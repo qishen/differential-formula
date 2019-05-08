@@ -30,6 +30,17 @@ namespace Microsoft.Formula.Core.Parser
 
     public enum NodeKind
     {   
+        FuncTermList,
+        BinaryExpr,
+        UnaryExpr,
+        PrimitiveExpr,
+        WrappedExpr,
+        FuncCallExpr,
+        Fields,
+        Field,
+        StringLiteral,
+        FracLiteral,
+        RealLiteral,
         DecimalLiteral,
         EnumList,
         EnumCnst,
@@ -50,9 +61,8 @@ namespace Microsoft.Formula.Core.Parser
         ContractItem,
         Setting,
         Config,
-        Field,
         Enum,
-        Union,
+        UnionBody,
         ConDecl,
         MapDecl,
         UnnDecl,

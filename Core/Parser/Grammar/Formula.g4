@@ -4,20 +4,22 @@ grammar Formula;
  * Parser Rules
  */
 
+/**************** Module Decls *****************/
 program
-   : EOF    
-   | moduleList   
-   ;    
+    : EOF    
+    | moduleList   
+    ;    
 
 moduleList
-   : module      
-   | module      
-	 moduleList
-   ;
+    : module      
+    | module      
+	  moduleList
+    ;
 
 module 
-   : domain
-   ;
+    : domain 
+	| model
+    ;
 
 domain 
 	: domainSig LBRACE domSentences? RBRACE
@@ -44,8 +46,7 @@ typeDecl
 funcDecl : INJ | BIJ | SUR | FUN | SUB | NEW;
 
 fields
-	: field 
-	| field COMMA fields ;
+	: field (COMMA field)* ;
 
 field
 	: unnBody 
@@ -106,15 +107,14 @@ constraint
 	;
 
 funcTermList 
-	: funcTerm						
-	| funcTerm COMMA funcTermList   
-	;
+	: funcTerm (COMMA funcTerm)* ;
 
 funcTerm 
 	: atom							# PrimitiveExpr
 	| unOp funcTerm					# UnaryExpr
 	| funcTerm binOp funcTerm		# BinaryExpr
-	| Id LPAREN funcTermList RPAREN # FunCallExpr
+	| Id LPAREN funcTermList RPAREN # FuncCallExpr
+	| LPAREN funcTerm LPAREN        # WrappedExpr
 	;
 
 atom : Id | constant ;

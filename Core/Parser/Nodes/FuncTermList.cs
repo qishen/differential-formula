@@ -6,16 +6,16 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class EnumList : Nodes
+    public class FuncTermList : Node
     {
-        public EnumList(ParserRuleContext sourceLocation) : base(sourceLocation)
+        public FuncTermList(ParserRuleContext sourceLocation) : base(sourceLocation)
         {
 
         }
 
         public override NodeKind NodeKind
         {
-            get { return NodeKind.EnumList; }
+            get { return NodeKind.FuncTermList; }
         }
     }
 }

@@ -33,6 +33,41 @@ namespace Microsoft.Formula.Core.Parser
             return null;
         }
 
+        public override object VisitFields([NotNull] FormulaParser.FieldsContext context)
+        {
+            var fields = context.field().Select((field) =>
+            {
+                return (Node)Visit(field);
+            });
+
+            var fieldsNode = new Fields(context);
+            foreach (var field in fields)
+            {
+                fieldsNode.AddComponent(field);
+            }
+
+            return fieldsNode;
+        }
+
+        public override object VisitField([NotNull] FormulaParser.FieldContext context)
+        {
+            Id id = null; 
+        
+            if (context.Id() != null)
+            {
+                id = (Id)Visit(context.Id());
+            }
+
+            if (context.ANY() != null)
+            {
+
+            }
+
+            UnnBody body = (UnnBody)Visit(context.unnBody());
+
+            return new Field(context, id, body);
+        }
+
         public override object VisitUnnBody([NotNull] FormulaParser.UnnBodyContext context)
         {
             var unnBody = new UnnBody(context);
@@ -97,6 +132,38 @@ namespace Microsoft.Formula.Core.Parser
             }
 
             return null;
+        }
+
+        public override object VisitPrimitiveExpr([NotNull] FormulaParser.PrimitiveExprContext context)
+        {
+            if (context.atom().Id() != null)
+            {
+                return new Id(context.atom(), context.atom().Id().GetText());
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public override object VisitBinaryExpr([NotNull] FormulaParser.BinaryExprContext context)
+        {
+            return base.VisitBinaryExpr(context);
+        }
+
+        public override object VisitUnaryExpr([NotNull] FormulaParser.UnaryExprContext context)
+        {
+            return base.VisitUnaryExpr(context);
+        }
+
+        public override object VisitFuncCallExpr([NotNull] FormulaParser.FuncCallExprContext context)
+        {
+            return base.VisitFuncCallExpr(context);
+        }
+
+        public override object VisitWrappedExpr([NotNull] FormulaParser.WrappedExprContext context)
+        {
+            return base.VisitWrappedExpr(context);
         }
 
     }
