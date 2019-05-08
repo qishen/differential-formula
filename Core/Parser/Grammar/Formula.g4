@@ -54,7 +54,7 @@ field
 	| Id COLON ANY unnBody ;
 
 unnBody
-	: unnElem (PLUS unnBody)* ;
+	: unnElem (PLUS unnElem)* ;
 
 unnElem 
 	: Id 

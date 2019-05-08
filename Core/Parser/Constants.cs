@@ -30,6 +30,9 @@ namespace Microsoft.Formula.Core.Parser
 
     public enum NodeKind
     {   
+        DecimalLiteral,
+        EnumList,
+        EnumCnst,
         TypeDeclExpr,
         Cnst,
         Id,
