@@ -11,9 +11,7 @@ program
     ;    
 
 moduleList
-    : module      
-    | module      
-	  moduleList
+    : (module)*      
     ;
 
 module 
@@ -21,20 +19,26 @@ module
 	| model
     ;
 
+model 
+	: modelFactList
+
 domain 
-	: domainSig LBRACE domSentences? RBRACE
+	: domainSig LBRACE domSentences RBRACE
 	;
 
 domainSig
-	: DOMAIN Id (EXTENDS | INCLUDES) //ModRefs
+	: DOMAIN Id (EXTENDS | INCLUDES)? //ModRefs
 	;
 
 domSentences
-	: formulaRule
-	| typeDecl
-	| CONFORMS 
+	: (domSentence)*
 	;
 
+domSentence
+	: formulaRule # DomRuleExpr
+	| TypeDecl # DomTypeExpr
+	| CONFORMS funcTermList DOT # DomConformsExpr
+	;
 
 /**************** Type Decls *****************/
 
@@ -69,15 +73,23 @@ enumCnst
 
 
 /************* Facts, Rules, and Comprehensions **************/
+modelFactList
+	: modelFact (COMMA modelFact)* DOT 
+	;
+
+modelFact
+	: funcTerm DOT
+	| Id (IS | EQ) funcTerm
+	;
 
 formulaRule 
-	 : funcTermList      
-	   DOT                
-	 | funcTermList
-	   RULE               
-	   disjunction
-	   DOT				
-	 ;
+	: funcTermList      
+	  DOT                
+	| funcTermList
+	  RULE               
+	  disjunction
+	  DOT				
+	;
 
 comprehension
 	: LBRACE funcTermList RBRACE
