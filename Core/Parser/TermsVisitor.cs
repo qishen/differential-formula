@@ -12,7 +12,7 @@ using Microsoft.Formula.Core.Parser.Nodes;
 
 namespace Microsoft.Formula.Core.Parser
 {
-    public class ExprVisitor : FormulaBaseVisitor<object>
+    public class TermsVisitor : FormulaBaseVisitor<object>
     {
         private readonly IDictionary<string, object> typeElems = new Dictionary<string, object>();
 
@@ -154,6 +154,11 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitUnaryExpr([NotNull] FormulaParser.UnaryExprContext context)
         {
             return base.VisitUnaryExpr(context);
+        }
+
+        public override object VisitModelFact([NotNull] FormulaParser.ModelFactContext context)
+        {
+            return base.VisitModelFact(context);
         }
 
         public override object VisitFuncCallExpr([NotNull] FormulaParser.FuncCallExprContext context)

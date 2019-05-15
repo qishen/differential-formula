@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Microsoft.Formula.Core.Parser
+namespace Microsoft.Formula.Core
 {
 
     public enum ContractKind 

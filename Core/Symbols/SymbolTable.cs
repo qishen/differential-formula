@@ -6,6 +6,14 @@ namespace Microsoft.Formula.Core.Symbols
 {
     public class SymbolTable
     {
+        public SymbolTable()
+        {
 
+        }
+
+        public void Compile()
+        {
+
+        }
     }
 }

@@ -15,12 +15,13 @@ moduleList
     ;
 
 module 
-    : domain 
+    : domain
 	| model
     ;
 
 model 
 	: modelFactList
+	;
 
 domain 
 	: domainSig LBRACE domSentences RBRACE
@@ -36,7 +37,7 @@ domSentences
 
 domSentence
 	: formulaRule # DomRuleExpr
-	| TypeDecl # DomTypeExpr
+	| typeDecl # DomTypeExpr
 	| CONFORMS funcTermList DOT # DomConformsExpr
 	;
 

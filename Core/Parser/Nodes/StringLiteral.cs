@@ -6,14 +6,14 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class StringLiteral
+    public class StringLiteral : Node
     {
         public StringLiteral(ParserRuleContext sourceLocation) : base(sourceLocation)
         {
 
         }
 
-        public NodeKind NodeKind
+        public override NodeKind NodeKind
         {
             get { return NodeKind.StringLiteral; }
         }

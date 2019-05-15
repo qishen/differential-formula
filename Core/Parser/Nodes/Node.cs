@@ -32,7 +32,7 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 
         public bool IsTypeTerm
         {
-            get { return NodeKind == NodeKind.Union || IsUnionComponent; }
+            get { return NodeKind == NodeKind.UnnDecl || IsUnionComponent; }
         }
 
         public bool IsUnionComponent
