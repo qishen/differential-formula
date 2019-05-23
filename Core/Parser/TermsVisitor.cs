@@ -156,19 +156,65 @@ namespace Microsoft.Formula.Core.Parser
             return base.VisitUnaryExpr(context);
         }
 
-        public override object VisitModelFact([NotNull] FormulaParser.ModelFactContext context)
-        {
-            return base.VisitModelFact(context);
-        }
-
         public override object VisitFuncCallExpr([NotNull] FormulaParser.FuncCallExprContext context)
         {
-            return base.VisitFuncCallExpr(context);
+            string idStr = context.Id().GetText();
+            Id id = new Id(context, idStr);
+            List<Term> terms = Visit(context.funcTermList()) as List<Term>;
+            Term term = new Term(id, terms, context);
+            return term;
+        }
+
+        public override object VisitFuncTermList([NotNull] FormulaParser.FuncTermListContext context)
+        {
+            var terms = context.funcTerm().Select((funcTerm)=>
+            {
+                Term term = Visit(funcTerm) as Term;
+                return term;
+            });
+            return terms;
         }
 
         public override object VisitWrappedExpr([NotNull] FormulaParser.WrappedExprContext context)
         {
             return base.VisitWrappedExpr(context);
+        }
+
+        public override object VisitModel([NotNull] FormulaParser.ModelContext context)
+        {
+            return null;
+        }
+
+        public override object VisitModelFactList([NotNull] FormulaParser.ModelFactListContext context)
+        {
+            ModelFactList modelList = new ModelFactList(context);
+            var modelFacts = context.modelFact().Select((modelFact) =>
+            {
+                Node node = Visit(modelFact) as Node;
+                return node;
+            });
+            foreach (var modelFact in modelFacts)
+            {
+                modelList.AddComponent(modelFact);
+            }
+
+            return modelList;
+        }
+
+        public override object VisitModelFact([NotNull] FormulaParser.ModelFactContext context)
+        {
+            string id = "";
+            if(context.Id() != null)
+            {
+                id = context.Id().GetText();
+            }
+
+            Term term = Visit(context.funcTerm()) as Term;
+            if(id != "")
+            {
+                term.Alias = new Id(null, id);
+            }         
+            return term;
         }
 
     }

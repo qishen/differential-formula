@@ -6,7 +6,7 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    interface INode
+    public interface INode
     {
         ParserRuleContext SourceLocation { get; }
     }

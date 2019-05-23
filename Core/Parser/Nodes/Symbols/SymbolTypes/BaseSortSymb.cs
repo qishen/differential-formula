@@ -23,9 +23,7 @@ namespace Microsoft.Formula.Core.Symbols
         {
             get;
             private set;
-        }
-
-        
+        }      
        
         internal BaseSortSymb(BaseSortKind sortKind)      
         {

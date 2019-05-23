@@ -54,6 +54,7 @@ namespace Microsoft.Formula.Core
         FuncTerm,
         Find,
         ModelFact,
+        ModelFactList,
         Compr,
         RelConstr,
         Body,
