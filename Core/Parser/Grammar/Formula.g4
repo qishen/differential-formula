@@ -7,8 +7,12 @@ grammar Formula;
 /**************** Module Decls *****************/
 program
     : EOF    
-    | moduleList   
+    | (importModule)? moduleList   
     ;    
+
+importModule
+	: IMPORT Id FROM STRING AS Id
+	;
 
 moduleList
     : (module)*      
@@ -19,8 +23,37 @@ module
 	| model
     ;
 
+modRefs
+	: modRef (COMMA modRef)*
+	;
+
+modRef
+	: modRefRename
+	| modRefNoRename
+	;
+
+modRefRename
+	: Id RENAMES Id
+	| Id RENAMES Id AT STRING
+	;
+
+modRefNoRename
+	: Id
+	| Id AT STRING
+	;
+
 model 
-	: modelFactList
+	: modelSig LBRACE (modelFactList)? RBRACE
+	;
+
+modelIntro
+	: (PARTIAL)? MODEL Id OF modRef
+	;
+
+modelSig
+	: modelIntro
+	| modelIntro INCLUDES modRefs
+	| modelIntro EXTENDS modRefs
 	;
 
 domain 
@@ -28,7 +61,7 @@ domain
 	;
 
 domainSig
-	: DOMAIN Id (EXTENDS | INCLUDES)? //ModRefs
+	: DOMAIN Id (EXTENDS | INCLUDES)? modRefs
 	;
 
 domSentences
@@ -179,6 +212,9 @@ INITIALLY: 'initially' ;
 NEXT : 'next' ;
 PROPERTY : 'property' ;
 BOOT : 'boot' ;
+IMPORT : 'import';
+FROM : 'from';
+AS : 'as';
 
 
 GRAPHIC_TOKEN: (GRAPHIC | '\\')+ ; 

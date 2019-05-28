@@ -12,7 +12,7 @@ using Microsoft.Formula.Core.Parser.Nodes;
 
 namespace Microsoft.Formula.Core.Parser
 {
-    public class TermsVisitor : FormulaBaseVisitor<object>
+    public class ExprVisitor : FormulaBaseVisitor<object>
     {
         private readonly IDictionary<string, object> typeElems = new Dictionary<string, object>();
 
@@ -24,21 +24,83 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitModuleList([NotNull] FormulaParser.ModuleListContext context)
         {
-            return base.VisitModuleList(context);
+            var moduleList = new ModuleList(context);
+            var modules = context.module().Select((module) =>
+            {
+                return Visit(module);
+            });
+
+            foreach(var module in modules)
+            {
+                moduleList.AddComponent(module as Node);
+            }
+
+            return moduleList;
         }
 
         public override object VisitModule([NotNull] FormulaParser.ModuleContext context)
         {
-            return base.VisitModule(context);
+            if(context.domain() != null)
+            {
+                Domain domain = Visit(context.domain()) as Domain;
+                return new Module(context, domain);
+            }
+            else if(context.model() != null)
+            {
+                Model model = Visit(context.model()) as Model;
+                return new Module(context, model);
+            }
+
+            return null;
         }
 
         public override object VisitDomain([NotNull] FormulaParser.DomainContext context)
         {
-            return base.VisitDomain(context);
+            DomainSentences sentences = Visit(context.domSentences()) as DomainSentences;
+            return new Domain(sentences, context);
         }
+
+        public override object VisitDomSentences([NotNull] FormulaParser.DomSentencesContext context)
+        {
+            var sentences = context.domSentence().Select((domSentence) =>
+            {
+                return Visit(domSentence) as Node;
+            });
+
+            var domainSentences = new DomainSentences(context);
+            
+            foreach(var sentence in sentences)
+            {
+                domainSentences.AddComponent(sentence);
+            }
+
+            return domainSentences;
+        }
+
+        public override object VisitDomConformsExpr([NotNull] FormulaParser.DomConformsExprContext context)
+        {
+            return base.VisitDomConformsExpr(context);
+        }
+
+        public override object VisitDomRuleExpr([NotNull] FormulaParser.DomRuleExprContext context)
+        {
+            return base.VisitDomRuleExpr(context);
+        }
+
+        public override object VisitDomTypeExpr([NotNull] FormulaParser.DomTypeExprContext context)
+        {
+            return base.VisitDomTypeExpr(context);
+        }
+
+        public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)
+        {
+            return base.VisitModelSig(context);
+        }
+
         public override object VisitModel([NotNull] FormulaParser.ModelContext context)
         {
-            return null;
+            ModelFactList modFactList = Visit(context.modelFactList()) as ModelFactList;
+            return new Model(modFactList, context);
         }
 
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)

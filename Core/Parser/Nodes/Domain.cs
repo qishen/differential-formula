@@ -8,9 +8,11 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Domain : Node
     {
-        public Domain(ParserRuleContext sourceLocation) : base(sourceLocation)
-        {
+        DomainSentences DomainSentences { get; }
 
+        public Domain(DomainSentences domainSentences, ParserRuleContext sourceLocation) : base(sourceLocation)
+        {
+            DomainSentences = domainSentences;
         }
 
         public override NodeKind NodeKind
