@@ -1,0 +1,67 @@
+﻿domain Digraphs
+{
+   V ::= new (lbl: Integer).
+   E ::= new (src: V, dst: V).
+   Thing ::= V + E.
+}
+
+domain LabeledDigraphs extends Digraphs
+{     
+   ENUM ::= {HELLO, WORLD}.
+   Label ::= bij (lbl: ENUM => vertex: V).
+}
+
+model g1 of LabeledDigraphs
+{
+   v1 is V(1).
+   v2 is V(2).
+   Label(HELLO, v1).
+   Label(HELLO, v2).
+}
+
+domain DAGs extends Digraphs
+{
+   path ::= (V, V).
+   //path(u, w) :- E(u, w); E(u, v), path(v, w).  
+   path(u, v) :- E(u, v).
+   path(u, w) :- path(u, v), path(v, w).
+   conforms no path(u, u).
+}
+
+partial model PDAG of DAGs
+{
+  requires atleast 5 E.
+  requires atleast 5 V.
+}
+
+model LittleCycle of DAGs
+{
+   v1 is V(1).
+   v2 is V(2).
+   E(v1, v2).
+   E(v2, v1).
+}
+
+model Path10 of DAGs
+{
+   v0 is V(0),
+   v1 is V(1),
+   v2 is V(2),
+   v3 is V(3),
+   v4 is V(4),
+   v5 is V(5),
+   v6 is V(6),
+   v7 is V(7),
+   v8 is V(8),
+   v9 is V(9).
+   
+   E(v0, v1),
+   E(v1, v2),
+   E(v2, v3),
+   E(v3, v4),
+   E(v4, v5),
+   E(v5, v6),
+   E(v6, v7),
+   E(v7, v8),
+   E(v8, v9).
+}
