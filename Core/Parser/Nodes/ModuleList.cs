@@ -2,9 +2,20 @@
 using System.Collections.Generic;
 using System.Text;
 
+using Antlr4.Runtime;
+
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    class ModuleList
+    public class ModuleList : Node
     {
+        public ModuleList(ParserRuleContext sourceLocation) : base(sourceLocation)
+        {
+
+        }
+
+        public override NodeKind NodeKind
+        {
+            get { return NodeKind.ModuleList; }
+        }
     }
 }

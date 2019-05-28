@@ -16,6 +16,31 @@ namespace Microsoft.Formula.Core.Parser
     {
         private readonly IDictionary<string, object> typeElems = new Dictionary<string, object>();
 
+        public override object VisitProgram([NotNull] FormulaParser.ProgramContext context)
+        {
+            ModuleList moduleList = Visit(context.moduleList()) as ModuleList;
+            return new Program(context, moduleList);
+        }
+
+        public override object VisitModuleList([NotNull] FormulaParser.ModuleListContext context)
+        {
+            return base.VisitModuleList(context);
+        }
+
+        public override object VisitModule([NotNull] FormulaParser.ModuleContext context)
+        {
+            return base.VisitModule(context);
+        }
+
+        public override object VisitDomain([NotNull] FormulaParser.DomainContext context)
+        {
+            return base.VisitDomain(context);
+        }
+        public override object VisitModel([NotNull] FormulaParser.ModelContext context)
+        {
+            return null;
+        }
+
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)
         {
             Id typeId = new Id(context, context.Id().GetText());
@@ -180,11 +205,6 @@ namespace Microsoft.Formula.Core.Parser
             return base.VisitWrappedExpr(context);
         }
 
-        public override object VisitModel([NotNull] FormulaParser.ModelContext context)
-        {
-            return null;
-        }
-
         public override object VisitModelFactList([NotNull] FormulaParser.ModelFactListContext context)
         {
             ModelFactList modelList = new ModelFactList(context);
@@ -193,6 +213,7 @@ namespace Microsoft.Formula.Core.Parser
                 Node node = Visit(modelFact) as Node;
                 return node;
             });
+
             foreach (var modelFact in modelFacts)
             {
                 modelList.AddComponent(modelFact);

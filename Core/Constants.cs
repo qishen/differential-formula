@@ -53,6 +53,8 @@ namespace Microsoft.Formula.Core
         Quote,
         FuncTerm,
         Find,
+        Module,
+        ModuleList,
         ModelFact,
         ModelFactList,
         Compr,
