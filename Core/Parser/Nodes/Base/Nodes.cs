@@ -16,6 +16,7 @@ namespace Microsoft.Formula.Core.Parser.Nodes
         internal Nodes(ParserRuleContext sourceLocation)
         {
             SourceLocation = sourceLocation;
+            Components = new HashSet<Node>();
         }
 
         public bool AddComponent(Node node)

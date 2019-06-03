@@ -8,5 +8,9 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class DomConformsExpr : Node
     {
+        public override NodeKind NodeKind
+        {
+            get { return NodeKind.DomConformsExpr; }
+        }
     }
 }

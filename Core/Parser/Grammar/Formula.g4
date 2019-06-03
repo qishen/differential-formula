@@ -69,8 +69,8 @@ domSentences
 	;
 
 domSentence
-	: formulaRule # DomRuleExpr
-	| typeDecl # DomTypeExpr
+	: formulaRule DOT # DomRuleExpr
+	| typeDecl DOT # DomTypeExpr
 	| CONFORMS funcTermList DOT # DomConformsExpr
 	;
 
