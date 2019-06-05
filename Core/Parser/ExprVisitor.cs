@@ -28,7 +28,7 @@ namespace Microsoft.Formula.Core.Parser
             var modules = context.module().Select((module) =>
             {
                 return Visit(module);
-            });
+            }).ToList();
 
             foreach(var module in modules)
             {
@@ -45,7 +45,6 @@ namespace Microsoft.Formula.Core.Parser
                 Domain domain = Visit(context.domain()) as Domain;
                 return new Module(context, domain);
             }
-
             else if(context.model() != null)
             {
                 Model model = Visit(context.model()) as Model;
@@ -71,10 +70,13 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitDomSentences([NotNull] FormulaParser.DomSentencesContext context)
         {
+            var contextList = context.domSentence();
+
             var sentences = context.domSentence().Select((domSentence) =>
             {
-                return Visit(domSentence) as Node;
-            });
+                System.Console.WriteLine(domSentence.GetText());
+                return Visit(domSentence);
+            }).ToList();
 
             return sentences;
         }
@@ -91,7 +93,7 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitDomTypeExpr([NotNull] FormulaParser.DomTypeExprContext context)
         {
-            return base.VisitDomTypeExpr(context);
+            return Visit(context.typeDecl());
         }
 
         public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)

@@ -15,12 +15,19 @@ namespace CommandLine
             string input = @"
                 domain Graph
                 {
-                    Node ::= new (id: Integer).
-                    Edge ::= new (src: Node, dst: Node).
+                    Node ::= new(id: Integer).
+                    Edge ::= new(src: Node, dst: Node).
                 }
             ";
 
-            ICharStream stream = new AntlrInputStream(input);
+            string input2 = @"
+                domain Graph
+                {
+                    Node ::= SmallNode + BigNode.
+                }
+            ";
+
+            ICharStream stream = new AntlrInputStream(input2);
             FormulaLexer lexer = new FormulaLexer(stream);
             ITokenStream tokens = new CommonTokenStream(lexer);
 

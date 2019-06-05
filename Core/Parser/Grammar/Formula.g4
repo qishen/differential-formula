@@ -61,7 +61,7 @@ domain
 	;
 
 domainSig
-	: DOMAIN Id (EXTENDS | INCLUDES)? modRefs
+	: DOMAIN Id ((EXTENDS | INCLUDES) modRefs)? 
 	;
 
 domSentences
@@ -87,10 +87,8 @@ fields
 	: field (COMMA field)* ;
 
 field
-	: unnBody 
-	| ANY unnBody 
-	| Id COLON unnBody 
-	| Id COLON ANY unnBody ;
+	: (Id COLON)? (ANY)? unnBody 
+	;
 
 unnBody
 	: unnElem (PLUS unnElem)* ;
@@ -222,7 +220,7 @@ GRAPHIC_TOKEN: (GRAPHIC | '\\')+ ;
 fragment GRAPHIC: [#$&*+./:<=>?@^~] | '-' ;
 fragment ALPHANUMERIC: ALPHA | DIGIT ;
 fragment ALPHA: '_' | SMALL_LETTER | CAPITAL_LETTER ;
-fragment SMALL_LETTER: [a-z_] ;
+fragment SMALL_LETTER: [a-z] ;
 fragment CAPITAL_LETTER: [A-Z] ;
 fragment DIGIT : [0-9] ;
 
