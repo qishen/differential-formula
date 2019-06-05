@@ -57,15 +57,13 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitDomain([NotNull] FormulaParser.DomainContext context)
         {
             var domainSigContext = context.domainSig();
-            System.Console.WriteLine(domainSigContext.Id().GetText());
-
+            string domainName = domainSigContext.Id().GetText();
+            List<Node> sentences = null;
             if(context.domSentences() != null)
             {
-                List<Node> sentences = Visit(context.domSentences()) as List<Node>;
-                return new Domain(sentences, context);
+                sentences = Visit(context.domSentences()) as List<Node>;
             }
-
-            return null;
+            return new Domain(context, sentences, domainName);
         }
 
         public override object VisitDomSentences([NotNull] FormulaParser.DomSentencesContext context)
@@ -78,9 +76,10 @@ namespace Microsoft.Formula.Core.Parser
                 return Visit(domSentence);
             }).ToList();
 
-            return sentences;
+            return sentences;                                                                                                            
         }
 
+        /*
         public override object VisitDomConformsExpr([NotNull] FormulaParser.DomConformsExprContext context)
         {
             return base.VisitDomConformsExpr(context);
@@ -90,6 +89,7 @@ namespace Microsoft.Formula.Core.Parser
         {
             return base.VisitDomRuleExpr(context);
         }
+        */
 
         public override object VisitDomTypeExpr([NotNull] FormulaParser.DomTypeExprContext context)
         {
@@ -99,12 +99,6 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)
         {
             return base.VisitModelSig(context);
-        }
-
-        public override object VisitModel([NotNull] FormulaParser.ModelContext context)
-        {
-            ModelFactList modFactList = Visit(context.modelFactList()) as ModelFactList;
-            return new Model(modFactList, context);
         }
 
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)
@@ -117,13 +111,14 @@ namespace Microsoft.Formula.Core.Parser
             return node;
         }
 
+        /*
         public override object VisitRegularTypeDecl([NotNull] FormulaParser.RegularTypeDeclContext context)
         {
             Id typeId = new Id(context, context.Id().GetText());
 
             return null;
         }
-
+        */
         public override object VisitFields([NotNull] FormulaParser.FieldsContext context)
         {
             var fields = context.field().Select((field) =>
@@ -159,6 +154,7 @@ namespace Microsoft.Formula.Core.Parser
             return new Field(context, id, body);
         }
 
+        /*
         public override object VisitUnnBody([NotNull] FormulaParser.UnnBodyContext context)
         {
             var unnBody = new UnnBody(context);
@@ -175,6 +171,7 @@ namespace Microsoft.Formula.Core.Parser
 
             return unnBody;
         }
+        
 
         public override object VisitUnnElem([NotNull] FormulaParser.UnnElemContext context)
         {
@@ -192,6 +189,7 @@ namespace Microsoft.Formula.Core.Parser
                 return null;
             }
         }
+        */
 
         public override object VisitEnumList([NotNull] FormulaParser.EnumListContext context)
         {
@@ -225,6 +223,7 @@ namespace Microsoft.Formula.Core.Parser
             return null;
         }
 
+        /*
         public override object VisitPrimitiveExpr([NotNull] FormulaParser.PrimitiveExprContext context)
         {
             if (context.atom().Id() != null)
@@ -236,73 +235,9 @@ namespace Microsoft.Formula.Core.Parser
                 return null;
             }
         }
-
-        public override object VisitBinaryExpr([NotNull] FormulaParser.BinaryExprContext context)
-        {
-            return base.VisitBinaryExpr(context);
-        }
-
-        public override object VisitUnaryExpr([NotNull] FormulaParser.UnaryExprContext context)
-        {
-            return base.VisitUnaryExpr(context);
-        }
-
-        public override object VisitFuncCallExpr([NotNull] FormulaParser.FuncCallExprContext context)
-        {
-            string idStr = context.Id().GetText();
-            Id id = new Id(context, idStr);
-            List<Term> terms = Visit(context.funcTermList()) as List<Term>;
-            Term term = new Term(id, terms, context);
-            return term;
-        }
-
-        public override object VisitFuncTermList([NotNull] FormulaParser.FuncTermListContext context)
-        {
-            var terms = context.funcTerm().Select((funcTerm)=>
-            {
-                Term term = Visit(funcTerm) as Term;
-                return term;
-            });
-            return terms;
-        }
-
-        public override object VisitWrappedExpr([NotNull] FormulaParser.WrappedExprContext context)
-        {
-            return base.VisitWrappedExpr(context);
-        }
-
-        public override object VisitModelFactList([NotNull] FormulaParser.ModelFactListContext context)
-        {
-            ModelFactList modelList = new ModelFactList(context);
-            var modelFacts = context.modelFact().Select((modelFact) =>
-            {
-                Node node = Visit(modelFact) as Node;
-                return node;
-            });
-
-            foreach (var modelFact in modelFacts)
-            {
-                modelList.AddComponent(modelFact);
-            }
-
-            return modelList;
-        }
-
-        public override object VisitModelFact([NotNull] FormulaParser.ModelFactContext context)
-        {
-            string id = "";
-            if(context.Id() != null)
-            {
-                id = context.Id().GetText();
-            }
-
-            Term term = Visit(context.funcTerm()) as Term;
-            if(id != "")
-            {
-                term.Alias = new Id(null, id);
-            }         
-            return term;
-        }
+        */
+        
+        
 
     }
 }

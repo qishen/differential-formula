@@ -21,10 +21,11 @@ namespace CommandLine
             ";
 
             string input2 = @"
-                domain Graph
-                {
-                    Node ::= SmallNode + BigNode.
-                }
+domain Graph
+{
+    Node ::= Small + Big.
+    Edge ::= Smaller + Bigger.
+}
             ";
 
             ICharStream stream = new AntlrInputStream(input2);
