@@ -64,8 +64,22 @@ namespace Microsoft.Formula.Core.Parser
             var modelIntro = modelSig.modelIntro();
             string modelName = modelIntro.Id().GetText();
             bool isPartial = modelSig.modelIntro().PARTIAL() != null;
-            List<Node> terms = Visit(context.modelFactList()) as List<Node>;
-            return new Model(context, isPartial, modelName, terms);
+
+            var termsList = context.modelFactList().Select((modelFactList) => {
+                List<Node> terms = Visit(modelFactList) as List<Node>;
+                return terms;
+            });
+
+            List<Node> allTerms = new List<Node>();
+            foreach (List<Node> terms in termsList)
+            {
+                foreach (Node term in terms)
+                {
+                    allTerms.Add(term);
+                }
+            }
+
+            return new Model(context, isPartial, modelName, allTerms);
         }
 
         public override object VisitModRef([NotNull] FormulaParser.ModRefContext context)
@@ -103,11 +117,17 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitCompositionTerm([NotNull] FormulaParser.CompositionTermContext context)
         {
             Id alias = null;
-            if (context.Id(0) != null)
+            Id typeName;
+            if (context.Id(0) != null && context.Id(1) != null)
             {
                 alias = new Id(context, context.Id(0).GetText());
+                typeName = new Id(context, context.Id(1).GetText());
             }
-            Id typeName = new Id(context, context.Id(1).GetText());
+            else
+            {
+                typeName = new Id(context, context.Id(0).GetText());
+            }
+            
             var terms = (List<Node>)Visit(context.funcTermList());
             return new Term(context, alias, typeName, terms);
         }

@@ -35,7 +35,7 @@ modRef
 	;
 
 model 
-	: modelSig LBRACE modelFactList RBRACE
+	: modelSig LBRACE (modelFactList)* RBRACE
 	;
 
 modelIntro

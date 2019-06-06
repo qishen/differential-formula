@@ -12,8 +12,6 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 
         public string ModelName { get; }
 
-        public List<Term> Terms { get; }
-
         public List<Model> ModRefs { get; }
 
         public Model(ParserRuleContext sourceLocation, bool isPartial, string modelName, List<Node> terms) 
