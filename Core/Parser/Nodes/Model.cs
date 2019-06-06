@@ -7,12 +7,34 @@ using Antlr4.Runtime;
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Model : Node
-    {
-        public ModelFactList ModelFactList { get; }
+    {   
+        public bool IsPartial { get; }
 
-        public Model(ModelFactList modelFactList, ParserRuleContext sourceLocation) : base(sourceLocation)
+        public string ModelName { get; }
+
+        public List<Term> Terms { get; }
+
+        public List<Model> ModRefs { get; }
+
+        public Model(ParserRuleContext sourceLocation, bool isPartial, string modelName, List<Node> terms) 
+            : base(sourceLocation, terms)
         {
-            ModelFactList = modelFactList;
+            IsPartial = isPartial;
+            ModelName = modelName;
+            ModRefs = new List<Model>();
+        }
+
+        public bool AddModRef(Model model)
+        {
+            if (model.ModelName != this.ModelName)
+            {
+                ModRefs.Add(model);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         public override NodeKind NodeKind

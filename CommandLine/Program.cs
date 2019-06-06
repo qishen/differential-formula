@@ -23,8 +23,15 @@ namespace CommandLine
             string input2 = @"
 domain Graph
 {
-    Node ::= Small + Big.
-    Edge ::= Smaller + Bigger + {1, 2, 3}.
+    Node ::= new (id: Integer).
+    Edge ::= new (src: Node, dst: Node).
+    Thing ::= Node + Edge + {1, 2, 3}.
+}
+
+model g of Graph
+{
+    v1 is Node(1).
+    Node(2).
 }
             ";
 

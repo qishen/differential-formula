@@ -80,6 +80,7 @@ namespace Microsoft.Formula.Core
         DomConformsExpr,
         DomRuleExpr,
         DomTypeExpr,
+        Term,
         Transform,
         TSystem,
         Model,

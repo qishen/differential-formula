@@ -19,13 +19,16 @@ namespace Microsoft.Formula.Core.Parser.Nodes
         public Id Alias
         {
             get;
-            set;
         }
 
         public Id Sig
         {
             get;
-            set;
+        }
+
+        public Cnst Cnst
+        {
+            get;
         }
 
         public Groundness Groundness
@@ -34,34 +37,29 @@ namespace Microsoft.Formula.Core.Parser.Nodes
             private set;
         }
 
-        public Symbol Symbol
-        {
-            get;
-            private set;
-        }
-
-        public ImmutableArray<Term> Args
-        {
-            get;
-            private set;
-        }
-
-        public Term(Symbol symbol, List<Term> args, ParserRuleContext sourceLocation) : base(sourceLocation)
-        {
-
-        }
-
-        public Term(Id symbol, List<Term> args, ParserRuleContext sourceLocation) : base(sourceLocation)
+        public Term(ParserRuleContext sourceLocation, Id alias, Id symbol, List<Node> args) 
+            : base(sourceLocation, args)
         {
             Sig = symbol;
-            Args = ImmutableArray.ToImmutableArray(args);
+            Alias = alias;
+            Groundness = Groundness.Type;
         }
 
-        public Term(ParserRuleContext sourceLocation) : base(sourceLocation)
+        public Term(ParserRuleContext sourceLocation, Cnst cnst)
         {
-
+            Cnst = cnst;
+            Groundness = Groundness.Ground;
         }
 
-        public override NodeKind NodeKind => throw new NotImplementedException();
+        public Term(ParserRuleContext sourceLocation, Id symbol) : base(sourceLocation)
+        {
+            Sig = symbol;
+            Groundness = Groundness.Variable;
+        }
+
+        public override NodeKind NodeKind
+        {
+            get { return NodeKind.Term; }
+        }
     }
 }

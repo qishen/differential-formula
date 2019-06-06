@@ -28,22 +28,14 @@ modRefs
 	;
 
 modRef
-	: modRefRename
-	| modRefNoRename
-	;
-
-modRefRename
-	: Id RENAMES Id
+	: Id
+	| Id AT STRING
+	| Id RENAMES Id
 	| Id RENAMES Id AT STRING
 	;
 
-modRefNoRename
-	: Id
-	| Id AT STRING
-	;
-
 model 
-	: modelSig LBRACE  RBRACE
+	: modelSig LBRACE modelFactList RBRACE
 	;
 
 modelIntro
@@ -51,9 +43,7 @@ modelIntro
 	;
 
 modelSig
-	: modelIntro
-	| modelIntro INCLUDES modRefs
-	| modelIntro EXTENDS modRefs
+	: modelIntro ((INCLUDES | EXTENDS) modRefs)?
 	;
 
 domain 
@@ -90,7 +80,7 @@ fields
 	: field (COMMA field)* ;
 
 field
-	: (Id COLON)? (ANY)? unnBody 
+	: (Id COLON)? (ANY)? (Id | unnBody) 
 	;
 
 unnElem 
@@ -101,17 +91,12 @@ unnElem
 enumList : enumCnst (COMMA enumCnst)* ;
 
 enumCnst 
-	: DECIMAL | REAL | FRAC | STRING | DECIMAL RANGE DECIMAL;
+	: constant | DECIMAL RANGE DECIMAL;
 
 
 /************* Facts, Rules, and Comprehensions **************/
 modelFactList
-	: modelFact (COMMA modelFact)* DOT 
-	;
-
-modelFact
-	: funcTerm DOT
-	| Id (IS | EQ) funcTerm
+	: funcTerm (COMMA funcTerm)* DOT 
 	;
 
 formulaRule 
@@ -143,10 +128,8 @@ conjunction
 
 constraint
 	: funcTerm
-	| Id IS funcTerm
-	| NO Id IS funcTerm
-	| NO comprehension
 	| NO funcTerm
+	| NO comprehension
 	| funcTerm relOp funcTerm
 	;
 
@@ -154,11 +137,10 @@ funcTermList
 	: funcTerm (COMMA funcTerm)* ;
 
 funcTerm 
-	: atom							# PrimitiveExpr
-	| unOp funcTerm					# UnaryExpr
-	| funcTerm binOp funcTerm		# BinaryExpr
-	| Id LPAREN funcTermList RPAREN # FuncCallExpr
-	| LPAREN funcTerm LPAREN        # WrappedExpr
+	: atom							# AtomTerm
+	| unOp funcTerm					# UnaryTerm
+	| funcTerm binOp funcTerm		# BinaryTerm
+	| (Id (IS | EQ))? Id LPAREN funcTermList RPAREN # CompositionTerm
 	;
 
 atom : Id | constant ;

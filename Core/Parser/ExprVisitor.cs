@@ -56,6 +56,105 @@ namespace Microsoft.Formula.Core.Parser
             return new Domain(context, sentences, domainName);
         }
 
+        public override object VisitModel([NotNull] FormulaParser.ModelContext context)
+        {
+            // TODO: Add domain references with includes and excludes keyword.
+            // modelIntro.modRef()
+            var modelSig = context.modelSig();
+            var modelIntro = modelSig.modelIntro();
+            string modelName = modelIntro.Id().GetText();
+            bool isPartial = modelSig.modelIntro().PARTIAL() != null;
+            List<Node> terms = Visit(context.modelFactList()) as List<Node>;
+            return new Model(context, isPartial, modelName, terms);
+        }
+
+        public override object VisitModRef([NotNull] FormulaParser.ModRefContext context)
+        {
+            return base.VisitModRef(context);
+        }
+
+        public override object VisitModelFactList([NotNull] FormulaParser.ModelFactListContext context)
+        {
+            List<Node> terms = context.funcTerm().Select((funcTerm) => {
+                return (Node)Visit(funcTerm);
+            }).ToList();
+            return terms;
+        }
+
+        public override object VisitAtomTerm([NotNull] FormulaParser.AtomTermContext context)
+        {
+            if (context.atom().Id() != null)
+            {
+                string id = context.atom().Id().GetText();
+                Cnst cnst = new Cnst(id);
+                return new Term(context.atom(), cnst);
+            }
+            else if (context.atom().constant() != null)
+            {
+                Cnst cnst = Visit(context.atom().constant()) as Cnst;
+                return new Term(context.atom(), cnst);
+            }
+            else
+            {
+                throw new ParseCanceledException();
+            }
+        }
+
+        public override object VisitCompositionTerm([NotNull] FormulaParser.CompositionTermContext context)
+        {
+            Id alias = null;
+            if (context.Id(0) != null)
+            {
+                alias = new Id(context, context.Id(0).GetText());
+            }
+            Id typeName = new Id(context, context.Id(1).GetText());
+            var terms = (List<Node>)Visit(context.funcTermList());
+            return new Term(context, alias, typeName, terms);
+        }
+
+        public override object VisitFuncTermList([NotNull] FormulaParser.FuncTermListContext context)
+        {
+            var terms = context.funcTerm().Select((funcTerm) => {
+                return (Node)Visit(funcTerm);
+            }).ToList();
+            return terms;
+        }
+
+        public override object VisitConstant([NotNull] FormulaParser.ConstantContext context)
+        {
+            if (context.DECIMAL() != null)
+            {
+                Rational r;
+                Rational.TryParseDecimal(context.DECIMAL().GetText(), out r);
+                return new Cnst(r);
+            }
+            else if (context.REAL() != null)
+            {
+                Rational r;
+                Rational.TryParseDecimal(context.REAL().GetText(), out r);
+                return new Cnst(r);
+            }
+            else if (context.FRAC() != null)
+            {
+                Rational r;
+                Rational.TryParseFraction(context.FRAC().GetText(), out r);
+                return new Cnst(r);
+            }
+            else if (context.STRING() != null)
+            {
+                return new Cnst(context.STRING().GetText());
+            }
+            else
+            {
+                throw new ParseCanceledException();
+            }
+        }
+
+        public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)
+        {
+            return base.VisitModelSig(context);
+        }
+
         public override object VisitDomSentences([NotNull] FormulaParser.DomSentencesContext context)
         {
             var sentences = context.domSentence().Select((domSentence) => {
@@ -78,11 +177,6 @@ namespace Microsoft.Formula.Core.Parser
         {
             var typeExpr = Visit(context.typeDecl());
             return typeExpr;
-        }
-
-        public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)
-        {
-            return base.VisitModelSig(context);
         }
 
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)
@@ -114,9 +208,9 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitField([NotNull] FormulaParser.FieldContext context)
         {
             string label = null;
-            if (context.Id() != null)
+            if (context.Id(0) != null)
             {
-                label = context.Id().GetText();
+                label = context.Id(0).GetText();
             }
 
             bool isAny = false;
@@ -125,8 +219,22 @@ namespace Microsoft.Formula.Core.Parser
                 isAny = context.ANY() != null;
             }
 
-            UnnDecl body = (UnnDecl)Visit(context.unnBody());
-            return new Field(context, label, body, isAny);
+            if (context.unnBody() != null)
+            {
+                var body = Visit(context.unnBody()) as List<Node>;
+                UnnDecl unionNode = new UnnDecl(context.unnBody(), null, body);
+                return new Field(context, label, unionNode, isAny);
+            }
+            else if (context.Id(1) != null)
+            {
+                string typeName = context.Id(1).GetText();
+                Id typeNode = new Id(context, typeName);
+                return new Field(context, label, typeNode, false);
+            }
+            else
+            {
+                throw new ParseCanceledException();
+            }          
         }
 
         public override object VisitUnnBody([NotNull] FormulaParser.UnnBodyContext context)
@@ -172,27 +280,9 @@ namespace Microsoft.Formula.Core.Parser
                 var highStr = context.DECIMAL(1).GetText();
                 return new Range(context, lowStr, highStr);
             }
-            else if (context.DECIMAL() != null)
+            else if (context.constant() != null)
             {
-                Rational r;
-                Rational.TryParseDecimal(context.DECIMAL(0).GetText(), out r);
-                return new Cnst(r);
-            }
-            else if (context.REAL() != null)
-            {
-                Rational r;
-                Rational.TryParseDecimal(context.REAL().GetText(), out r);
-                return new Cnst(r);
-            }
-            else if (context.FRAC() != null)
-            {
-                Rational r;
-                Rational.TryParseFraction(context.FRAC().GetText(), out r);
-                return new Cnst(r);
-            }
-            else if (context.STRING() != null)
-            {
-                return new Cnst(context.STRING().GetText());
+                return Visit(context.constant());
             }
             else
             {
