@@ -65,26 +65,24 @@ domainSig
 	;
 
 domSentences
-	: (domSentence)*
+	: (domSentence DOT)*
 	;
 
 domSentence
 	: typeDecl # DomTypeExpr
-	//| formulaRule # DomRuleExpr
-	//| CONFORMS funcTermList # DomConformsExpr
+	| formulaRule # DomRuleExpr
+	| CONFORMS funcTermList # DomConformsExpr
 	;
 
 /**************** Type Decls *****************/
 
 typeDecl
-	:
-	//: Id TYPEDEF (funcDecl)? LPAREN fields RPAREN # RegularTypeDecl
-	//| Id TYPEDEF unnBody # UnionTypeDecl
-	Id TYPEDEF unnBody # UnionTypeDecl
+	: Id TYPEDEF (funcDecl)? LPAREN fields RPAREN # RegularTypeDecl
+	| Id TYPEDEF unnBody # UnionTypeDecl
 	;
 
 unnBody
-	: Id (PLUS Id)* ;
+	: unnElem (PLUS unnElem)* ;
 
 funcDecl : INJ | BIJ | SUR | FUN | SUB | NEW;
 
@@ -96,7 +94,7 @@ field
 	;
 
 unnElem 
-	: COMMA 
+	: Id 
 	| LBRACE enumList RBRACE
 	;
 
@@ -104,6 +102,74 @@ enumList : enumCnst (COMMA enumCnst)* ;
 
 enumCnst 
 	: DECIMAL | REAL | FRAC | STRING | DECIMAL RANGE DECIMAL;
+
+
+/************* Facts, Rules, and Comprehensions **************/
+modelFactList
+	: modelFact (COMMA modelFact)* DOT 
+	;
+
+modelFact
+	: funcTerm DOT
+	| Id (IS | EQ) funcTerm
+	;
+
+formulaRule 
+	: funcTermList      
+	  DOT                
+	| funcTermList
+	  RULE               
+	  disjunction
+	  DOT				
+	;
+
+comprehension
+	: LBRACE funcTermList RBRACE
+	| LBRACE funcTermList PIPE disjunction RBRACE
+	;
+
+
+disjunction 
+	: conjunction			  
+	| conjunction SEMICOLON disjunction
+	;
+
+conjunction 
+	: constraint          
+	| constraint COMMA conjunction
+	;
+
+/******************* Terms and Constraints *******************/
+
+constraint
+	: funcTerm
+	| Id IS funcTerm
+	| NO Id IS funcTerm
+	| NO comprehension
+	| NO funcTerm
+	| funcTerm relOp funcTerm
+	;
+
+funcTermList 
+	: funcTerm (COMMA funcTerm)* ;
+
+funcTerm 
+	: atom							# PrimitiveExpr
+	| unOp funcTerm					# UnaryExpr
+	| funcTerm binOp funcTerm		# BinaryExpr
+	| Id LPAREN funcTermList RPAREN # FuncCallExpr
+	| LPAREN funcTerm LPAREN        # WrappedExpr
+	;
+
+atom : Id | constant ;
+
+constant : DECIMAL | REAL | FRAC | STRING ;
+
+unOp : MINUS ;
+
+binOp : MUL | DIV | MOD | PLUS | MINUS ;
+
+relOp : EQ | NE | LT | LE | GT | GE | COLON ;
 
 /*
  * Lexer Rules

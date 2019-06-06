@@ -6,9 +6,9 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class EnumList : Nodes
+    public class EnumList : Node
     {
-        public EnumList(ParserRuleContext sourceLocation) : base(sourceLocation)
+        public EnumList(ParserRuleContext sourceLocation, List<Node> components) : base(sourceLocation, components)
         {
 
         }

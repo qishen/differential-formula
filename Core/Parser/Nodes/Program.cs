@@ -8,11 +8,10 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Program : Node
     {
-        public ModuleList ModuleList { get; }
-
-        public Program(ParserRuleContext sourceLocation, ModuleList moduleList)
+        public Program(ParserRuleContext sourceLocation, List<Node> moduleList)
+            : base(sourceLocation, moduleList)
         {
-            ModuleList = moduleList;
+            
         }
 
         public override NodeKind NodeKind

@@ -9,7 +9,6 @@ using System.Numerics;
 
 namespace Microsoft.Formula.Core
 {
-   
     public struct Rational : IComparable<Rational>, IEquatable<Rational>
     {
         private BigInteger num;

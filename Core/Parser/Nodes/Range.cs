@@ -9,18 +9,26 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Range : Node
     {
-        public DecimalLiteral LowerBound { get; }
-        public DecimalLiteral UpperBound { get; }
+        public Rational LowerBound { get; }
+        public Rational UpperBound { get; }
 
         public Range(ParserRuleContext sourceLocation, string lString, string rString) : base(sourceLocation)
         {
-            LowerBound = new DecimalLiteral(sourceLocation, lString);
-            UpperBound = new DecimalLiteral(sourceLocation, rString);
+            Rational lowerBound, upperBound;
+            Rational.TryParseDecimal(lString, out lowerBound);
+            Rational.TryParseDecimal(rString, out upperBound);
+            LowerBound = lowerBound;
+            UpperBound = upperBound;
         }
 
         public override NodeKind NodeKind
         {
             get { return NodeKind.Range; }
+        }
+
+        public List<Rational> GetRationals()
+        {
+            throw new NotImplementedException();
         }
     }
 }

@@ -18,68 +18,52 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitProgram([NotNull] FormulaParser.ProgramContext context)
         {
-            ModuleList moduleList = Visit(context.moduleList()) as ModuleList;
+            var moduleList = Visit(context.moduleList()) as List<Node>;
             return new Program(context, moduleList);
         }
 
         public override object VisitModuleList([NotNull] FormulaParser.ModuleListContext context)
         {
-            var moduleList = new ModuleList(context);
-            var modules = context.module().Select((module) =>
-            {
-                return Visit(module);
+            var modules = context.module().Select((module) => {
+                return (Node)Visit(module);
             }).ToList();
-
-            foreach(var module in modules)
-            {
-                moduleList.AddComponent(module as Node);
-            }
-
-            return moduleList;
+            return modules;
         }
 
         public override object VisitModule([NotNull] FormulaParser.ModuleContext context)
         {
-            if(context.domain() != null)
+            if (context.domain() != null)
             {
-                Domain domain = Visit(context.domain()) as Domain;
-                return new Module(context, domain);
+                Domain domain = (Domain)Visit(context.domain());
+                return domain;
             }
-            else if(context.model() != null)
+            else if (context.model() != null)
             {
-                Model model = Visit(context.model()) as Model;
-                return new Module(context, model);
+                Model model = (Model)Visit(context.model());
+                return model;
             }
-
-            return null;
+            else
+            {
+                throw new ParseCanceledException();
+            }
         }
 
         public override object VisitDomain([NotNull] FormulaParser.DomainContext context)
         {
             var domainSigContext = context.domainSig();
             string domainName = domainSigContext.Id().GetText();
-            List<Node> sentences = null;
-            if(context.domSentences() != null)
-            {
-                sentences = Visit(context.domSentences()) as List<Node>;
-            }
+            var sentences = (List<Node>)Visit(context.domSentences());         
             return new Domain(context, sentences, domainName);
         }
 
         public override object VisitDomSentences([NotNull] FormulaParser.DomSentencesContext context)
         {
-            var contextList = context.domSentence();
-
-            var sentences = context.domSentence().Select((domSentence) =>
-            {
-                System.Console.WriteLine(domSentence.GetText());
-                return Visit(domSentence);
+            var sentences = context.domSentence().Select((domSentence) => {
+                return (Node)Visit(domSentence);
             }).ToList();
-
             return sentences;                                                                                                            
         }
-
-        /*
+  
         public override object VisitDomConformsExpr([NotNull] FormulaParser.DomConformsExprContext context)
         {
             return base.VisitDomConformsExpr(context);
@@ -89,11 +73,11 @@ namespace Microsoft.Formula.Core.Parser
         {
             return base.VisitDomRuleExpr(context);
         }
-        */
 
         public override object VisitDomTypeExpr([NotNull] FormulaParser.DomTypeExprContext context)
         {
-            return Visit(context.typeDecl());
+            var typeExpr = Visit(context.typeDecl());
+            return typeExpr;
         }
 
         public override object VisitModelSig([NotNull] FormulaParser.ModelSigContext context)
@@ -103,141 +87,118 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)
         {
-            Id typeId = new Id(context, context.Id().GetText());
-            var unnbodyContext = context.unnBody();
-            object node = Visit(unnbodyContext);
+            Id unionTypeName = new Id(context, context.Id().GetText());         
+            List<Node> components = Visit(context.unnBody()) as List<Node>;
+            UnnDecl unionNode = new UnnDecl(context, unionTypeName, components);
             // Map Id name to Union type node.
-            typeElems.Add(context.Id().GetText(), node);
-            return node;
+            typeElems.Add(unionTypeName.Name, unionNode);
+            return unionNode;
         }
 
-        /*
         public override object VisitRegularTypeDecl([NotNull] FormulaParser.RegularTypeDeclContext context)
         {
             Id typeId = new Id(context, context.Id().GetText());
-
-            return null;
+            List<Node> fields = Visit(context.fields()) as List<Node>;
+            ConDecl conDecl = new ConDecl(context, typeId, fields);
+            return conDecl;
         }
-        */
+
         public override object VisitFields([NotNull] FormulaParser.FieldsContext context)
         {
-            var fields = context.field().Select((field) =>
-            {
+            var fields = context.field().Select((field) => {
                 return (Node)Visit(field);
-            });
-
-            var fieldsNode = new Fields(context);
-            foreach (var field in fields)
-            {
-                fieldsNode.AddComponent(field);
-            }
-
-            return fieldsNode;
+            }).ToList();
+            return fields;
         }
 
         public override object VisitField([NotNull] FormulaParser.FieldContext context)
         {
-            Id id = null; 
-        
+            string label = null;
             if (context.Id() != null)
             {
-                id = (Id)Visit(context.Id());
+                label = context.Id().GetText();
             }
 
+            bool isAny = false;
             if (context.ANY() != null)
             {
-
+                isAny = context.ANY() != null;
             }
 
-            UnnBody body = (UnnBody)Visit(context.unnBody());
-
-            return new Field(context, id, body);
+            UnnDecl body = (UnnDecl)Visit(context.unnBody());
+            return new Field(context, label, body, isAny);
         }
 
-        /*
         public override object VisitUnnBody([NotNull] FormulaParser.UnnBodyContext context)
         {
-            var unnBody = new UnnBody(context);
-            var unnElems = context.unnElem().Select((unnElem) =>
-            {
+            var unnElems = context.unnElem().Select((unnElem) => {
                 return (Node)Visit(unnElem);
-            }
-            );
-
-            foreach (var unnElem in unnElems)
-            {
-                unnBody.AddComponent(unnElem);
-            }
-
-            return unnBody;
+            }).ToList();
+            return unnElems;
         }
         
-
         public override object VisitUnnElem([NotNull] FormulaParser.UnnElemContext context)
         {
             Debug.Assert(!(context.Id() == null && context.enumList() == null));
+
             if (context.Id() != null)
             {
-                return new Id(context, context.Id().GetText());
+                string subtypeName = context.Id().GetText();
+                return new Id(context, subtypeName);
             }
             else if (context.enumList() != null)
             {
-                return new EnumList(context);
+                return Visit(context.enumList());
             }
             else
             {
-                return null;
+                throw new ParseCanceledException();
             }
         }
-        */
 
         public override object VisitEnumList([NotNull] FormulaParser.EnumListContext context)
         {
-            return base.VisitEnumList(context);
+            var enumList = context.enumCnst().Select((enumCnst) => {
+                return Visit(enumCnst) as Node;
+            }).ToList();
+            return new EnumList(context, enumList);
         }
 
         public override object VisitEnumCnst([NotNull] FormulaParser.EnumCnstContext context)
         {
             if (context.RANGE() != null)
             {
-                var left = Visit(context.DECIMAL(0));
-                var right = Visit(context.DECIMAL(1));
+                var lowStr = context.DECIMAL(0).GetText();
+                var highStr = context.DECIMAL(1).GetText();
+                return new Range(context, lowStr, highStr);
             }
             else if (context.DECIMAL() != null)
             {
-                return new DecimalLiteral(context, context.DECIMAL().ToString());
+                Rational r;
+                Rational.TryParseDecimal(context.DECIMAL(0).GetText(), out r);
+                return new Cnst(r);
             }
             else if (context.REAL() != null)
             {
-
+                Rational r;
+                Rational.TryParseDecimal(context.REAL().GetText(), out r);
+                return new Cnst(r);
             }
             else if (context.FRAC() != null)
             {
-
+                Rational r;
+                Rational.TryParseFraction(context.FRAC().GetText(), out r);
+                return new Cnst(r);
             }
             else if (context.STRING() != null)
             {
-
-            }
-
-            return null;
-        }
-
-        /*
-        public override object VisitPrimitiveExpr([NotNull] FormulaParser.PrimitiveExprContext context)
-        {
-            if (context.atom().Id() != null)
-            {
-                return new Id(context.atom(), context.atom().Id().GetText());
+                return new Cnst(context.STRING().GetText());
             }
             else
             {
-                return null;
+                throw new ParseCanceledException();
             }
         }
-        */
-        
-        
 
     }
 }

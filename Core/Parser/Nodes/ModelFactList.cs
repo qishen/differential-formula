@@ -6,7 +6,7 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class ModelFactList : Nodes
+    public class ModelFactList : Node
     {
         public ModelFactList(ParserRuleContext sourceLocation) : base(sourceLocation)
         {

@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
-using System.Linq;
 using System.Text;
-using System.Threading;
 
 using Antlr4.Runtime;
 
@@ -11,81 +8,41 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public abstract class Node : INode
     {
+
         public ParserRuleContext SourceLocation { get; }
 
-        public bool IsParamType
+        public List<Node> Components { get; private set; }
+
+        internal Node(){}
+
+        internal Node(ParserRuleContext sourceLocation)
         {
-            get { return IsTypeTerm || NodeKind == NodeKind.ModRef; }
+            SourceLocation = sourceLocation;
+            Components = new List<Node>();
         }
 
-        public bool IsTypeTerm
+        internal Node(ParserRuleContext sourceLocation, List<Node> components)
         {
-            get { return NodeKind == NodeKind.UnnDecl || IsUnionComponent; }
+            SourceLocation = sourceLocation;
+            Components = components;
         }
 
-        public bool IsUnionComponent
+        public bool AddComponent(Node node)
         {
-            get { return NodeKind == NodeKind.Id || NodeKind == NodeKind.Enum; }
-        }
-
-        public bool IsEnumElement
-        {
-            get { return NodeKind == NodeKind.Id || NodeKind == NodeKind.Cnst || NodeKind == NodeKind.Range; }
-        }
-
-        public bool IsAtom
-        {
-            get { return NodeKind == NodeKind.Id || NodeKind == NodeKind.Cnst; }
-        }
-
-        public bool IsFuncOrAtom
-        {
-            get { return NodeKind == NodeKind.Id || NodeKind == NodeKind.Cnst || NodeKind == NodeKind.FuncTerm || NodeKind == NodeKind.Compr || NodeKind == NodeKind.Quote; }
-        }
-
-        public bool IsModAppArg
-        {
-            get { return NodeKind == NodeKind.Id || NodeKind == NodeKind.Cnst || NodeKind == NodeKind.FuncTerm || NodeKind == NodeKind.ModRef || NodeKind == NodeKind.Quote; }
-        }
-
-        public bool IsDomOrTrans
-        {
-            get { return NodeKind == NodeKind.Domain || NodeKind == NodeKind.Transform; }
-        }
-
-        public bool IsModule
-        {
-            get { return NodeKind == NodeKind.Domain || NodeKind == NodeKind.Transform || NodeKind == NodeKind.TSystem || NodeKind == NodeKind.Model || NodeKind == NodeKind.Machine; }
-        }
-
-        public bool IsTypeDecl
-        {
-            get { return NodeKind == NodeKind.ConDecl || NodeKind == NodeKind.MapDecl || NodeKind == NodeKind.UnnDecl; }
-        }
-
-        public bool IsConstraint
-        {
-            get { return NodeKind == NodeKind.Find || NodeKind == NodeKind.RelConstr; }
+            if (!Components.Contains(node))
+            {
+                Components.Add(node);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         public abstract NodeKind NodeKind
         {
             get;
         }
-
-        internal Node(ParserRuleContext sourceLocation)
-        {
-            SourceLocation = sourceLocation;
-        }
-
-        internal Node()
-        { }
-
-        public void Visit()
-        {
-
-        }
-        
     }
 }
-

@@ -8,7 +8,7 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class Term : Nodes
+    public class Term : Node
     {
         private long uid = -1;
         internal const int FamilyNumeric = 0;

@@ -44,7 +44,7 @@ namespace Microsoft.Formula.Core
         DecimalLiteral,
         EnumList,
         EnumCnst,
-        TypeDeclExpr,
+        TypeDecl,
         Cnst,
         Id,
         Range,

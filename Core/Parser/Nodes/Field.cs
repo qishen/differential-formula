@@ -8,14 +8,30 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Field : Node
     {   
-        public UnnBody UnionBody { get; }
-
-        public Id Id { get; }
-
-        public Field(ParserRuleContext sourceLocation, Id id, UnnBody unnBody) : base(sourceLocation)
+        public Field(ParserRuleContext sourceLocation, string label, Node type, bool isAny) 
+            : base(sourceLocation)
         {
-            UnionBody = unnBody;
-            Id = id;
+            Label = label;
+            Type = type;
+            IsAny = isAny;
+        }
+
+        public bool IsAny
+        {
+            get;
+            private set;
+        }
+        
+        public string Label
+        {
+            get;
+            private set;
+        }
+
+        public Node Type
+        {
+            get;
+            private set;
         }
 
         public override NodeKind NodeKind

@@ -7,20 +7,18 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class UnionTypeDecl : Node
+    public class UnnDecl : Node
     {
         public Id Id { get; }
-        public UnnBody UnnBody { get; }
 
-        public UnionTypeDecl(ParserRuleContext sourceLocation, Id id, UnnBody unnBody) : base(sourceLocation)
+        public UnnDecl(ParserRuleContext sourceLocation, Id id, List<Node> components) : base(sourceLocation, components)
         {
             Id = id;
-            UnnBody = unnBody;
         }
 
         public override NodeKind NodeKind
         {
-            get { return NodeKind.TypeDeclExpr; }
+            get { return NodeKind.UnnDecl; }
         }
     }
 }

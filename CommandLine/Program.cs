@@ -24,7 +24,7 @@ namespace CommandLine
 domain Graph
 {
     Node ::= Small + Big.
-    Edge ::= Smaller + Bigger.
+    Edge ::= Smaller + Bigger + {1, 2, 3}.
 }
             ";
 

@@ -1,20 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Collections.Generic;
 
 using Antlr4.Runtime;
 
-namespace Microsoft.Formula.Core.Parser.Nodes.Base
+namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public interface INode
     {   
-        INode Parent { get; }
-        List<INode> Children { get; }
-
         ParserRuleContext SourceLocation { get; }
 
-        bool Contains(INode other);
+        NodeKind NodeKind
+        { get; }
         
     }
 }

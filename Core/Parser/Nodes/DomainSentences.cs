@@ -6,7 +6,7 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    public class DomainSentences : Nodes
+    public class DomainSentences : Node
     {
         public DomainSentences(ParserRuleContext context) : base(context)
         {
