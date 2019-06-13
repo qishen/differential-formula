@@ -137,10 +137,17 @@ funcTermList
 	: funcTerm (COMMA funcTerm)* ;
 
 funcTerm 
-	: atom							# AtomTerm
-	| unOp funcTerm					# UnaryTerm
-	| funcTerm binOp funcTerm		# BinaryTerm
-	| (Id (IS | EQ))? Id LPAREN funcTermList RPAREN # CompositionTerm
+	: arithmeticTerm # ArithmeticFuncterm
+	| (Id (IS | EQ))? Id LPAREN funcTermList RPAREN # CompositionFuncterm
+	;
+
+// Operator precedence (* or /) -> MOD -> (+ or -) and no right associativity is needed.
+arithmeticTerm
+	: LPAREN arithmeticTerm RPAREN # ParenthesisArithTerm
+	| arithmeticTerm (MUL | DIV) arithmeticTerm # MulDivArithTerm
+	| arithmeticTerm MOD arithmeticTerm # ModArithTerm
+	| arithmeticTerm (PLUS | MINUS) arithmeticTerm # AddSubArithTerm
+	| atom # AtomTerm
 	;
 
 atom : Id | constant ;

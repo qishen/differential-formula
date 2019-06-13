@@ -32,6 +32,8 @@ model g of Graph
 {
     v1 is Node(1).
     Node(2).
+    e1 is Edge(Node(1), Node(2)).
+    e2 is Edge(v1, v2).
 }
             ";
 

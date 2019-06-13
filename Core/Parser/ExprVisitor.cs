@@ -99,9 +99,9 @@ namespace Microsoft.Formula.Core.Parser
         {
             if (context.atom().Id() != null)
             {
-                string id = context.atom().Id().GetText();
-                Cnst cnst = new Cnst(id);
-                return new Term(context.atom(), cnst);
+                string idStr = context.atom().Id().GetText();
+                Id id = new Id(context.atom(), idStr);
+                return new Term(context.atom(), id);
             }
             else if (context.atom().constant() != null)
             {
@@ -114,7 +114,48 @@ namespace Microsoft.Formula.Core.Parser
             }
         }
 
-        public override object VisitCompositionTerm([NotNull] FormulaParser.CompositionTermContext context)
+        public override object VisitAddSubArithTerm([NotNull] FormulaParser.AddSubArithTermContext context)
+        {
+            var term1 = Visit(context.arithmeticTerm(0)) as Term;
+            var term2 = Visit(context.arithmeticTerm(1)) as Term;
+            Term binaryTerm;
+            if (context.PLUS() != null)
+            {
+                binaryTerm = new Term(context, OpKind.Add, term1, term2);
+            }
+            else
+            {
+                binaryTerm = new Term(context, OpKind.Sub, term1, term2);
+            }
+
+            return binaryTerm;
+        }
+
+        public override object VisitModArithTerm([NotNull] FormulaParser.ModArithTermContext context)
+        {
+            var term1 = Visit(context.arithmeticTerm(0)) as Term;
+            var term2 = Visit(context.arithmeticTerm(1)) as Term;
+            return new Term(context, OpKind.Mod, term1, term2);
+        }
+
+        public override object VisitMulDivArithTerm([NotNull] FormulaParser.MulDivArithTermContext context)
+        {
+            var term1 = Visit(context.arithmeticTerm(0)) as Term;
+            var term2 = Visit(context.arithmeticTerm(1)) as Term;
+            Term binaryTerm;
+            if (context.MUL() != null)
+            {
+                binaryTerm = new Term(context, OpKind.Mul, term1, term2);
+            }
+            else
+            {
+                binaryTerm = new Term(context, OpKind.Div, term1, term2);
+            }
+
+            return binaryTerm;
+        }
+
+        public override object VisitCompositionFuncterm([NotNull] FormulaParser.CompositionFunctermContext context)
         {
             Id alias = null;
             Id typeName;
