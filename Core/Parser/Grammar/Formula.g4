@@ -108,11 +108,19 @@ formulaRule
 	  DOT				
 	;
 
-comprehension
+/* 
+Set comprehension is the form of {t1, t2,... tn | body}, t1...tn can be a combination
+of constants, variables and predicates.
+For every assignment that satisfies the body, substitute values to each t_i and add t_i
+to set S.
+The body of set comprehension can have nested comprehension inside it.
+For example, count({a, b | a is V, E(a, a'), count({a' | Element(a', b) }) < 2 }) = 1. It does
+not make sense but fully supported in FORMULA.
+*/
+setComprehension
 	: LBRACE funcTermList RBRACE
 	| LBRACE funcTermList PIPE disjunction RBRACE
 	;
-
 
 disjunction 
 	: conjunction			  
@@ -126,22 +134,47 @@ conjunction
 
 /******************* Terms and Constraints *******************/
 
+/*
+Five kinds of constraints in FORMULA rules or queries.
+1. Existence or absence of compositional term. e.g. no A(a, b).
+2. Aggregation over set comprehension.
+Binary constraint are matched only for arithmetic terms over binary relation
+and only limited numeric types.
+*/
 constraint
-	: funcTerm
-	| NO funcTerm
-	| NO comprehension
-	| funcTerm relOp funcTerm
+	: (NO)? compositionalTermWithoutAlias # PredConstraint
+	| (NO)? setComprehension # ComprConstraint
+	| arithmeticTerm relOp arithmeticTerm # BinaryConstraint
+	| Id IS Id # TypeConstraint
+	| Id IS compositionalTermWithoutAlias # VariableConstraint
+	;
+
+compositionalTermList
+	: compositionalTerm (COMMA compositionalTerm)*
 	;
 
 funcTermList 
-	: funcTerm (COMMA funcTerm)* ;
-
-funcTerm 
-	: arithmeticTerm # ArithmeticFuncterm
-	| (Id (IS | EQ))? Id LPAREN funcTermList RPAREN # CompositionFuncterm
+	: funcTerm (COMMA funcTerm)* 
 	;
 
-// Operator precedence (* or /) -> MOD -> (+ or -) and no right associativity is needed.
+funcTerm 
+	: compositionalTerm 
+    | compositionalTermWithoutAlias
+	| arithmeticTerm
+	;
+
+compositionalTerm 
+	: (Id (IS | EQ))? Id LPAREN funcTermList RPAREN
+	;
+
+compositionalTermWithoutAlias
+	: Id LPAREN funcTermList RPAREN
+	;
+
+/*
+Operator precedence (* or /) -> MOD -> (+ or -) and no right associativity is needed.
+The basic arithmetic term is either variable or constant.
+*/
 arithmeticTerm
 	: LPAREN arithmeticTerm RPAREN # ParenthesisArithTerm
 	| arithmeticTerm (MUL | DIV) arithmeticTerm # MulDivArithTerm
@@ -188,6 +221,7 @@ SUR : 'sur' ;
 ANY : 'any' ;
 SUB : 'sub' ;
 
+COUNT : 'count' ;
 ENSURES : 'ensures' ;
 REQUIRES : 'requires' ;
 CONFORMS : 'conforms' ;
