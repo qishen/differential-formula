@@ -5,6 +5,18 @@ using System.Text;
 
 namespace Microsoft.Formula.Core
 {
+    public enum Groundness
+    {
+        Ground,
+        Variable,
+        Composite
+    }
+
+    public enum ConstraintKind
+    {
+        BinaryConstraint,
+        UnaryConstraint
+    }
 
     public enum ContractKind 
     {
@@ -18,7 +30,7 @@ namespace Microsoft.Formula.Core
 
     public enum ComposeKind { None, Includes, Extends };
 
-    public enum RelKind { No, Eq, Neq, Le, Lt, Ge, Gt, Typ };
+    public enum RelKind { No, Eq, Neq, Le, Lt, Ge, Gt, Typ, Null };
 
     public enum SeverityKind { Info = 0, Warning = 1, Error = 2 };
 
@@ -30,13 +42,10 @@ namespace Microsoft.Formula.Core
 
     public enum NodeKind
     {   
-        FuncTermList,
-        BinaryExpr,
-        UnaryExpr,
-        PrimitiveExpr,
-        WrappedExpr,
-        FuncCallExpr,
-        Fields,
+        SetComprehension,
+        Constraint,
+        Disjunction,
+        Conjunction,
         Field,
         StringLiteral,
         FracLiteral,

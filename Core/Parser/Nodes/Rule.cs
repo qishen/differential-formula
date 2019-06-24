@@ -8,9 +8,12 @@ namespace Microsoft.Formula.Core.Parser.Nodes
 {
     public class Rule : Node
     {
-        public Rule(ParserRuleContext sourceLocation) : base(sourceLocation)
+        public List<Node> Head { get; }
+        public Disjunction Body { get; }
+        public Rule(ParserRuleContext sourceLocation, List<Node> head, Disjunction body) : base(sourceLocation)
         {
-
+            Head = head;
+            Body = body;
         }
 
         public override NodeKind NodeKind

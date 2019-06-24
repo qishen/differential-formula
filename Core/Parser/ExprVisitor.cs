@@ -16,6 +16,44 @@ namespace Microsoft.Formula.Core.Parser
     {
         private readonly IDictionary<string, object> typeElems = new Dictionary<string, object>();
 
+        public static RelKind Str2RelKind(string s)
+        {
+            RelKind op;
+
+            switch (s)
+            {
+                case ">":
+                    op = RelKind.Gt;
+                    break;
+                case ">=":
+                    op = RelKind.Ge;
+                    break;
+                case "<":
+                    op = RelKind.Lt;
+                    break;
+                case "<=":
+                    op = RelKind.Le;
+                    break;
+                case "=":
+                    op = RelKind.Eq;
+                    break;
+                case "no":
+                    op = RelKind.No;
+                    break;
+                case "!=":
+                    op = RelKind.Neq;
+                    break;
+                case ":":
+                    op = RelKind.Typ;
+                    break;
+                default:
+                    op = RelKind.Null;
+                    break;
+            }
+
+            return op;
+        }
+
         public override object VisitProgram([NotNull] FormulaParser.ProgramContext context)
         {
             var moduleList = Visit(context.moduleList()) as List<Node>;
@@ -89,10 +127,53 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitModelFactList([NotNull] FormulaParser.ModelFactListContext context)
         {
-            List<Node> terms = context.funcTerm().Select((funcTerm) => {
-                return (Node)Visit(funcTerm);
+            List<Node> terms = context.modelFact().Select((modelFact) => {
+                return (Node)Visit(modelFact);
             }).ToList();
             return terms;
+        }
+
+        public override object VisitCompositionalTerm([NotNull] FormulaParser.CompositionalTermContext context)
+        {
+            Id alias = new Id(context, context.Id(0).GetText());
+            Id typeName = new Id(context, context.Id(1).GetText());
+            var terms = (List<Node>)Visit(context.terms());
+            return new Term(context, alias, typeName, terms);
+        }
+
+        public override object VisitCompositionalTermWithoutAlias([NotNull] FormulaParser.CompositionalTermWithoutAliasContext context)
+        {
+            Id typeName = new Id(context, context.Id().GetText());
+            var terms = (List<Node>)Visit(context.terms());
+            return new Term(context, null, typeName, terms);
+        }
+
+        public override object VisitTerms([NotNull] FormulaParser.TermsContext context)
+        {
+            var terms = context.term().Select((term) => {
+                return (Node)Visit(term);
+            }).ToList();
+            return terms;
+        }
+
+        public override object VisitTerm([NotNull] FormulaParser.TermContext context)
+        {
+            if (context.atom() != null)
+            {
+                return Visit(context.atom());
+            }
+            else if (context.compositionalTermWithoutAlias() != null)
+            {
+                return Visit(context.compositionalTermWithoutAlias());
+            }
+            else if (context.arithmeticTerm() != null)
+            {
+                return Visit(context.arithmeticTerm());
+            }
+            else
+            {
+                throw new ParseCanceledException();
+            }
         }
 
         public override object VisitAtomTerm([NotNull] FormulaParser.AtomTermContext context)
@@ -155,32 +236,6 @@ namespace Microsoft.Formula.Core.Parser
             return binaryTerm;
         }
 
-        public override object VisitCompositionFuncterm([NotNull] FormulaParser.CompositionFunctermContext context)
-        {
-            Id alias = null;
-            Id typeName;
-            if (context.Id(0) != null && context.Id(1) != null)
-            {
-                alias = new Id(context, context.Id(0).GetText());
-                typeName = new Id(context, context.Id(1).GetText());
-            }
-            else
-            {
-                typeName = new Id(context, context.Id(0).GetText());
-            }
-            
-            var terms = (List<Node>)Visit(context.funcTermList());
-            return new Term(context, alias, typeName, terms);
-        }
-
-        public override object VisitFuncTermList([NotNull] FormulaParser.FuncTermListContext context)
-        {
-            var terms = context.funcTerm().Select((funcTerm) => {
-                return (Node)Visit(funcTerm);
-            }).ToList();
-            return terms;
-        }
-
         public override object VisitConstant([NotNull] FormulaParser.ConstantContext context)
         {
             if (context.DECIMAL() != null)
@@ -224,22 +279,6 @@ namespace Microsoft.Formula.Core.Parser
             return sentences;                                                                                                            
         }
   
-        public override object VisitDomConformsExpr([NotNull] FormulaParser.DomConformsExprContext context)
-        {
-            return base.VisitDomConformsExpr(context);
-        }
-
-        public override object VisitDomRuleExpr([NotNull] FormulaParser.DomRuleExprContext context)
-        {
-            return base.VisitDomRuleExpr(context);
-        }
-
-        public override object VisitDomTypeExpr([NotNull] FormulaParser.DomTypeExprContext context)
-        {
-            var typeExpr = Visit(context.typeDecl());
-            return typeExpr;
-        }
-
         public override object VisitUnionTypeDecl([NotNull] FormulaParser.UnionTypeDeclContext context)
         {
             Id unionTypeName = new Id(context, context.Id().GetText());         
@@ -349,6 +388,105 @@ namespace Microsoft.Formula.Core.Parser
             {
                 throw new ParseCanceledException();
             }
+        }
+
+        public override object VisitFormulaRule([NotNull] FormulaParser.FormulaRuleContext context)
+        {
+            List<Node> head = Visit(context.terms()) as List<Node>;
+            Disjunction body = Visit(context.disjunction()) as Disjunction;
+            return new Rule(context, head, body);
+        }
+
+        public override object VisitDisjunction([NotNull] FormulaParser.DisjunctionContext context)
+        {
+            var conjunctions = context.conjunction().Select((conjunction) => {
+                return Visit(conjunction) as Node;
+            }).ToList();
+
+            return conjunctions;
+        }
+
+        public override object VisitConjunction([NotNull] FormulaParser.ConjunctionContext context)
+        {
+            var constraints = context.constraint().Select((constraint) => {
+                return Visit(constraint) as Node;
+            }).ToList();
+
+            return constraints;
+        }
+
+        public override object VisitPredConstraint([NotNull] FormulaParser.PredConstraintContext context)
+        {
+            bool negated;
+            if(context.NO() != null)
+            {
+                negated = true;
+            }
+            else
+            {
+                negated = false;
+            }
+            Term term = Visit(context.compositionalTermWithoutAlias()) as Term;
+            return new Constraint(context.compositionalTermWithoutAlias(), negated, term);
+
+        }
+
+        public override object VisitAggregationCountConstraint([NotNull] FormulaParser.AggregationCountConstraintContext context)
+        {
+            SetComprehension compr = Visit(context.setComprehension()) as SetComprehension;
+            Rational r;
+            Rational.TryParseDecimal(context.DECIMAL().GetText(), out r);
+            Cnst num = new Cnst(r);
+            string opStr = context.relOp().GetText();
+            RelKind op = Str2RelKind(opStr);
+            return new Constraint(context, op, compr, num);
+        }
+
+        public override object VisitBinaryConstraint([NotNull] FormulaParser.BinaryConstraintContext context)
+        {
+            Node arg1 = Visit(context.arithmeticTerm(0)) as Node;
+            Node arg2 = Visit(context.arithmeticTerm(1)) as Node;
+            string opStr = context.relOp().GetText();
+            RelKind op = Str2RelKind(opStr);
+            return new Constraint(context, op, arg1, arg2);
+        }
+
+        public override object VisitTypeConstraint([NotNull] FormulaParser.TypeConstraintContext context)
+        {
+            string id = context.Id(0).GetText();
+            string typeStr = context.Id(1).GetText();
+            Id variable = new Id(context, id);
+            Id typeName = new Id(context, typeStr);
+            return new Constraint(context, RelKind.Typ, variable, typeName);
+        }
+
+        public override object VisitVariableBindingConstraint([NotNull] FormulaParser.VariableBindingConstraintContext context)
+        {
+            string id = context.Id().GetText();
+            Id variable = new Id(context, id);
+            Term term = Visit(context.compositionalTermWithoutAlias()) as Term;
+            return new Constraint(context, RelKind.Eq, variable, term);
+        }
+
+        public override object VisitDerivedConstantConstraint([NotNull] FormulaParser.DerivedConstantConstraintContext context)
+        {
+            bool negated;
+            if (context.NO() != null)
+            {
+                negated = true;
+            }
+            else
+            {
+                negated = false;
+            }
+
+            Id variable = new Id(context, context.Id().GetText());
+            return new Constraint(context, negated, variable);
+        }
+
+        public override object VisitSetComprehension([NotNull] FormulaParser.SetComprehensionContext context)
+        {
+            return base.VisitSetComprehension(context);
         }
 
     }

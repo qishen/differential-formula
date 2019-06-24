@@ -26,6 +26,10 @@ domain Graph
     Node ::= new (id: Integer).
     Edge ::= new (src: Node, dst: Node).
     Thing ::= Node + Edge + {1, 2, 3}.
+    
+    path ::= (src: Node, dst: Node).
+    path(a, b) :- Edge(a, b).
+    path(a, c) :- path(a, b), path(b, c).
 }
 
 model g of Graph

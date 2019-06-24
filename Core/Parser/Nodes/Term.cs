@@ -8,7 +8,7 @@ using Antlr4.Runtime;
 
 namespace Microsoft.Formula.Core.Parser.Nodes
 {
-    // 1. Term can be in the form of termId = TermType(term_1, term_2, ... term_n).
+    // 1. Term can be in composite form as termId = TermType(term_1, term_2, ... term_n).
     // 2. Term can be just a constant of basic built-in type.
     // 3. Term can be a variable.
     // 4. Term can be binary arithmetic expression of subterms made of Opkind, Arg1 and Arg2. 
@@ -18,20 +18,18 @@ namespace Microsoft.Formula.Core.Parser.Nodes
     // have semantics defined and users should not be allowed to write such expressions.
     public class Term : Node
     {
-        private long uid = -1;
-        internal const int FamilyNumeric = 0;
-        internal const int FamilyString = 1;
-        internal const int FamilyUsrCnst = 2;
-        internal const int FamilyApp = 3;
-
-        public OpKind Op
-        { get; }
+        // Nullable type
+        public OpKind? Op
+        {
+            get;
+        }
 
         public Id Alias
         {
             get;
         }
 
+        // The name of the constructor of composite term.
         public Id Sig
         {
             get;
@@ -48,33 +46,49 @@ namespace Microsoft.Formula.Core.Parser.Nodes
             private set;
         }
 
+        public bool IsArithmeticTerm
+        {
+            get { return Op.HasValue; }
+        }
+
+        // Constructor for compositional term in which each argument is also a term.
         public Term(ParserRuleContext sourceLocation, Id alias, Id symbol, List<Node> args) 
             : base(sourceLocation, args)
         {
             Sig = symbol;
             Alias = alias;
-            Groundness = Groundness.Type;
+            Groundness = Groundness.Composite;
         }
 
+
+        // Constructor for constant term
         public Term(ParserRuleContext sourceLocation, Cnst cnst) : base(sourceLocation)
         {
             Cnst = cnst;
             Groundness = Groundness.Ground;
         }
 
+
+        // Constructor for variable term
         public Term(ParserRuleContext sourceLocation, Id symbol) : base(sourceLocation)
         {
             Sig = symbol;
             Groundness = Groundness.Variable;
         }
 
-        public Term(ParserRuleContext sourceLocation, OpKind op, Term arg1, Term arg2) 
+
+        // Binary arithmetic term that contains two arguments and an operator.
+        // For example, arithmetic expression inside Node(x*3) can be written as <*>(x, 3),
+        // so an arithmetic term is also an composite term in infix form.
+        public Term(ParserRuleContext sourceLocation, OpKind op, Node arg1, Node arg2) 
             : base(sourceLocation)
         {
-            Op = op;
+            Op = (OpKind?) op;
             this.AddComponent(arg1);
             this.AddComponent(arg2);
+            Groundness = Groundness.Composite;
         }
+
 
         public override NodeKind NodeKind
         {
