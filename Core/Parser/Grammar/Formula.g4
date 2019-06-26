@@ -186,18 +186,28 @@ term
 /*
 terms can be used in the head of FORMULA rule and its head
 should only contain boolean variables or compositional terms with
-some variables inside it.
+some variables or arithmetic expressions inside it.
 */
 terms 
 	: term (COMMA term)*
 	;
 
+
+/*
+Antlr4 only supports mutually recursive definition written in one rule instead of
+multiple rules.
+*/
 compositionalTerm 
-	: Id (IS | EQ) Id LPAREN terms RPAREN
+	: Id (IS | EQ) compositionalTermWithoutAlias
 	;
 
+/*
+Terms in model facts should not contain any arithmetic expressions,
+while terms in FORMULA rules can have them.
+*/
 compositionalTermWithoutAlias
-	: Id LPAREN terms RPAREN
+	: Id LPAREN compositionalTermWithoutAlias (COMMA compositionalTermWithoutAlias)* RPAREN # NestedCompositionalTerm
+	| Id LPAREN atom (COMMA atom)* RPAREN # NonNestedCompositionalTerm
 	;
 
 /*

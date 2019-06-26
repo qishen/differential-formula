@@ -135,16 +135,28 @@ namespace Microsoft.Formula.Core.Parser
 
         public override object VisitCompositionalTerm([NotNull] FormulaParser.CompositionalTermContext context)
         {
-            Id alias = new Id(context, context.Id(0).GetText());
-            Id typeName = new Id(context, context.Id(1).GetText());
-            var terms = (List<Node>)Visit(context.terms());
-            return new Term(context, alias, typeName, terms);
+            Id alias = new Id(context, context.Id().GetText());
+
+            Term composTerm = Visit(context.compositionalTermWithoutAlias()) as Term;
+            composTerm.AddTermAlias(alias);
+            return composTerm;
         }
 
-        public override object VisitCompositionalTermWithoutAlias([NotNull] FormulaParser.CompositionalTermWithoutAliasContext context)
+        public override object VisitNestedCompositionalTerm([NotNull] FormulaParser.NestedCompositionalTermContext context)
         {
             Id typeName = new Id(context, context.Id().GetText());
-            var terms = (List<Node>)Visit(context.terms());
+            var terms = context.compositionalTermWithoutAlias().Select((term) => {
+                return (Node)Visit(term);
+            }).ToList();
+            return new Term(context, null, typeName, terms);
+        }
+
+        public override object VisitNonNestedCompositionalTerm([NotNull] FormulaParser.NonNestedCompositionalTermContext context)
+        {
+            Id typeName = new Id(context, context.Id().GetText());
+            var terms = context.atom().Select((atom) => {
+                return (Node)Visit(atom);
+            }).ToList();
             return new Term(context, null, typeName, terms);
         }
 
@@ -176,23 +188,28 @@ namespace Microsoft.Formula.Core.Parser
             }
         }
 
-        public override object VisitAtomTerm([NotNull] FormulaParser.AtomTermContext context)
+        public override object VisitAtom([NotNull] FormulaParser.AtomContext context)
         {
-            if (context.atom().Id() != null)
+            if (context.Id() != null)
             {
-                string idStr = context.atom().Id().GetText();
-                Id id = new Id(context.atom(), idStr);
-                return new Term(context.atom(), id);
+                string idStr = context.Id().GetText();
+                Id id = new Id(context, idStr);
+                return new Term(context, id);
             }
-            else if (context.atom().constant() != null)
+            else if (context.constant() != null)
             {
-                Cnst cnst = Visit(context.atom().constant()) as Cnst;
-                return new Term(context.atom(), cnst);
+                Cnst cnst = Visit(context.constant()) as Cnst;
+                return new Term(context, cnst);
             }
             else
             {
                 throw new ParseCanceledException();
             }
+        }
+
+        public override object VisitAtomTerm([NotNull] FormulaParser.AtomTermContext context)
+        {
+            return Visit(context.atom()) as Term;
         }
 
         public override object VisitAddSubArithTerm([NotNull] FormulaParser.AddSubArithTermContext context)
@@ -400,10 +417,10 @@ namespace Microsoft.Formula.Core.Parser
         public override object VisitDisjunction([NotNull] FormulaParser.DisjunctionContext context)
         {
             var conjunctions = context.conjunction().Select((conjunction) => {
-                return Visit(conjunction) as Node;
+                return Visit(conjunction) as Conjunction;
             }).ToList();
 
-            return conjunctions;
+            return new Disjunction(context, conjunctions);
         }
 
         public override object VisitConjunction([NotNull] FormulaParser.ConjunctionContext context)
@@ -412,7 +429,7 @@ namespace Microsoft.Formula.Core.Parser
                 return Visit(constraint) as Node;
             }).ToList();
 
-            return constraints;
+            return new Conjunction(context, constraints);
         }
 
         public override object VisitPredConstraint([NotNull] FormulaParser.PredConstraintContext context)
@@ -428,7 +445,6 @@ namespace Microsoft.Formula.Core.Parser
             }
             Term term = Visit(context.compositionalTermWithoutAlias()) as Term;
             return new Constraint(context.compositionalTermWithoutAlias(), negated, term);
-
         }
 
         public override object VisitAggregationCountConstraint([NotNull] FormulaParser.AggregationCountConstraintContext context)

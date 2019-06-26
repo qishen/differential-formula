@@ -18,7 +18,14 @@ namespace Microsoft.Formula.Core.Parser.Nodes
     // have semantics defined and users should not be allowed to write such expressions.
     public class Term : Node
     {
-        // Nullable type
+        public Groundness Groundness
+        {
+            get;
+            private set;
+        }
+
+        // Nullable type for OpKind
+        // operator for binary arithmetic term.
         public OpKind? Op
         {
             get;
@@ -27,6 +34,7 @@ namespace Microsoft.Formula.Core.Parser.Nodes
         public Id Alias
         {
             get;
+            set;
         }
 
         // The name of the constructor of composite term.
@@ -35,21 +43,32 @@ namespace Microsoft.Formula.Core.Parser.Nodes
             get;
         }
 
-        public Cnst Cnst
+        // Use an Id node to represent variable.
+        public Id Variable
         {
             get;
         }
 
-        public Groundness Groundness
+        // A node to hold constant value if the term is a constant.
+        public Cnst Cnst
         {
             get;
-            private set;
         }
 
         public bool IsArithmeticTerm
         {
             get { return Op.HasValue; }
         }
+
+
+        // Constructor without parser context.
+        public Term(Id alias, Id symbol, List<Node> args)
+        {
+            Sig = symbol;
+            Alias = alias;
+            Groundness = Groundness.Composite;
+        }
+
 
         // Constructor for compositional term in which each argument is also a term.
         public Term(ParserRuleContext sourceLocation, Id alias, Id symbol, List<Node> args) 
@@ -72,7 +91,7 @@ namespace Microsoft.Formula.Core.Parser.Nodes
         // Constructor for variable term
         public Term(ParserRuleContext sourceLocation, Id symbol) : base(sourceLocation)
         {
-            Sig = symbol;
+            Variable = symbol;
             Groundness = Groundness.Variable;
         }
 
@@ -87,6 +106,12 @@ namespace Microsoft.Formula.Core.Parser.Nodes
             this.AddComponent(arg1);
             this.AddComponent(arg2);
             Groundness = Groundness.Composite;
+        }
+
+
+        public void AddTermAlias(Id id)
+        {
+            Alias = id;
         }
 
 
