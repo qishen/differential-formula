@@ -29,3 +29,6 @@ class Rule:
             rules.append(new_rule)
 
         return rules
+
+    def find_match(self):
+        pass

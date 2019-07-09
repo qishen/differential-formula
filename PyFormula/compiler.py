@@ -1,7 +1,6 @@
 
 
 class Compiler:
-
     # e.g. fact_map = {link: [[a,b], [b,c]]}
     def __init__(self, relations, rules):
         self.relation_map = {}
