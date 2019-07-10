@@ -49,12 +49,22 @@ compiler = Compiler(relations, rules)
 compiler.compile(facts_map)
 
 for t in link.data:
-    print(str(t[0]), t[1])
+    print(str(t), link.data[t])
+
 
 rules = hop_rule.derive_delta_rules()
 for rule in rules:
     print(rule)
 
+
 bindings = link_x_z_term.get_bindings(link_facts[0])
 for (key, value) in bindings.items():
     print(str(key) + ' binds to ' + str(value))
+
+
+print('\n--- Test on pattern match on rule ---')
+bindings_list = hop_rule.find_match()
+for bindings in bindings_list:
+    for (key, value) in bindings.items():
+        print(str(key) + ' binds to ' + str(value))
+    print('\n')

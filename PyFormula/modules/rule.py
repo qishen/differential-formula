@@ -30,5 +30,44 @@ class Rule:
 
         return rules
 
+    def get_factset_for_pred(self, constraint):
+        """
+        Return the right factset for predicate constraint, which can be one of
+        three fact sets: Existing fact set, Delta fact set and combined fact set.
+        :param constraint:
+        :return:
+        """
+        relation = constraint.get_relation()
+        if constraint.pred_type == PredType.ORIGINAL:
+            factset = relation.data
+        elif constraint.pred_type == PredType.DELTA:
+            factset = relation.delta_data
+        else:
+            factset = relation.combined_data
+        return factset
+
     def find_match(self):
-        pass
+        bindings_list = [{}]
+        for constraint in self.body:
+            factset = self.get_factset_for_pred(constraint)
+            new_bindings_list = []
+            for fact in factset:
+                for bindings in bindings_list:
+                    partial_binded_term = constraint.term.propagate_bindings(bindings)
+                    '''
+                    If the term in constraint predicate is still not fully binded after propagating bindings
+                    and the partial binded term is semantically equal to current ground term fact, then find
+                    new bindings between partial binded term and fact.
+                    '''
+                    if partial_binded_term.is_ground_term:
+                        new_bindings_list.append(bindings)
+                    elif not partial_binded_term.is_ground_term and partial_binded_term.equal_semantically(fact):
+                        new_bindings = partial_binded_term.get_bindings(fact)
+                        new_combined_bindings = {**bindings, **new_bindings}
+                        new_bindings_list.append(new_combined_bindings)
+            bindings_list = new_bindings_list
+        return bindings_list
+
+
+if __name__ == '__main__':
+    pass

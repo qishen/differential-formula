@@ -32,6 +32,9 @@ class Predicate(Constraint):
             prefix += '[combined]'
         return prefix + str(self.term)
 
+    def get_relation(self):
+        return self.term.sort
+
     def convert(self, pred_type: PredType, negated: bool):
         return Predicate(self.term, pred_type, negated)
 

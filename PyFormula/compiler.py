@@ -15,12 +15,21 @@ class Compiler:
             if key in self.relation_map:
                 relation = self.relation_map[key]
                 for fact in facts:
-                    relation.data.append((fact, 1))
+                    relation.data[fact] = 1
+
+        self.initial_evaluation()
 
     def initial_evaluation(self):
-        pass
+        for rule in self.rules:
+            bindings_list = rule.find_match()
+            for constraint in rule.head:
+                facts = []
+                hterm = constraint.term
+                for bindings in bindings_list:
+                    fact = hterm.propagate_bindings(bindings)
+                    hterm.sort.add_fact(fact)
 
-    def add_changes(self):
+    def add_changes(self, facts_map):
         pass
 
     def incremental_evaluation(self):

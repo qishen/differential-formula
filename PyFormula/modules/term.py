@@ -15,20 +15,20 @@ class Term:
     def __init__(self, sort):
         self.sort = sort
 
-    def is_ground_term(self):
+    def check_ground_term(self):
         if type(self) is Atom:
             return True
         elif type(self) is Variable:
             return False
         elif type(self) is Composite:
             for arg in self.args:
-                if not arg.is_ground_term():
+                if not arg.check_ground_term():
                     return False
             return True
 
     def get_variables(self):
         variables = []
-        if self.is_ground_term():
+        if self.check_ground_term():
             return variables
         else:
             if type(self) is Variable:
@@ -97,23 +97,23 @@ class Term:
         """
         bindings = {}
 
-        def bind_helper(var_term, ground_term):
+        def bind_helper(var_term, g_term):
             """
             Recursively bind variables to ground terms without invoking all sanity checks again.
             :param var_term:
-            :param ground_term:
+            :param g_term:
             :return:
             """
             if type(var_term) is Variable:
-                bindings[var_term] = ground_term
+                bindings[var_term] = g_term
             elif type(var_term) is Composite:
                 length = len(var_term.args)
                 for i in range(length):
-                    bind_helper(var_term.args[i], ground_term.args[i])
+                    bind_helper(var_term.args[i], g_term.args[i])
 
         if not self.equal_semantically(ground_term):
             raise Exception('Two terms are not semantically equal and thus cannot be bind.')
-        elif not ground_term.is_ground_term():
+        elif not ground_term.is_ground_term:
             raise Exception('Cannot bind to non-ground term.')
         else:
             bind_helper(self, ground_term)
@@ -147,22 +147,25 @@ class Term:
 class Composite(Term):
     def __init__(self, relation, terms, alias=None):
         super().__init__(relation)
-        self.relation = relation # same as self.sort attribute in base class.
+        self.relation = relation  # same as self.sort attribute in base class.
         self.args = terms
         self.alias = alias
         self.term_type = TermType.COMPOSITE
+        self.is_ground_term = self.check_ground_term()
 
-        if self.is_ground_term():
-            self.hash = DeepHash(self)[self]
-        else:
-            self.hash = None
+        # Can't call DeepHash on self because it will invoke __hash__() and end up with endless recursion.
+        hash_obj = [self.args, self.relation.name]
+        self.hash = hash(DeepHash(hash_obj)[hash_obj])
 
 
     def __str__(self):
         return self.relation.name + '(' + ','.join([str(x) for x in self.args]) + ')'
 
+    def __hash__(self):
+        return self.hash
+
     def __eq__(self, other):
-        return self.equal_strictly(other)
+        return self.__hash__() == other.__hash__()
 
 
 class Atom(Term):
@@ -185,12 +188,14 @@ class Atom(Term):
         else:
             return str(self.val)
 
-    def __eq__(self, other):
-        return self.val == other.val
+    def __hash__(self):
+        return hash(self.val)
 
+    def __eq__(self, other):
+        return self.__hash__() == other.__hash__()
 
 class Variable(Term):
-    def __init__(self, name: str, sort):
+    def __init__(self, name: str, sort: Relation):
         super().__init__(sort)
         self.var = name
         self.term_type = TermType.VARIABLE
@@ -198,8 +203,11 @@ class Variable(Term):
     def __str__(self):
         return '<' + self.var + '>'
 
+    def __hash__(self):
+        return hash(self.var)
+
     def __eq__(self, other):
-        return self.var == other.var and self.sort == other.sort
+        return self.__hash__() == other.__hash__()
 
 
 if __name__ == '__main__':
@@ -224,6 +232,11 @@ if __name__ == '__main__':
     e3 = Composite(edge, [n1, n3])
     e3_clone = Composite(edge, [n1, n3])
 
+    link = Relation('link', ['src', 'dst'], ["string", "string"])
+    string_sort = Relation('string')
+    link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
+    bindings = {Variable('X', string_sort): Atom('hello'),Variable('Z', string_sort): Atom('world')}
+
     print(a1, a2, a3)
     print(v1, v2)
     print(n1, n2)
@@ -234,3 +247,6 @@ if __name__ == '__main__':
     print(n2.hash)
     print(e3.hash)
     print(e3_clone.hash)
+
+    t = link_x_z_term.propagate_bindings(bindings)
+    print(t)
