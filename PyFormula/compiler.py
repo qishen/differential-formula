@@ -20,14 +20,16 @@ class Compiler:
         self.initial_evaluation()
 
     def initial_evaluation(self):
+        # TODO: Rules need to be stratified and raise error if reduced dependency graph has cycle.
         for rule in self.rules:
             bindings_list = rule.find_match()
             for constraint in rule.head:
                 facts = []
                 hterm = constraint.term
-                for bindings in bindings_list:
+                for bindings_tuple in bindings_list:
+                    (bindings, bindings_count) = bindings_tuple
                     fact = hterm.propagate_bindings(bindings)
-                    hterm.sort.add_fact(fact)
+                    hterm.sort.add_fact(fact, bindings_count)
 
     def add_changes(self, facts_map):
         pass

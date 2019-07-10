@@ -8,6 +8,17 @@ class Relation:
     float = None
     _instance_map = {}
 
+
+    def __str__(self):
+        output = '------------ Model facts on Relation %s ---------------\n' % self.name
+        output += '--- Data ---\n'
+        for fact in self.data:
+            output += str(fact) + ' -> ' + str(self.data[fact]) + '\n'
+        output += '--- Delta Data ---\n'
+        for fact in self.delta_data:
+            output += str(fact) + ' -> ' + str(self.delta_data[fact]) + '\n'
+        return output
+
     '''
     All data has to be ground terms without variables.
     '''
@@ -38,17 +49,17 @@ class Relation:
         else:
             return super().__new__(cls)
 
-    def add_fact(self, fact):
+    def add_fact(self, fact, count=1):
         if fact in self.data:
-            self.data[fact] += 1
+            self.data[fact] += count
         else:
-            self.data[fact] = 1
+            self.data[fact] = count
 
-    def add_delta_fact(self, fact):
+    def add_delta_fact(self, fact, count):
         if fact in self.data:
-            self.delta_data[fact] += 1
+            self.delta_data[fact] += count
         else:
-            self.delta_data[fact] = 1
+            self.delta_data[fact] = count
 
 
 if __name__ == '__main__':

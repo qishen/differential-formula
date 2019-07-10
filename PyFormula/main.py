@@ -64,7 +64,12 @@ for (key, value) in bindings.items():
 
 print('\n--- Test on pattern match on rule ---')
 bindings_list = hop_rule.find_match()
-for bindings in bindings_list:
+for bindings_tuple in bindings_list:
+    (bindings, count) = bindings_tuple
     for (key, value) in bindings.items():
         print(str(key) + ' binds to ' + str(value))
     print('\n')
+
+print(str(link))
+print(str(hop))
+print(str(tri_hop))

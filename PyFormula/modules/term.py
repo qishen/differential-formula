@@ -194,6 +194,7 @@ class Atom(Term):
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
 
+
 class Variable(Term):
     def __init__(self, name: str, sort: Relation):
         super().__init__(sort)
