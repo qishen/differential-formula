@@ -9,13 +9,9 @@ class Compiler:
         for relation in relations:
             self.relation_map[relation.name] = relation
 
-    def compile(self, facts_map):
-        for key in facts_map:
-            facts = facts_map[key]
-            if key in self.relation_map:
-                relation = self.relation_map[key]
-                for fact in facts:
-                    relation.data[fact] = 1
+    def compile(self, facts):
+        for fact in facts:
+            fact.relation.data[fact] = 1
 
         self.initial_evaluation()
 
@@ -31,8 +27,21 @@ class Compiler:
                     fact = hterm.propagate_bindings(bindings)
                     hterm.sort.add_fact(fact, bindings_count)
 
-    def add_changes(self, facts_map):
-        pass
+    def add_changes(self, changes):
+        for fact in changes:
+            count = changes[fact]
+            fact.relation.add_delta_fact(fact, count)
+
+        for rule in self.rules:
+            delta_rules = rule.derive_delta_rules()
+            for delta_rule in delta_rules:
+                bindings_list = delta_rule.find_match()
+                for bindings_tuple in bindings_list:
+                    (bindings, bindings_count) = bindings_tuple
+                    for constraint in delta_rule.head:
+                        hterm = constraint.term
+                        fact = hterm.propagate_bindings(bindings)
+                        hterm.sort.add_delta_fact(fact, bindings_count)
 
     def incremental_evaluation(self):
         pass

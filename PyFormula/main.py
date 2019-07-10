@@ -42,11 +42,17 @@ Randomly creates some facts for relations
 '''
 link_facts = [['a', 'b'], ['a', 'd'], ['d', 'c'], ['b', 'c'], ['c', 'h'], ['f', 'g']]
 link_facts = [Composite(link, [Atom(t[0]), Atom(t[1])]) for t in link_facts]
-facts_map = {'link': link_facts}
 
 
 compiler = Compiler(relations, rules)
-compiler.compile(facts_map)
+compiler.compile(link_facts)
+
+c1 = Composite(link, [Atom('a'), Atom('b')])
+c2 = Composite(link, [Atom('d'), Atom('f')])
+c3 = Composite(link, [Atom('a'), Atom('f')])
+changes = {c1: -1, c2: 1, c3: 1}
+
+compiler.add_changes(changes)
 
 for t in link.data:
     print(str(t), link.data[t])

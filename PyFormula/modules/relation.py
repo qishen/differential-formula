@@ -1,5 +1,5 @@
-import more_itertools
-
+import itertools
+from collections import ChainMap
 
 class Relation:
     # Some built-in basic sorts as defined as static singleton variables.
@@ -28,7 +28,7 @@ class Relation:
         self.types = types
         self.data = {}
         self.delta_data = {}
-        self.combined_data = more_itertools.flatten([self.data, self.delta_data])
+        self.combined_data = ChainMap(self.data, self.delta_data)
 
     def __new__(cls, *args, **kwargs):
         """
@@ -56,7 +56,7 @@ class Relation:
             self.data[fact] = count
 
     def add_delta_fact(self, fact, count):
-        if fact in self.data:
+        if fact in self.delta_data:
             self.delta_data[fact] += count
         else:
             self.delta_data[fact] = count
