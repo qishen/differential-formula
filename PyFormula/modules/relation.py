@@ -1,5 +1,55 @@
-import itertools
-from collections import ChainMap
+from collections import ChainMap, Counter
+
+
+class CounterChainMap(ChainMap):
+    """
+    Extends collections.ChainMap to create a special chained map that if multiple
+    maps have the same key, CounterChainMap will combine all values and return the sum.
+    Note that CounterChainMap only supports maps whose values can be added and any direct
+    manipulation on chain map should be prohibited.
+
+    Another option is collections.Counter,
+    combined = Counter(data) + Counter(delta_data)
+    """
+    def __getitem__(self, key):
+        count = 0
+        has_key = False
+        for mapping in self.maps:
+            if key in mapping:
+                count += mapping[key]
+                has_key = True
+        if has_key:
+            return count
+        else:
+            raise KeyError(key)
+
+
+class SetDiffMap:
+    """
+    Only compare the first two mappings and skip other mappings.
+    """
+    def __init__(self, first, second):
+        self.first = first
+        self.second = second
+
+    def __missing__(self, key):
+        raise KeyError(key)
+
+    def __iter__(self):
+        list = []
+        for key in self.first:
+            if key in self.first and key not in self.second:
+                list.append(key)
+        return iter(list)
+
+    def __getitem__(self, key):
+        if key in self.first and key in self.second:
+            raise KeyError(key)
+        elif key in self.first and key not in self.second:
+            return 1
+        else:
+            raise KeyError(key)
+
 
 class Relation:
     # Some built-in basic sorts as defined as static singleton variables.
@@ -7,7 +57,6 @@ class Relation:
     integer = None
     float = None
     _instance_map = {}
-
 
     def __str__(self):
         output = '------------ Model facts on Relation %s ---------------\n' % self.name
@@ -28,7 +77,19 @@ class Relation:
         self.types = types
         self.data = {}
         self.delta_data = {}
-        self.combined_data = ChainMap(self.data, self.delta_data)
+        self.combined_data = CounterChainMap(self.data, self.delta_data)
+        ''' 
+        [optimized_delta_data] = set([delta_data]) - set([data]) 
+        new derived [delta_data] may contain duplicates compared with [data],
+        then those duplicates will not contribute to new [delta_data] in rule
+        execution on next stratum, but we still have to keep an accurate
+        count of duplicates to maintain incremental views because multiple rules
+        with expansion from initial facts can lead to the generation of same fact,
+        so when initial facts are changed, the count of duplicates tell us if
+        any other rule has derivation to still hold it.
+        '''
+        self.optimized_delta_data = SetDiffMap(self.combined_data, self.data)
+
 
     def __new__(cls, *args, **kwargs):
         """
@@ -61,6 +122,9 @@ class Relation:
         else:
             self.delta_data[fact] = count
 
+    def merge_delta_into_data(self):
+        pass
+
 
 if __name__ == '__main__':
     link = Relation('link', ['src', 'dst'], ["string", "string"])
@@ -71,3 +135,12 @@ if __name__ == '__main__':
     print(link.combined_data)
     for i in link.combined_data:
         print(i, link.combined_data[i])
+
+    d1 = {'hello': 1, 'world': 2}
+    d2 = {'hello': 3, 'hi': 4}
+    c = CounterChainMap(d1, d2)
+    print(c['hello'])
+
+    s = SetDiffMap(d1, d2)
+    for key in s:
+        print(key)

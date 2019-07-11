@@ -41,7 +41,13 @@ class Compiler:
                     for constraint in delta_rule.head:
                         hterm = constraint.term
                         fact = hterm.propagate_bindings(bindings)
+                        # new derived fact could be a duplicate in old data set.
                         hterm.sort.add_delta_fact(fact, bindings_count)
+
+        # Merge delta data dict into data dict after all rules are executed.
+        for name in self.relation_map:
+            relation = self.relation_map[name]
+            relation.merge_delta_into_data()
 
     def incremental_evaluation(self):
         pass

@@ -41,7 +41,7 @@ class Rule:
         if constraint.pred_type == PredType.ORIGINAL:
             factset = relation.data
         elif constraint.pred_type == PredType.DELTA:
-            factset = relation.delta_data
+            factset = relation.optimized_delta_data
         else:
             factset = relation.combined_data
         return factset
