@@ -27,6 +27,15 @@ class Compiler:
                     fact = hterm.propagate_bindings(bindings)
                     hterm.sort.add_fact(fact, bindings_count)
 
+    def merge_delta_data(self):
+        """
+        Merge delta data dict into data dict after all rules are executed.
+        :return:
+        """
+        for name in self.relation_map:
+            relation = self.relation_map[name]
+            relation.merge_delta_into_data()
+
     def add_changes(self, changes):
         for fact in changes:
             count = changes[fact]
@@ -44,10 +53,5 @@ class Compiler:
                         # new derived fact could be a duplicate in old data set.
                         hterm.sort.add_delta_fact(fact, bindings_count)
 
-        # Merge delta data dict into data dict after all rules are executed.
-        for name in self.relation_map:
-            relation = self.relation_map[name]
-            relation.merge_delta_into_data()
+        #self.merge_delta_data()
 
-    def incremental_evaluation(self):
-        pass

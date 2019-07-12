@@ -157,7 +157,6 @@ class Composite(Term):
         hash_obj = [self.args, self.relation.name]
         self.hash = hash(DeepHash(hash_obj)[hash_obj])
 
-
     def __str__(self):
         return self.relation.name + '(' + ','.join([str(x) for x in self.args]) + ')'
 
