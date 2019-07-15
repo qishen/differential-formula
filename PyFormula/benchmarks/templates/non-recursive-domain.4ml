@@ -1,6 +1,6 @@
 domain Graph
 {
-    Node ::= new (id: String).
+    Node ::= new (id: String + Integer).
     Edge ::= new (src: Node, dst: Node).
 
     hop ::= (src: Node, dst: Node).
@@ -19,17 +19,20 @@ domain HierarchicalGraph extends Graph
     NodeSet ::= new (cur: any Node + HyperNode, nxt: any NodeSet + {NIL}).
     HyperNode ::= new (item: any NodeSet + Node).
     HyperEdge ::= new (src: any Node + HyperNode, dst: any Node + HyperNode).
+
+    hyperHop ::= (src: Node + HyperNode, nxt: Node + HyperNode).
+    hyperHop(x,z) :- HyperEdge(x,y), HyperEdge(y,z).
 }
 
 
 model g of Graph
 {
-
+    //graph
 }
 
 model hg of HierarchicalGraph
 {
-
+    //hypergraph
 }
 
 model hg_example of HierarchicalGraph
@@ -51,6 +54,6 @@ model hg_example of HierarchicalGraph
     n6 is Node("n6").
 
     he1 is HyperEdge(h1, h2).
-    he2 is HyperEdge(h1, n6).
+    he2 is HyperEdge(h2, n6).
 
 }
