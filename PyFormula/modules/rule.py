@@ -69,7 +69,7 @@ class Rule:
         for negated_constraint in negated_constraints:
             negated_term = negated_constraint.term
             for bindings_with_count in bindings_with_count_list:
-                (bindings, _) = bindings_with_count
+                (bindings, count) = bindings_with_count
                 binded_negated_term = negated_term.propagate_bindings(bindings)
                 '''
                 It is possible that negated term contains variables that don't exist in bindings. 
@@ -82,6 +82,8 @@ class Rule:
                             negated_term.sort.delta_negated_data[binded_negated_term] = 1
                         elif binded_negated_term in negated_term.sort.delta_data and binded_negated_term not in negated_term.sort.data:
                             negated_term.sort.delta_negated_data[binded_negated_term] = -1
+                            bindings_with_count_list.remove(bindings_with_count)
+                            bindings_with_count_list.append((bindings, count*-1))
                     else:
                         if negated_constraint.pred_type == PredType.ORIGINAL:
                             un_negated_terms = negated_term.sort.data
