@@ -37,18 +37,22 @@ class Rule:
         return rules
 
     def find_match(self):
-        bindings_with_count_list = [({}, 1)]
+        bindings_with_count_list = [[{}, 1]]
         negated_constraints = []
+        '''
+        Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
+        '''
         for constraint in self.body:
             if constraint.negated:
                 negated_constraints.append(constraint)
             else:
+                ''' Can be either original, delta or combined fact set data depending on constraint prefix.'''
                 factset = constraint.get_factset_for_pred()
                 new_bindings_with_count_list = []
                 for fact in factset:
                     fact_count = factset[fact]
                     for bindings_tuple in bindings_with_count_list:
-                        (bindings, bindings_count) = bindings_tuple
+                        [bindings, bindings_count] = bindings_tuple
                         partial_binded_term = constraint.term.propagate_bindings(bindings)
                         '''
                         If the term in constraint predicate is still not fully binded after propagating bindings
@@ -61,15 +65,18 @@ class Rule:
                             new_bindings = partial_binded_term.get_bindings(fact)
                             new_combined_bindings = {**bindings, **new_bindings}
                             new_combined_bindings_count = fact_count * bindings_count
-                            new_combined_bindings_tuple = (new_combined_bindings, new_combined_bindings_count)
+                            new_combined_bindings_tuple = [new_combined_bindings, new_combined_bindings_count]
                             new_bindings_with_count_list.append(new_combined_bindings_tuple)
                 bindings_with_count_list = new_bindings_with_count_list
 
-        ''' Get all feasible bindings from non-negated terms and filter them according to matches on negated terms '''
+        ''' 
+        Get all feasible bindings from non-negated terms and filter them according to matches on negated terms data
+        '''
         for negated_constraint in negated_constraints:
+            delete_bindings_with_count_list = []
             negated_term = negated_constraint.term
-            for bindings_with_count in bindings_with_count_list:
-                (bindings, count) = bindings_with_count
+            for index, bindings_with_count in enumerate(bindings_with_count_list):
+                [bindings, count] = bindings_with_count
                 binded_negated_term = negated_term.propagate_bindings(bindings)
                 '''
                 It is possible that negated term contains variables that don't exist in bindings. 
@@ -78,23 +85,38 @@ class Rule:
                 '''
                 if binded_negated_term.is_ground_term:
                     if negated_constraint.pred_type == PredType.DELTA:
+                        '''
+                        1. t in delta Q and t not in Q + delta Q --> count = 1
+                        2. t in delta Q and t not in Q --> count = -1
+                        3. delta Q is empty, simply remove the binding tuple.
+                        '''
                         if binded_negated_term in negated_term.sort.delta_data and binded_negated_term not in negated_term.sort.combined_data:
                             negated_term.sort.delta_negated_data[binded_negated_term] = 1
                         elif binded_negated_term in negated_term.sort.delta_data and binded_negated_term not in negated_term.sort.data:
                             negated_term.sort.delta_negated_data[binded_negated_term] = -1
-                            bindings_with_count_list.remove(bindings_with_count)
-                            bindings_with_count_list.append((bindings, count*-1))
+                            ''' Update bindings count regarding negated constraint and 
+                                there can be only one delta negated constraint in rule'''
+                            new_count = count * -1
+                            bindings_with_count_list[index][1] = new_count
+                        else:
+                            ''' Delta negated constraint is not satisfied and need to remove the bindings. '''
+                            delete_bindings_with_count_list.append(bindings_with_count)
                     else:
                         if negated_constraint.pred_type == PredType.ORIGINAL:
-                            un_negated_terms = negated_term.sort.data
-                        else:  # PredType.COMBINED
-                            un_negated_terms = negated_term.sort.combined_data
-
-                        if binded_negated_term not in un_negated_terms:
+                            terms = negated_term.sort.data
+                        elif negated_constraint.pred_type == PredType.COMBINED:
+                            terms = negated_term.sort.combined_data
+                        ''' 
+                        Remove the binding if negated term is not satisfied.
+                        '''
+                        if binded_negated_term not in terms:
                             negated_term.sort.negated_data[binded_negated_term] = 1
                         else:
-                            # Remove the binding if negated term is not satisfied.
-                            bindings_with_count_list.remove(bindings_with_count)
+                            delete_bindings_with_count_list.append(bindings_with_count)
+
+            ''' Delete some bindings that don't satisfy negated constraint terms.'''
+            for delete_bindings_with_count in delete_bindings_with_count_list:
+                bindings_with_count_list.remove(delete_bindings_with_count)
 
         return bindings_with_count_list
 

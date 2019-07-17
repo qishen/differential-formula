@@ -25,7 +25,7 @@ hop_x_z_term = Composite(hop, [Variable('X', string_sort), Variable('Z', string_
 tri_hop_x_y_term = Composite(tri_hop, [Variable('X', string_sort), Variable('Y', string_sort)])
 only_tri_hop_x_y_term = Composite(only_tri_hop, [Variable('X', string_sort), Variable('Y', string_sort)])
 
-link_x_y = Predicate(link_x_z_term, PredType.ORIGINAL, False)
+link_x_z = Predicate(link_x_z_term, PredType.ORIGINAL, False)
 link_z_y = Predicate(link_z_y_term, PredType.ORIGINAL, False)
 hop_x_y = Predicate(hop_x_y_term, PredType.ORIGINAL, False)
 negated_hop_x_y = Predicate(hop_x_y_term, PredType.ORIGINAL, True)
@@ -36,7 +36,7 @@ only_tri_hop_x_y = Predicate(only_tri_hop_x_y_term, PredType.ORIGINAL, False)
 '''
 Rules composed by predicates
 '''
-hop_rule = Rule([hop_x_y], [link_x_y, link_z_y])
+hop_rule = Rule([hop_x_y], [link_x_z, link_z_y])
 tri_hop_rule = Rule([tri_hop_x_y], [hop_x_z, link_z_y])
 only_tri_hop_rule = Rule([only_tri_hop_x_y], [tri_hop_x_y, negated_hop_x_y])
 rules = [hop_rule, tri_hop_rule, only_tri_hop_rule]

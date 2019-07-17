@@ -92,24 +92,6 @@ class Relation:
     float = None
     _instance_map = {}
 
-    def __str__(self):
-        def get_printable_data(name, data):
-            string = ''
-            if len(data) > 0:
-                string = '--- %s ---\n' % name
-                for fact in data:
-                    string += str(fact) + ' -> ' + str(data[fact]) + '\n'
-            return string
-
-        output = '------------ Model facts on Relation %s ---------------\n' % self.name
-
-        for t in [('Data', self.data), ('Delta Data', self.delta_data), \
-                  ('Negated Data', self.negated_data), ('Delta Negated Data', self.delta_negated_data)]:
-            data_str = get_printable_data(t[0], t[1])
-            output += data_str
-
-        return output
-
     '''
     All data has to be ground terms without variables.
     '''
@@ -137,6 +119,24 @@ class Relation:
         self.negated_data = {}
         self.delta_negated_data = {}
         self.combined_negated_data = CounterChainMap(self.negated_data, self.delta_negated_data)
+
+    def __str__(self):
+        def get_printable_data(name, data):
+            string = ''
+            if len(data) > 0:
+                string = '--- %s ---\n' % name
+                for fact in data:
+                    string += str(fact) + ' -> ' + str(data[fact]) + '\n'
+            return string
+
+        output = '------------ Model facts on Relation %s ---------------\n' % self.name
+
+        for t in [('Data', self.data), ('Delta Data', self.delta_data), \
+                  ('Negated Data', self.negated_data), ('Delta Negated Data', self.delta_negated_data)]:
+            data_str = get_printable_data(t[0], t[1])
+            output += data_str
+
+        return output
 
     def __new__(cls, *args, **kwargs):
         """
@@ -178,7 +178,7 @@ class Relation:
             else:
                 self.data[fact] = self.delta_data[fact]
         # Delete all delta_data after merge.
-        self.delta_data = {}
+        self.delta_data.clear()
 
 
 if __name__ == '__main__':
