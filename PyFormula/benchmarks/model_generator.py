@@ -2,7 +2,6 @@ import random
 from datetime import datetime
 import os
 import os.path
-import itertools
 import subprocess
 
 from utils import utils
@@ -51,17 +50,21 @@ class GraphGenerator:
                 edges_str += edge_str
         return edges_str
 
-    def instantiate_graph_template(self, node_num, edge_num,
-                                   generated_filename='graph_model_%s.4ml' % datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
+    def instantiate_graph_template(self, node_num, edge_num, domain):
+        self.node_names.clear()
+        self.edge_names.clear()
+
         nodes_str = self.create_nodes(node_num)
         edges_str = self.create_edges(edge_num)
 
-        f = open('templates/non-recursive-domain.4ml', 'r+')
+        f = open('templates/graphs.4ml', 'r+')
         template = f.read()
         f.close()
 
+        generated_filename = '%s_model_%sN_%sE.4ml' % (domain, str(node_num), str(edge_num))
         f = open('generated/' + generated_filename, 'w+')
-        texts = template.split('//graph')
+        split_str = '//' + domain.lower()
+        texts = template.split(split_str, 1)
         program = texts[0] + nodes_str + edges_str + texts[1]
         f.write(program)
         f.close()
@@ -76,6 +79,13 @@ class HyperGraphGenerator(GraphGenerator):
         self.hyperedge_names = {}
 
     def create_hypernodes(self, prev_node_names, num, cluster_size):
+        """
+        Randomly cluster some nodes to create a supernode.
+        :param prev_node_names:
+        :param num:
+        :param cluster_size:
+        :return:
+        """
         hypernode_names = []
         hypernodes_str = ''
         for i in range(num):
@@ -91,6 +101,15 @@ class HyperGraphGenerator(GraphGenerator):
         return hypernode_names, hypernodes_str
 
     def create_nested_hypernodes(self, layer_num, layers, cluster_size):
+        """
+        Wrap each node as hypernode and build new hypernodes upon existing hypernodes.
+        Each layer has the same number of supernodes and depends only on previous layer
+        of supernodes instead of all supernodes.
+        :param layer_num:
+        :param layers:
+        :param cluster_size:
+        :return:
+        """
         final_hypernodes_str = ''
         initial_nodes_str = self.create_nodes(layer_num)
         initial_hypernode_names = []
@@ -111,6 +130,11 @@ class HyperGraphGenerator(GraphGenerator):
         return final_hypernodes_str
 
     def create_hyperedges(self, num):
+        """
+        Randomly generate edges on all existing supernodes.
+        :param num:
+        :return:
+        """
         all_hypernodes = []
         for l in self.hypernode_names_list:
             all_hypernodes += l
@@ -141,18 +165,22 @@ class HyperGraphGenerator(GraphGenerator):
                 edges_str += edge_str
         return edges_str
 
-    def instantiate_hypergraph_template(self, layer_num, layers, cluster_size, edge_num,
-                                        generated_filename='hypergraph_model_%s.4ml' %
-                                        datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
+    def instantiate_hypergraph_template(self, layer_num, layers, cluster_size, edge_num, domain):
+        self.hypernode_names_list.clear()
+        self.hyperedge_names.clear()
+
         hypernodes_str = self.create_nested_hypernodes(layer_num, layers, cluster_size)
         hyperedges_str = self.create_hyperedges(edge_num)
 
-        f = open('templates/non-recursive-domain.4ml', 'r+')
+        f = open('templates/graphs.4ml', 'r+')
         template = f.read()
         f.close()
 
+        generated_filename = '%s_model_%sNx%sL_%sC_%sE.4ml' % (domain, str(layer_num), str(layers),
+                                                                      str(cluster_size), str(edge_num))
         f = open('generated/' + generated_filename, 'w+')
-        texts = template.split('//hypergraph')
+        split_str = '//' + domain.lower()
+        texts = template.split(split_str, 1)
         program = texts[0] + hypernodes_str + hyperedges_str + texts[1]
         f.write(program)
         f.close()
@@ -162,11 +190,17 @@ class HyperGraphGenerator(GraphGenerator):
 
 if __name__ == '__main__':
     generator = GraphGenerator()
-    program = generator.instantiate_graph_template(10000, 2000)
+    node_num = 50
+    for i in range(8):
+        edge_num = (node_num * node_num) // 100
+        generator.instantiate_graph_template(node_num, edge_num, 'GraphNonrecur')
+        node_num = node_num * 2
+
+    program = generator.instantiate_graph_template(10000, 2000, 'GraphNonrecur')
     print(program)
 
     hyper_generator = HyperGraphGenerator()
-    program = hyper_generator.instantiate_hypergraph_template(1000, 8, 5, 200)
+    program = hyper_generator.instantiate_hypergraph_template(1000, 8, 5, 200, 'HGraphNonrecur')
     print(program)
 
 '''

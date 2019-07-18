@@ -1,17 +1,25 @@
-
+import logging
+import coloredlogs
+import sys
 
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
-    def __init__(self, relations, rules):
+    def __init__(self, relations, rules, logger_disabled=False):
         self.relation_map = {}
         self.rules = rules
+        self.logger = logging.getLogger(__name__)
+        self.logger.addHandler(logging.StreamHandler())
+        self.logger.setLevel(logging.DEBUG)
+        if logger_disabled:
+            self.logger.disabled = True
+        # coloredlogs.install(level='DEBUG', logger=self.logger)
 
         for relation in relations:
             self.relation_map[relation.name] = relation
 
     def print_all_facts(self):
         for name in self.relation_map:
-            print(self.relation_map[name])
+            self.logger.debug(self.relation_map[name])
 
     def compile(self, facts):
         changes = {}
@@ -32,14 +40,14 @@ class Compiler:
 
     def print_bindings_list(self, bindings_list):
         if len(bindings_list) == 0:
-            print('No bindings available for current rule.')
+            self.logger.debug('No bindings available for current rule.')
         for bindings_tuple in bindings_list:
             (bindings, count) = bindings_tuple
             bindings_str_list = []
             for (key, value) in bindings.items():
                 bindings_str_list.append('[' + str(key) + ' binds to ' + str(value) + ']')
-            print(', '.join(bindings_str_list) + ' with count ' + str(count))
-        print('\n')
+            self.logger.debug(', '.join(bindings_str_list) + ' with count ' + str(count))
+        self.logger.debug('\n')
 
     def add_changes(self, changes):
         for fact in changes:
@@ -49,7 +57,7 @@ class Compiler:
         for rule in self.rules:
             delta_rules = rule.derive_delta_rules()
             for delta_rule in delta_rules:
-                print(delta_rule)
+                self.logger.info(delta_rule)
                 bindings_list = delta_rule.find_match()
 
                 self.print_bindings_list(bindings_list)
@@ -60,9 +68,10 @@ class Compiler:
                         hterm = constraint.term
                         fact = hterm.propagate_bindings(bindings)
 
-                        print('%s -> %s' % (fact, bindings_count))
+                        self.logger.debug('%s -> %s' % (fact, bindings_count))
 
                         # new derived fact could be a duplicate in old data set.
                         hterm.sort.add_delta_fact(fact, bindings_count)
 
+                self.logger.debug('\n')
 

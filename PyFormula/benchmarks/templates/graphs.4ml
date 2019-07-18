@@ -1,0 +1,122 @@
+domain BaseGraph
+{
+    Node ::= new (id: String + Integer).
+    Edge ::= new (src: Node, dst: Node).
+}
+
+domain GraphNonrecur includes BaseGraph
+{
+    hop ::= (src: Node, dst: Node).
+    tri_hop ::= (src: Node, dst: Node).
+    quad_hop ::= (src: Node, dst: Node).
+    five_hop ::= (src: Node, dst: Node).
+    six_hop ::= (src: Node, dst: Node).
+    seven_hop ::= (src: Node, dst: Node).
+
+    hop(x,z) :- Edge(x,y), Edge(y,z).
+    tri_hop(a,d) :- Edge(a,b), Edge(b,c), Edge(c,d).
+    //quad_hop(e,i) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i).
+    //five_hop(e,j) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j).
+    //six_hop(e,k) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j), Edge(j,k).
+    //seven_hop(e,l) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j), Edge(j,k), Edge(k,l).
+}
+
+domain GraphRecur includes BaseGraph
+{
+    path ::= (src: Node, dst: Node).
+    path(x, y) :- Edge(x, y).
+    path(x, z) :- path(x, y), path(y, z).
+}
+
+domain GraphNonrecurNeg includes GraphNonrecur
+{
+    only_tri_hop ::= (src: Node, dst: Node).
+    only_tri_hop(x, y) :- tri_hop(x, y), no hop(x, y).
+}
+
+domain GraphRecurNeg includes GraphRecur
+{
+    conforms no path(x, x).
+}
+
+domain HierarchicalGraph includes BaseGraph
+{
+    NodeSet ::= new (cur: any Node + HyperNode, nxt: any NodeSet + {NIL}).
+    HyperNode ::= new (item: any NodeSet + Node).
+    HyperEdge ::= new (src: any Node + HyperNode, dst: any Node + HyperNode).
+}
+
+domain HGraphNonrecur includes HierarchicalGraph
+{
+    hyperHop ::= (src: Node + HyperNode, nxt: Node + HyperNode).
+    hyperHop(x,z) :- HyperEdge(x,y), HyperEdge(y,z).
+}
+
+domain HGraphRecur includes HierarchicalGraph
+{
+    hyperPath ::= (src: Node + HyperNode, nxt: Node + HyperNode).
+
+    hyperPath(x, y) :- HyperEdge(x, y).
+    hyperPath(x, z) :- hyperPath(x, y), hyperPath(y, z).
+}
+
+// ------------------------------------- Models ----------------------------------------
+
+model example of HGraphNonrecur
+{
+    n1 is Node("n1").
+    n2 is Node("n2").
+    n3 is Node("n3").
+    e1 is Edge(n1, n2).
+    e2 is Edge(n2, n3).
+    s1 is NodeSet(n1, NodeSet(n2, NodeSet(n3, NIL))).
+    h1 is HyperNode(s1).
+
+    n4 is Node("n4").
+    n5 is Node("n5").
+    e3 is Edge(n4, n5).
+    s2 is NodeSet(n4, NodeSet(n5, NIL)).
+    h2 is HyperNode(s2).
+
+    n6 is Node("n6").
+
+    he1 is HyperEdge(h1, h2).
+    he2 is HyperEdge(h2, n6).
+
+}
+
+model g1 of GraphNonrecur
+{
+// qr g1 hop(x,y)
+// qr g1 tri_hop(x,y)
+// qr g1 quad_hop(x,y)
+// qr g1 seven_hop(x,y)
+//graphnonrecur
+}
+
+model g2 of GraphRecur
+{
+// qr g2 path(x,y)
+//graphrecur
+}
+
+model g3 of GraphNonrecurNeg
+{
+//graphnonrecurneg
+}
+
+model g4 of GraphRecurNeg
+{
+//graphrecurneg
+}
+
+model hg1 of HGraphNonrecur
+{
+//hgraphnonrecur
+}
+
+model hg2 of HGraphRecur
+{
+//hgraphrecur
+}
+

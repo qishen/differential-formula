@@ -1,5 +1,6 @@
 import unittest
 import logging
+import sys
 
 from modules.rule import Rule
 from modules.relation import Relation
@@ -15,7 +16,6 @@ class BaseLinkTestCase(unittest.TestCase):
         self.hop = Relation('hop', ['src', 'dst'], ["string", "string"])
         self.tri_hop = Relation('tri_hop', ['src', 'dst'], ["string", "string"])
         self.only_tri_hop = Relation('only_tri_hop', ['src', 'dst'], ['string', 'string'])
-        self.relations = [self.link, self.hop, self.tri_hop, self.only_tri_hop]
 
         '''
         Define terms that will be used in rules. 
@@ -49,18 +49,16 @@ class BaseLinkTestCase(unittest.TestCase):
         self.hop_rule = Rule([self.hop_x_y], [self.link_x_z, self.link_z_y])
         self.tri_hop_rule = Rule([self.tri_hop_x_y], [self.hop_x_z, self.link_z_y])
         self.only_tri_hop_rule = Rule([self.only_tri_hop_x_y], [self.tri_hop_x_y, self.negated_hop_x_y])
-        self.rules = [self.hop_rule, self.tri_hop_rule, self.only_tri_hop_rule]
-
-        '''
-        Initialize compiler with given relations and rules.
-        '''
-        self.compiler = Compiler(self.relations, self.rules)
 
 
 class NonRecursiveLinkTestCase(BaseLinkTestCase):
 
     def setUp(self):
         super().setUp()
+        rules = [self.hop_rule, self.tri_hop_rule, self.only_tri_hop_rule]
+        relations = [self.link, self.hop, self.tri_hop, self.only_tri_hop]
+        self.compiler = Compiler(relations, rules)
+        self.logger = self.compiler.logger
 
     #@unittest.skip("Skip temporarily")
     def test_first_input(self):
@@ -68,59 +66,62 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
         link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
         self.compiler.compile(link_facts)
 
-        print('-------------------------------------')
-        print('--- Print out initial model facts ---')
-        print('-------------------------------------')
+        self.logger.info('-------------------------------------')
+        self.logger.info('--- Print out initial model facts ---')
+        self.logger.info('-------------------------------------')
         self.compiler.print_all_facts()
 
-        print('\n--- Test on incremental evaluation ---')
+        self.logger.info('\n--- Test on incremental evaluation ---')
         c1 = Composite(self.link, [Atom('a'), Atom('b')])
         c2 = Composite(self.link, [Atom('d'), Atom('f')])
         c3 = Composite(self.link, [Atom('a'), Atom('f')])
         changes = {c1: -1, c2: 1, c3: 1}
 
-        print('Make some changes to existing facts: ')
+        self.logger.info('Make some changes to existing facts: ')
         for (term, count) in changes.items():
             if count > 0:
-                print('Add ', term)
+                self.logger.info('Add ' + str(term))
             else:
-                print('Remove ', term)
+                self.logger.info('Remove ' + str(term))
+        self.logger.info('\n')
 
         self.compiler.add_changes(changes)
 
-        print('----------------------------------------------------------')
-        print('--- Print out model facts after changes are propagated ---')
-        print('----------------------------------------------------------')
+        self.logger.info('----------------------------------------------------------')
+        self.logger.info('--- Print out model facts after changes are propagated ---')
+        self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts()
 
-    @unittest.skip("Skip temporarily")
+    #@unittest.skip("Skip temporarily")
     def test_second_input(self):
+
         link_facts_raw = [['a', 'b'], ['a', 'e'], ['a', 'f'], ['a', 'g'], ['b', 'c'], ['c', 'd'], ['c', 'k'],
                           ['e', 'd'], ['f', 'd'], ['g', 'h'], ['h', 'k']]
         link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
         self.compiler.compile(link_facts)
 
-        print('-------------------------------------')
-        print('--- Print out initial model facts ---')
-        print('-------------------------------------')
+        self.logger.info('-------------------------------------')
+        self.logger.info('--- Print out initial model facts ---')
+        self.logger.info('-------------------------------------')
         self.compiler.print_all_facts()
 
-        print('\n--- Test on incremental evaluation ---')
+        self.logger.info('\n--- Test on incremental evaluation ---')
         c1 = Composite(self.link, [Atom('b'), Atom('k')])
         changes = {c1: 1}
 
-        print('Make some changes to existing facts: ')
+        self.logger.info('Make some changes to existing facts: ')
         for (term, count) in changes.items():
             if count > 0:
-                print('Add ', term)
+                self.logger.info('Add ' + str(term))
             else:
-                print('Remove ', term)
+                self.logger.info('Remove ' + str(term))
+        self.logger.info('\n')
 
         self.compiler.add_changes(changes)
 
-        print('----------------------------------------------------------')
-        print('--- Print out model facts after changes are propagated ---')
-        print('----------------------------------------------------------')
+        self.logger.info('----------------------------------------------------------')
+        self.logger.info('--- Print out model facts after changes are propagated ---')
+        self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts()
 
 

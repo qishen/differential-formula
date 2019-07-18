@@ -1,3 +1,5 @@
+import logging
+
 from modules.rule import Rule
 from modules.relation import Relation
 from modules.term import Atom, Variable, Composite
@@ -97,4 +99,9 @@ compiler.add_changes(changes)
 print(str(link))
 print(str(hop))
 print(str(tri_hop))
-print(only_tri_hop)
+#print(str(only_tri_hop))
+logger = logging.getLogger()
+logger.addHandler(logging.StreamHandler())
+logger.disabled = True
+logger.setLevel(logging.DEBUG)
+logger.info(str(only_tri_hop))
