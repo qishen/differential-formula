@@ -58,66 +58,53 @@ class Term:
                 for i in range(length):
                     if not self.args[i].equal_semantically(other.args[i]):
                         return False
-                    return True
+                return True
             else:
                 return False
         else:
             # Atom vs Composite is definitely false.
             return False
 
-    def equal_strictly(self, other):
-        """
-        Two terms are strictly equivalent if they are exactly the same as well as their argument terms.
-        :param other:
-        :return:
-        """
-        if (type(self) is Variable and type(other) is Variable) and (self.sort == other.sort):
-            return True
-        elif type(self) is Atom and type(other) is Atom:
-            return self.val == other.val
-        elif type(self) is Composite and type(other) is Composite:
-            if self.relation == other.relation:
-                length = len(self.args)
-                for i in range(length):
-                    if not self.args[i].equal_strictly(other.args[i]):
-                        return False
-                    return True
-            else:
-                return False
-        else:
-            return False
-
     def get_bindings(self, ground_term):
         """
-        TODO: This method can be optimized to reduce redundant sanity check.
+        Self must be a non-ground term and the argument has to be ground term.
+        Assume both terms are from same relation or sort.
         A composite term with variables is compared with a semantically equivalent ground term
         to get bindings.
         :param ground_term:
         :return:
         """
-        bindings = {}
+        if self.is_ground_term or not ground_term.is_ground_term:
+            raise Exception('Self is ground term or self is compared to a non-ground term.')
 
-        def bind_helper(var_term, g_term):
+        def bind_helper(term, gterm, bindings):
             """
-            Recursively bind variables to ground terms without invoking all sanity checks again.
-            :param var_term:
-            :param g_term:
+            Recursively get bindings without checking equality semantically.
+            :param term:
+            :param gterm:
+            :param bindings:
             :return:
             """
-            if type(var_term) is Variable:
-                bindings[var_term] = g_term
-            elif type(var_term) is Composite:
-                length = len(var_term.args)
+            if type(term) is Variable:
+                bindings[term] = gterm
+            elif type(term) is Atom:
+                if term.val != gterm.val:
+                    bindings.clear()
+                    return False
+            elif type(term) is Composite:
+                length = len(term.args)
                 for i in range(length):
-                    bind_helper(var_term.args[i], g_term.args[i])
+                    has_local_bindings = bind_helper(term.args[i], gterm.args[i], bindings)
+                    if not has_local_bindings:
+                        return False
+            return True
 
-        if not self.equal_semantically(ground_term):
-            raise Exception('Two terms are not semantically equal and thus cannot be bind.')
-        elif not ground_term.is_ground_term:
-            raise Exception('Cannot bind to non-ground term.')
+        all_bindings = {}
+        has_bindings = bind_helper(self, ground_term, all_bindings)
+        if has_bindings:
+            return all_bindings
         else:
-            bind_helper(self, ground_term)
-        return bindings
+            return {}
 
     def propagate_bindings(self, bindings):
         """
@@ -214,28 +201,31 @@ if __name__ == '__main__':
     node = Relation('node', ['id'], ['string'])
     edge = Relation('edge', ['src', 'dst'], ['node', 'node'])
     a1 = Atom('hello')
+    a1_clone = Atom('hello')
     a2 = Atom(123)
     a3 = Atom(1.23)
     a4 = Atom('world')
 
     v1 = Variable('X', node)
+    v1_clone = Variable('X', node)
     v2 = Variable('Y', node)
     s1 = Variable('S', Relation('string'))
 
     n1 = Composite(node, [a1])
     n1_clone = Composite(node, [a1])
+    n1_clone2 = Composite(node, [a1_clone])
     n2 = Composite(node, [s1])
     n3 = Composite(node, [a4])
 
     e1 = Composite(edge, [v1, v2])
     e2 = Composite(edge, [n1, v2])
     e3 = Composite(edge, [n1, n3])
-    e3_clone = Composite(edge, [n1, n3])
+    e3_clone = Composite(edge, [n1_clone2, n3])
 
     link = Relation('link', ['src', 'dst'], ["string", "string"])
     string_sort = Relation('string')
     link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
-    bindings = {Variable('X', string_sort): Atom('hello'),Variable('Z', string_sort): Atom('world')}
+    bindings = {Variable('X', string_sort): Atom('hello'), Variable('Z', string_sort): Atom('world')}
 
     print(a1, a2, a3)
     print(v1, v2)
@@ -250,3 +240,8 @@ if __name__ == '__main__':
 
     t = link_x_z_term.propagate_bindings(bindings)
     print(t)
+
+    print(n1 == n1_clone)
+    print(n1_clone == n1_clone2)
+    print(v1 == v1_clone)
+    print(e3 == e3_clone)

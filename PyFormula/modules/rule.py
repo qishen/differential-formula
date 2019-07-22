@@ -39,35 +39,49 @@ class Rule:
     def find_match(self):
         bindings_with_count_list = [[{}, 1]]
         negated_constraints = []
-        '''
-        Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
-        '''
+        term_constraints = []
+
         for constraint in self.body:
             if constraint.negated:
                 negated_constraints.append(constraint)
             else:
-                ''' Can be either original, delta or combined fact set data depending on constraint prefix.'''
-                factset = constraint.get_factset_for_pred()
-                new_bindings_with_count_list = []
-                for fact in factset:
-                    fact_count = factset[fact]
-                    for bindings_tuple in bindings_with_count_list:
-                        [bindings, bindings_count] = bindings_tuple
-                        partial_binded_term = constraint.term.propagate_bindings(bindings)
-                        '''
-                        If the term in constraint predicate is still not fully binded after propagating bindings
-                        and the partial binded term is semantically equal to current ground term fact, then find
-                        new bindings between partial binded term and fact.
-                        '''
-                        if partial_binded_term.is_ground_term:
-                            new_bindings_with_count_list.append((bindings, bindings_count * fact_count))
-                        elif not partial_binded_term.is_ground_term and partial_binded_term.equal_semantically(fact):
-                            new_bindings = partial_binded_term.get_bindings(fact)
+                term_constraints.append(constraint)
+
+        ''' Sort term constraints by facts number '''
+        term_constraints.sort(key=lambda x: x.factset_count())
+
+        '''
+        Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
+        '''
+        for constraint in term_constraints:
+            ''' Can be either original, delta or combined fact set data depending on constraint prefix.'''
+            factset = constraint.get_factset_for_pred()
+            new_bindings_with_count_list = []
+
+            ''' No bindings since factset is empty, return [] immediately '''
+            if len(factset) == 0:
+                return []
+
+            for fact in factset:
+                fact_count = factset[fact]
+                for bindings_tuple in bindings_with_count_list:
+                    [bindings, bindings_count] = bindings_tuple
+                    partial_binded_term = constraint.term.propagate_bindings(bindings)
+                    '''
+                    If the term in constraint predicate is still not fully binded after propagating bindings
+                    and the partial binded term is semantically equal to current ground term fact, then find
+                    new bindings between partial binded term and fact.
+                    '''
+                    if partial_binded_term.is_ground_term:
+                        new_bindings_with_count_list.append([bindings, bindings_count * fact_count])
+                    else:
+                        new_bindings = partial_binded_term.get_bindings(fact)
+                        if len(new_bindings) > 0:
                             new_combined_bindings = {**bindings, **new_bindings}
                             new_combined_bindings_count = fact_count * bindings_count
                             new_combined_bindings_tuple = [new_combined_bindings, new_combined_bindings_count]
                             new_bindings_with_count_list.append(new_combined_bindings_tuple)
-                bindings_with_count_list = new_bindings_with_count_list
+            bindings_with_count_list = new_bindings_with_count_list
 
         ''' 
         Get all feasible bindings from non-negated terms and filter them according to matches on negated terms data

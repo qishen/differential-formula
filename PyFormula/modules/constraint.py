@@ -17,7 +17,7 @@ class Constraint:
 
 
 class Predicate(Constraint):
-    def __init__(self, term: Term, pred_type: PredType, negated: bool):
+    def __init__(self, term: Term, pred_type: PredType=PredType.ORIGINAL, negated: bool=False):
         self.term = term
         self.pred_type = pred_type
         self.negated = negated
@@ -37,6 +37,10 @@ class Predicate(Constraint):
 
     def convert(self, pred_type: PredType, negated: bool):
         return Predicate(self.term, pred_type, negated)
+
+    def factset_count(self):
+        factset = self.get_factset_for_pred()
+        return len(factset)
 
     def get_factset_for_pred(self, optimized=False):
         """

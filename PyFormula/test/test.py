@@ -92,7 +92,7 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
         self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts()
 
-    #@unittest.skip("Skip temporarily")
+    @unittest.skip("Skip temporarily")
     def test_second_input(self):
 
         link_facts_raw = [['a', 'b'], ['a', 'e'], ['a', 'f'], ['a', 'g'], ['b', 'c'], ['c', 'd'], ['c', 'k'],
