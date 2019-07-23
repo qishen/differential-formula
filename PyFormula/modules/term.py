@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import *
 from modules.relation import Relation
-from deepdiff import DeepHash
 
 
 # A term can be atom, variable or composition of terms
@@ -14,17 +13,6 @@ class TermType(Enum):
 class Term:
     def __init__(self, sort):
         self.sort = sort
-
-    def check_ground_term(self):
-        if type(self) is Atom:
-            return True
-        elif type(self) is Variable:
-            return False
-        elif type(self) is Composite:
-            for arg in self.args:
-                if not arg.check_ground_term():
-                    return False
-            return True
 
     def get_variables(self):
         variables = []
@@ -106,30 +94,6 @@ class Term:
         else:
             return {}
 
-    def propagate_bindings(self, bindings):
-        """
-        Propagate variable bindings to a composite term that contains variables,
-        return a new term with some or all variables substituted by bindings as result,
-        or just return the original immutable variable or atom term.
-        :param bindings:
-        :return:
-        """
-        if type(self) == Variable:
-            for (v, t) in bindings.items():
-                # Don't have to deep clone for a new term because ground term is immutable.
-                if self == v:
-                    return bindings[v]
-            # Do not have suitable binding for this variable, so just return the variable.
-            return self
-        elif type(self) == Atom:
-            return self
-        elif type(self) == Composite:
-            length = len(self.args)
-            terms = []
-            for i in range(length):
-                terms.append(self.args[i].propagate_bindings(bindings))
-            return Composite(self.relation, terms)
-
 
 class Composite(Term):
     def __init__(self, relation, terms, alias=None):
@@ -140,18 +104,28 @@ class Composite(Term):
         self.term_type = TermType.COMPOSITE
         self.is_ground_term = self.check_ground_term()
 
-        # Can't call DeepHash on self because it will invoke __hash__() and end up with endless recursion.
-        hash_obj = [self.args, self.relation.name]
-        self.hash = hash(DeepHash(hash_obj)[hash_obj])
-
     def __str__(self):
         return self.relation.name + '(' + ','.join([str(x) for x in self.args]) + ')'
 
     def __hash__(self):
-        return self.hash
+        hashable_list = [arg.__hash__() for arg in self.args] + [self.relation.name]
+        return hash(tuple(hashable_list))
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+    def propagate_bindings(self, bindings):
+        length = len(self.args)
+        terms = []
+        for i in range(length):
+            terms.append(self.args[i].propagate_bindings(bindings))
+        return Composite(self.relation, terms)
+
+    def check_ground_term(self):
+        for arg in self.args:
+            if not arg.check_ground_term():
+                return False
+        return True
 
 
 class Atom(Term):
@@ -180,6 +154,12 @@ class Atom(Term):
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
 
+    def propagate_bindings(self, bindings):
+        return self
+
+    def check_ground_term(self):
+        return True
+
 
 class Variable(Term):
     def __init__(self, name: str, sort: Relation):
@@ -195,6 +175,16 @@ class Variable(Term):
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+    def propagate_bindings(self, bindings):
+        for (v, t) in bindings.items():
+            # Don't have to deep clone for a new term because ground term is immutable.
+            if self == v:
+                return bindings[v]
+        return self
+
+    def check_ground_term(self):
+        return False
 
 
 if __name__ == '__main__':
@@ -231,12 +221,6 @@ if __name__ == '__main__':
     print(v1, v2)
     print(n1, n2)
     print(e1, e2)
-
-    print(n1.hash)
-    print(n1_clone.hash)
-    print(n2.hash)
-    print(e3.hash)
-    print(e3_clone.hash)
 
     t = link_x_z_term.propagate_bindings(bindings)
     print(t)

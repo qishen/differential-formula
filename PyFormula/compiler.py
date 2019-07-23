@@ -2,6 +2,7 @@ import logging
 import coloredlogs
 import sys
 
+
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
     def __init__(self, relations, rules, logger_disabled=False):

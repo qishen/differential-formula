@@ -1,5 +1,7 @@
-from modules.constraint import Constraint, PredType, Predicate
 from typing import *
+import datetime
+
+from modules.constraint import Constraint, PredType, Predicate
 
 
 class Rule:
@@ -81,6 +83,7 @@ class Rule:
                             new_combined_bindings_count = fact_count * bindings_count
                             new_combined_bindings_tuple = [new_combined_bindings, new_combined_bindings_count]
                             new_bindings_with_count_list.append(new_combined_bindings_tuple)
+
             bindings_with_count_list = new_bindings_with_count_list
 
         ''' 

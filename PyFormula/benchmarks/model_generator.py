@@ -260,7 +260,7 @@ class HyperGraphGenerator(GraphGenerator):
 
 if __name__ == '__main__':
     generator = GraphGenerator()
-    generator.execute_in_pyFormula(100, 100)
+    generator.execute_in_pyFormula(200, 400)
 
     '''node_num = 50
     for i in range(8):
