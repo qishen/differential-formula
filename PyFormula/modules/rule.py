@@ -1,5 +1,5 @@
 from typing import *
-import datetime
+from collections import Counter
 
 from modules.constraint import Constraint, PredType, Predicate
 
@@ -56,7 +56,7 @@ class Rule:
         Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
         '''
         for constraint in term_constraints:
-            ''' Can be either original, delta or combined fact set data depending on constraint prefix.'''
+            ''' Can be either original, delta or combined fact set data depending on constraint prefix. '''
             factset = constraint.get_factset_for_pred()
             new_bindings_with_count_list = []
 
@@ -65,20 +65,20 @@ class Rule:
                 return []
 
             for bindings_tuple in bindings_with_count_list:
-                for fact in factset:
-                    fact_count = factset[fact]
-                    [bindings, bindings_count] = bindings_tuple
-                    partial_binded_term = constraint.term.propagate_bindings(bindings)
-                    '''
-                    1. If the term in constraint predicate is still not fully binded after propagating bindings
-                    and the partial binded term is semantically equal to current ground term fact, then find
-                    new bindings between partial binded term and fact.
-                    2. Ground term after propagation, then check if that term exists before adding the bindings.
-                    '''
-                    if partial_binded_term.is_ground_term:
-                        if partial_binded_term in factset:
-                            new_bindings_with_count_list.append([bindings, bindings_count * fact_count])
-                    else:
+                [bindings, bindings_count] = bindings_tuple
+                partial_binded_term = constraint.term.propagate_bindings(bindings)
+                '''
+                1. If the term in constraint predicate is still not fully binded after propagating bindings
+                and the partial binded term is semantically equal to current ground term fact, then find
+                new bindings between partial binded term and fact.
+                2. Ground term after propagation, then check if that term exists before adding the bindings.
+                '''
+                if partial_binded_term.is_ground_term:
+                    if partial_binded_term in factset:
+                        new_bindings_with_count_list.append([bindings, bindings_count])
+                else:
+                    for fact in factset:
+                        fact_count = factset[fact]
                         new_bindings = partial_binded_term.get_bindings(fact)
                         if len(new_bindings) > 0:
                             new_combined_bindings = {**bindings, **new_bindings}

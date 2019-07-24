@@ -13,7 +13,6 @@ class Compiler:
         self.logger.setLevel(logging.DEBUG)
         if logger_disabled:
             self.logger.disabled = True
-        # coloredlogs.install(level='DEBUG', logger=self.logger)
 
         for relation in relations:
             self.relation_map[relation.name] = relation
