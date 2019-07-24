@@ -68,7 +68,7 @@ class FullyConnectedGraphTestCase(BaseLinkTestCase):
         self.compiler = Compiler(relations, rules)
         self.logger = self.compiler.logger
 
-    #@unittest.skip("Skip temporarily")
+    @unittest.skip("Skip temporarily")
     def test_fully_connected_graph(self):
         nodes_raw = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
         link_facts = []
@@ -175,7 +175,22 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
 class RecursiveLinkClass(BaseLinkTestCase):
     def setUp(self):
         super().setUp()
+        string_sort = Relation('string')
+        self.link_x_y_term = Composite(self.link, [Variable('X', string_sort), Variable('Y', string_sort)])
+        self.link_x_y = Predicate(self.link_x_y_term)
+        self.recursive_link_rule = Rule([self.link_x_y], [self.link_x_z, self.link_z_y])
+        rules = [self.recursive_link_rule]
+        relations = [self.link]
+        self.compiler = Compiler(relations, rules)
+        self.logger = self.compiler.logger
 
-    def test_me(self):
-        pass
+    #@unittest.skip("Skip temporarily")
+    def test_small_tc_graph(self):
+        link_facts_raw = [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'e']]
+        link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
+        self.compiler.compile(link_facts)
 
+        self.logger.info('----------------------------------------------------------')
+        self.logger.info('--- Print out model facts after changes are propagated ---')
+        self.logger.info('----------------------------------------------------------')
+        self.compiler.print_all_facts()

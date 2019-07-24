@@ -8,9 +8,17 @@ class Rule:
     def __init__(self, head: List[Constraint], body: List[Constraint]):
         self.head = head
         self.body = body
+        self.has_recursion = self.check_recursion()
 
     def __str__(self):
         return ', '.join([str(pred) for pred in self.head]) + ' :- ' + ', '.join([str(pred) for pred in self.body])
+
+    def check_recursion(self):
+        for body_constraint in self.body:
+            for head_constraint in self.head:
+                if body_constraint.term.sort.name == head_constraint.term.sort.name:
+                    return True
+        return False
 
     def derive_delta_rules(self):
         rules = []

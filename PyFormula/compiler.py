@@ -1,6 +1,6 @@
 import logging
-import coloredlogs
 import sys
+from collections import Counter
 
 
 class Compiler:
@@ -47,7 +47,49 @@ class Compiler:
             for (key, value) in bindings.items():
                 bindings_str_list.append('[' + str(key) + ' binds to ' + str(value) + ']')
             self.logger.debug(', '.join(bindings_str_list) + ' with count ' + str(count))
-        self.logger.debug('\n')
+
+    def execute_rule(self, rule):
+        new_fact_counter = Counter()
+        delta_rules = rule.derive_delta_rules()
+        for delta_rule in delta_rules:
+            self.logger.info(delta_rule)
+            bindings_list = delta_rule.find_match()
+
+            self.print_bindings_list(bindings_list)
+
+            for bindings_tuple in bindings_list:
+                (bindings, bindings_count) = bindings_tuple
+                for constraint in delta_rule.head:
+                    head_term = constraint.term
+                    fact = head_term.propagate_bindings(bindings)
+
+                    self.logger.debug('%s -> %s' % (fact, bindings_count))
+
+                    # new derived fact could be a duplicate in old data set.
+                    new_fact_counter.update({fact: bindings_count})
+            self.logger.debug('\n')
+
+        if rule.has_recursion:
+            # Merge delta data and filter new derived data to remove duplicates
+            self.merge_delta_data()
+            delete_facts = []
+            for fact in new_fact_counter:
+                if fact in fact.sort.data:
+                    delete_facts.append(fact)
+            for fact in delete_facts:
+                del new_fact_counter[fact]
+
+            # Add new derived data, which are not duplicates, to delta data and execute the same rule again.
+            if len(new_fact_counter) > 0:
+                for fact in new_fact_counter:
+                    count = new_fact_counter[fact]
+                    fact.sort.add_delta_fact(fact, count)
+                self.execute_rule(rule)
+        else:
+            # Directly add new derived terms to delta data and merge delta data into data for non-recursive rule
+            for fact in new_fact_counter:
+                count = new_fact_counter[fact]
+                fact.sort.add_delta_fact(fact, count)
 
     def add_changes(self, changes):
         for fact in changes:
@@ -55,23 +97,4 @@ class Compiler:
             fact.relation.add_delta_fact(fact, count)
 
         for rule in self.rules:
-            delta_rules = rule.derive_delta_rules()
-            for delta_rule in delta_rules:
-                self.logger.info(delta_rule)
-                bindings_list = delta_rule.find_match()
-
-                self.print_bindings_list(bindings_list)
-
-                for bindings_tuple in bindings_list:
-                    (bindings, bindings_count) = bindings_tuple
-                    for constraint in delta_rule.head:
-                        hterm = constraint.term
-                        fact = hterm.propagate_bindings(bindings)
-
-                        self.logger.debug('%s -> %s' % (fact, bindings_count))
-
-                        # new derived fact could be a duplicate in old data set.
-                        hterm.sort.add_delta_fact(fact, bindings_count)
-
-                self.logger.debug('\n')
-
+            self.execute_rule(rule)
