@@ -64,18 +64,20 @@ class Rule:
             if len(factset) == 0:
                 return []
 
-            for fact in factset:
-                fact_count = factset[fact]
-                for bindings_tuple in bindings_with_count_list:
+            for bindings_tuple in bindings_with_count_list:
+                for fact in factset:
+                    fact_count = factset[fact]
                     [bindings, bindings_count] = bindings_tuple
                     partial_binded_term = constraint.term.propagate_bindings(bindings)
                     '''
-                    If the term in constraint predicate is still not fully binded after propagating bindings
+                    1. If the term in constraint predicate is still not fully binded after propagating bindings
                     and the partial binded term is semantically equal to current ground term fact, then find
                     new bindings between partial binded term and fact.
+                    2. Ground term after propagation, then check if that term exists before adding the bindings.
                     '''
                     if partial_binded_term.is_ground_term:
-                        new_bindings_with_count_list.append([bindings, bindings_count * fact_count])
+                        if partial_binded_term in factset:
+                            new_bindings_with_count_list.append([bindings, bindings_count * fact_count])
                     else:
                         new_bindings = partial_binded_term.get_bindings(fact)
                         if len(new_bindings) > 0:

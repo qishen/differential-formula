@@ -180,6 +180,12 @@ class Relation:
         # Delete all delta_data after merge.
         self.delta_data.clear()
 
+    def facts_count(self):
+        count = 0
+        for fact in self.combined_data:
+            count += self.combined_data[fact]
+        return count
+
 
 if __name__ == '__main__':
     link = Relation('link', ['src', 'dst'], ["string", "string"])
