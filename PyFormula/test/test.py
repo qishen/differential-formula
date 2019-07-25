@@ -186,7 +186,7 @@ class RecursiveLinkClass(BaseLinkTestCase):
 
     #@unittest.skip("Skip temporarily")
     def test_small_tc_graph(self):
-        link_facts_raw = [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'e']]
+        link_facts_raw = [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'e'], ['e', 'f']]
         link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
         self.compiler.compile(link_facts)
 

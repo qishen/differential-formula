@@ -70,26 +70,32 @@ class Compiler:
             self.logger.debug('\n')
 
         if rule.has_recursion:
-            # Merge delta data and filter new derived data to remove duplicates
+            ''' Merge delta data and find all new derived facts that does not exist in data.'''
             self.merge_delta_data()
-            delete_facts = []
+            non_duplicate_facts = {}
             for fact in new_fact_counter:
-                if fact in fact.sort.data:
-                    delete_facts.append(fact)
-            for fact in delete_facts:
-                del new_fact_counter[fact]
-
-            # Add new derived data, which are not duplicates, to delta data and execute the same rule again.
-            if len(new_fact_counter) > 0:
-                for fact in new_fact_counter:
-                    count = new_fact_counter[fact]
-                    fact.sort.add_delta_fact(fact, count)
+                if fact not in fact.sort.data:
+                    non_duplicate_facts[fact] = new_fact_counter[fact]
+            ''' 
+            Add all derived facts into delta data no matter if some facts are duplicates,
+            if derived facts have non-duplicate facts then execute the same rule again.
+            '''
+            self.insert_delta_facts(new_fact_counter)
+            if len(non_duplicate_facts) > 0:
                 self.execute_rule(rule)
         else:
             # Directly add new derived terms to delta data and merge delta data into data for non-recursive rule
-            for fact in new_fact_counter:
-                count = new_fact_counter[fact]
-                fact.sort.add_delta_fact(fact, count)
+            self.insert_delta_facts(new_fact_counter)
+
+    def insert_delta_facts(self, facts_dict):
+        """
+        Add every fact into delta data section of its own relation with count.
+        :param facts_dict:
+        :return:
+        """
+        for fact in facts_dict:
+            count = facts_dict[fact]
+            fact.sort.add_delta_fact(fact, count)
 
     def add_changes(self, changes):
         for fact in changes:
