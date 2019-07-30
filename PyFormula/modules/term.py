@@ -23,7 +23,7 @@ class Term:
                 variables.append(self)
             elif type(self) is Composite:
                 for term in self.args:
-                    sub_vars = self.get_variables(term)
+                    sub_vars = term.get_variables()
                     variables += sub_vars
         return variables
 
@@ -152,7 +152,10 @@ class Atom(Term):
         return hash(self.val)
 
     def __eq__(self, other):
-        return self.__hash__() == other.__hash__()
+        if type(other) == Atom:
+            return self.val == other.val
+        else:
+            return False
 
     def propagate_bindings(self, bindings):
         return self
@@ -174,7 +177,10 @@ class Variable(Term):
         return hash(self.var)
 
     def __eq__(self, other):
-        return self.__hash__() == other.__hash__()
+        if type(other) == Variable:
+            return self.var == other.var
+        else:
+            return False
 
     def propagate_bindings(self, bindings):
         for (v, t) in bindings.items():
@@ -187,45 +193,3 @@ class Variable(Term):
         return False
 
 
-if __name__ == '__main__':
-    node = Relation('node', ['id'], ['string'])
-    edge = Relation('edge', ['src', 'dst'], ['node', 'node'])
-    a1 = Atom('hello')
-    a1_clone = Atom('hello')
-    a2 = Atom(123)
-    a3 = Atom(1.23)
-    a4 = Atom('world')
-
-    v1 = Variable('X', node)
-    v1_clone = Variable('X', node)
-    v2 = Variable('Y', node)
-    s1 = Variable('S', Relation('string'))
-
-    n1 = Composite(node, [a1])
-    n1_clone = Composite(node, [a1])
-    n1_clone2 = Composite(node, [a1_clone])
-    n2 = Composite(node, [s1])
-    n3 = Composite(node, [a4])
-
-    e1 = Composite(edge, [v1, v2])
-    e2 = Composite(edge, [n1, v2])
-    e3 = Composite(edge, [n1, n3])
-    e3_clone = Composite(edge, [n1_clone2, n3])
-
-    link = Relation('link', ['src', 'dst'], ["string", "string"])
-    string_sort = Relation('string')
-    link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
-    bindings = {Variable('X', string_sort): Atom('hello'), Variable('Z', string_sort): Atom('world')}
-
-    print(a1, a2, a3)
-    print(v1, v2)
-    print(n1, n2)
-    print(e1, e2)
-
-    t = link_x_z_term.propagate_bindings(bindings)
-    print(t)
-
-    print(n1 == n1_clone)
-    print(n1_clone == n1_clone2)
-    print(v1 == v1_clone)
-    print(e3 == e3_clone)

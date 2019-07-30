@@ -25,6 +25,16 @@ class CounterChainMap(ChainMap):
         else:
             raise KeyError(key)
 
+    def __contains__(self, item):
+        count = 0
+        for mapping in self.maps:
+            if item in mapping:
+                count += mapping[item]
+        if count == 0:
+            return False
+        else:
+            return True
+
     def __iter__(self):
         list = []
         for item in super().__iter__():
@@ -185,32 +195,3 @@ class Relation:
         for fact in self.combined_data:
             count += self.combined_data[fact]
         return count
-
-
-if __name__ == '__main__':
-    link = Relation('link', ['src', 'dst'], ["string", "string"])
-    link.data['hello'] = 1
-    link.delta_data['world'] = 2
-    print(link.data)
-    print(link.delta_data)
-    print(link.combined_data)
-    for i in link.combined_data:
-        print(i, link.combined_data[i])
-
-    d1 = {'hello': 1, 'world': 2}
-    d2 = {'hello': 3, 'world': -2, 'hi': 4}
-    c = CounterChainMap(d1, d2)
-
-    print(c['hello'])
-    print(c['hi'])
-    print(len(c))
-
-    for key in c:
-        print(key)
-
-    d3 = {'hello': 1, 'world': 3}
-    d4 = {'world': 2, 'bug': 4}
-    s = SetDiffMap(d3, d4)
-    print(len(s))
-    for key in s:
-        print(key)

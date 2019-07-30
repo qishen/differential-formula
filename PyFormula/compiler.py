@@ -9,7 +9,8 @@ class Compiler:
         self.relation_map = {}
         self.rules = rules
         self.logger = logging.getLogger(__name__)
-        self.logger.addHandler(logging.StreamHandler())
+        if not self.logger.handlers:
+            self.logger.addHandler(logging.StreamHandler())
         self.logger.setLevel(logging.DEBUG)
         if logger_disabled:
             self.logger.disabled = True
@@ -22,6 +23,12 @@ class Compiler:
             self.logger.debug(self.relation_map[name])
 
     def compile(self, facts):
+        """
+        Initial compilation will treat facts as changes to empty dataset
+        and incrementally execute all rules.
+        :param facts:
+        :return:
+        """
         changes = {}
         for fact in facts:
             changes[fact] = 1
@@ -38,37 +45,44 @@ class Compiler:
             relation = self.relation_map[name]
             relation.merge_delta_into_data()
 
-    def print_bindings_list(self, bindings_list):
-        if len(bindings_list) == 0:
+    def print_bindings_list(self, bindings_counter):
+        """
+        Use default logger to print out all existing bindings of variables to terms with count.
+        :param bindings_list:
+        :return:
+        """
+        if len(bindings_counter) == 0:
             self.logger.debug('No bindings available for current rule.')
-        for bindings_tuple in bindings_list:
-            (bindings, count) = bindings_tuple
-            bindings_str_list = []
-            for (key, value) in bindings.items():
-                bindings_str_list.append('[' + str(key) + ' binds to ' + str(value) + ']')
-            self.logger.debug(', '.join(bindings_str_list) + ' with count ' + str(count))
+        else:
+            self.logger.debug(str(bindings_counter))
 
     def execute_rule(self, rule):
         new_fact_counter = Counter()
         delta_rules = rule.derive_delta_rules()
         for delta_rule in delta_rules:
+
             self.logger.info(delta_rule)
-            bindings_list = delta_rule.find_match()
 
-            self.print_bindings_list(bindings_list)
+            bindings_counter = delta_rule.find_match()
 
-            for bindings_tuple in bindings_list:
-                (bindings, bindings_count) = bindings_tuple
+            #self.print_bindings_list(bindings_counter)
+
+            for bindings in bindings_counter:
+                bindings_count = bindings_counter[bindings]
                 for constraint in delta_rule.head:
                     head_term = constraint.term
                     fact = head_term.propagate_bindings(bindings)
 
-                    self.logger.debug('%s -> %s' % (fact, bindings_count))
+                    #self.logger.debug('%s -> %s' % (fact, bindings_count))
 
                     # new derived fact could be a duplicate in old data set.
                     new_fact_counter.update({fact: bindings_count})
             self.logger.debug('\n')
 
+        ''' 
+        Note that counting algorithm is not efficient for recursive rule execution and does not 
+        terminate on some situations.
+        '''
         if rule.has_recursion:
             ''' Merge delta data and find all new derived facts that does not exist in data.'''
             self.merge_delta_data()

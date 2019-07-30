@@ -194,3 +194,14 @@ class RecursiveLinkClass(BaseLinkTestCase):
         self.logger.info('--- Print out model facts after changes are propagated ---')
         self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts()
+
+    @unittest.skip("Skip temporarily")
+    def test_graph_with_dred(self):
+        link_facts_raw = [['a', 'b'], ['b', 'c'], ['c', 'd'], ['c', 'c']]
+        link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
+        self.compiler.compile(link_facts)
+
+        self.logger.info('----------------------------------------------------------')
+        self.logger.info('--- Print out model facts after changes are propagated ---')
+        self.logger.info('----------------------------------------------------------')
+        self.compiler.print_all_facts()

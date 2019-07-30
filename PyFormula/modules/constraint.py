@@ -35,6 +35,9 @@ class Predicate(Constraint):
     def get_relation(self):
         return self.term.sort
 
+    def get_vars(self):
+        return self.term.get_variables()
+
     def convert(self, pred_type: PredType, negated: bool):
         return Predicate(self.term, pred_type, negated)
 
