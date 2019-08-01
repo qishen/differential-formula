@@ -123,6 +123,11 @@ class Rule:
 
         return rules
 
+    def find_match_without_counting(self):
+        bindings_counter = BindingsCounter({Bindings(): 1})
+        for constraint in self.term_constraints:
+            factset = constraint.get_factset_for_pred()
+
     def find_match(self):
         bindings_counter = BindingsCounter({Bindings(): 1})
         '''

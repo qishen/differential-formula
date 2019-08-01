@@ -130,6 +130,9 @@ class Relation:
         self.delta_negated_data = {}
         self.combined_negated_data = CounterChainMap(self.negated_data, self.delta_negated_data)
 
+    def __hash__(self):
+        return hash(self.name)
+
     def __str__(self):
         def get_printable_data(name, data):
             string = ''

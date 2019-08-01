@@ -1,5 +1,11 @@
 import logging
-import sys
+import networkx as nx
+
+from antlr4 import *
+#from parser.gen.FormulaLexer import FormulaLexer
+#from parser.gen.FormulaParser import FormulaParser
+
+
 from collections import Counter
 
 
@@ -17,6 +23,68 @@ class Compiler:
 
         for relation in relations:
             self.relation_map[relation.name] = relation
+
+    '''
+    def parse_string(self, file_str):
+        input_strean = FileStream(file_str)
+        lexer = FormulaLexer(input_strean)
+        stream = CommonTokenStream(lexer)
+        parser = FormulaParser(stream)
+    '''
+
+    def parse_file(self, filename):
+        pass
+
+    def stratify_rules(self):
+        idb = {}
+        edb = {}
+
+        # All predicates in head belong to IDB, the rest of preds belong to EDB
+        for rule in self.rules:
+            for c in rule.head:
+                if c.term.sort not in idb:
+                    idb[c.term.sort] = [rule]
+                else:
+                    if rule not in idb[c.term.sort]:
+                        idb[c.term.sort].append(rule)
+
+        for rule in self.rules:
+            for c in rule.body:
+                body_sort = c.term.sort
+                if body_sort not in idb:
+                    if body_sort not in edb:
+                        edb[body_sort] = [rule]
+                    else:
+                        if rule not in edb[body_sort]:
+                            edb[body_sort].append(rule)
+
+        dg = nx.DiGraph()
+        for rule in self.rules:
+            for hc in rule.head:
+                head_sort = hc.term.sort
+                for bc in rule.body:
+                    body_sort = bc.term.sort
+                    if body_sort in idb:
+                        if bc.negated:
+                            dg.add_edge(body_sort, head_sort, negated=True)
+                        else:
+                            dg.add_edge(body_sort, head_sort, negated=False)
+
+        cg = nx.condensation(dg)
+        mapping = cg.graph['mapping']
+
+        rule_clusters = []
+        for cluster_id in nx.topological_sort(cg):
+            rule_cluster = []
+            for node in mapping:
+                if mapping[node] == cluster_id:
+                    rule_cluster += idb[node]
+            rule_clusters.append(rule_cluster)
+
+        return rule_clusters
+
+    def transform_into_magicset(self):
+        pass
 
     def print_all_facts(self):
         for name in self.relation_map:
@@ -65,7 +133,7 @@ class Compiler:
 
             bindings_counter = delta_rule.find_match()
 
-            #self.print_bindings_list(bindings_counter)
+            self.print_bindings_list(bindings_counter)
 
             for bindings in bindings_counter:
                 bindings_count = bindings_counter[bindings]
@@ -73,7 +141,7 @@ class Compiler:
                     head_term = constraint.term
                     fact = head_term.propagate_bindings(bindings)
 
-                    #self.logger.debug('%s -> %s' % (fact, bindings_count))
+                    self.logger.debug('%s -> %s' % (fact, bindings_count))
 
                     # new derived fact could be a duplicate in old data set.
                     new_fact_counter.update({fact: bindings_count})

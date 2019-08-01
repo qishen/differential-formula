@@ -1,12 +1,55 @@
 import unittest
 import logging
 import sys
+import networkx as nx
 
 from modules.rule import Rule
 from modules.relation import Relation
 from modules.term import Atom, Variable, Composite
 from modules.constraint import PredType, Predicate
 from compiler import Compiler
+
+
+class RuleTransformationTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        pass
+
+    def test_rules_stratification(self):
+        string_sort = Relation('string')
+        link = Relation('link', ['src', 'dst'], ["string", "string"])
+        reachable = Relation('reachable', ['src', 'dst'], ['string', 'string'])
+        node = Relation('node', ['x'], ['string'])
+        unreachable = Relation('unreachable', ['src', 'dst'], ['string', 'string'])
+
+        relations = [link, reachable, node, unreachable]
+
+        '''
+        reachable(X,Y) :- link(X,Y)
+        reachable(X,Y) :- link(X,Z), reachable(Z,Y)
+        node(X) :- link(X,Y)
+        node(Y) :- link(X,Y)
+        unreachable(X,Y) :- node(X), node(Y), not reachable(X,Y)
+        '''
+        link_x_y_term = Composite(link, [Variable('X', string_sort), Variable('Y', string_sort)])
+        reachable_x_y_term = Composite(reachable, [Variable('X', string_sort), Variable('Y', string_sort)])
+
+        link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
+        reachable_z_y_term = Composite(reachable, [Variable('Z', string_sort), Variable('Y', string_sort)])
+
+        node_x_term = Composite(node, [Variable('X', string_sort)])
+        node_y_term = Composite(node, [Variable('Y', string_sort)])
+        unreachable_x_y_term = Composite(unreachable, [Variable('X', string_sort), Variable('Y', string_sort)])
+
+        rule1 = Rule([Predicate(reachable_x_y_term)], [Predicate(link_x_y_term)])
+        rule2 = Rule([Predicate(reachable_x_y_term)], [Predicate(link_x_z_term), Predicate(reachable_z_y_term)])
+        rule3 = Rule([Predicate(node_x_term)], [Predicate(link_x_y_term)])
+        rule4 = Rule([Predicate(node_y_term)], [Predicate(link_x_y_term)])
+        rule5 = Rule([Predicate(unreachable_x_y_term)], [Predicate(node_x_term), Predicate(node_y_term),
+                                                         Predicate(reachable_x_y_term, negated=True)])
+        rules = [rule1, rule2, rule3, rule4, rule5]
+
+        compiler = Compiler(relations, rules)
+        compiler.stratify_rules()
 
 
 class BaseLinkTestCase(unittest.TestCase):
@@ -184,7 +227,7 @@ class RecursiveLinkClass(BaseLinkTestCase):
         self.compiler = Compiler(relations, rules)
         self.logger = self.compiler.logger
 
-    #@unittest.skip("Skip temporarily")
+    @unittest.skip("Skip temporarily")
     def test_small_tc_graph(self):
         link_facts_raw = [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'e'], ['e', 'f']]
         link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
@@ -205,3 +248,7 @@ class RecursiveLinkClass(BaseLinkTestCase):
         self.logger.info('--- Print out model facts after changes are propagated ---')
         self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts()
+
+
+
+
