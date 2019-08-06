@@ -1,8 +1,6 @@
 from enum import Enum
-from typing import *
 
-from modules.term import Term, Atom, Variable, Composite
-from modules.relation import Relation
+from executer.term import Term
 
 
 class PredType(Enum):

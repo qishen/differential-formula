@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import *
-from modules.relation import Relation
+
+from executer.relation import BasicType
 
 
 # A term can be atom, variable or composition of terms
@@ -132,11 +132,11 @@ class Atom(Term):
     def __init__(self, value):
         # Determine the sort of basic atom value.
         if type(value) is str:
-            sort = Relation('string')
+            sort = BasicType('string')
         elif type(value) is int:
-            sort = Relation('integer')
+            sort = BasicType('integer')
         else:
-            sort = Relation('float')
+            sort = BasicType('float')
 
         super().__init__(sort)
         self.val = value
@@ -165,10 +165,11 @@ class Atom(Term):
 
 
 class Variable(Term):
-    def __init__(self, name: str, sort: Relation):
+    def __init__(self, name: str, sort: BasicType):
         super().__init__(sort)
-        self.var = name
+        self.var = name.split('.')[0]
         self.term_type = TermType.VARIABLE
+        self.fragments = name.split('.')[1:]
 
     def __str__(self):
         return '<' + self.var + '>'

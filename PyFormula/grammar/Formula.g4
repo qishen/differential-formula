@@ -4,6 +4,23 @@ grammar Formula;
  * Parser Rules
  */
 
+/**************** Configs *********************/
+config
+    : LBRACKET settingList RBRACKET
+    ;
+
+sentenceConfig
+    : LBRACKET settingList RBRACKET
+    ;
+
+settingList
+    : setting (COMMA setting)*
+    ;
+
+setting
+    : Id EQ constant
+    ;
+
 /**************** Module Decls *****************/
 program
     : EOF    
@@ -28,15 +45,42 @@ modRefs
 	;
 
 modRef
-	: Id
-	| Id AT STRING
-	| Id RENAMES Id
-	| Id RENAMES Id AT STRING
+	: Id (RENAMES Id)? (AT STRING)?
 	;
 
+/**************** Model Decls *****************/
 model 
-	: modelSig LBRACE (modelFactList)* RBRACE
+	: modelSigConfig LBRACE (modelBody)? RBRACE
 	;
+
+modelBody
+    : (modelSentence)*
+    ;
+
+modelSentence
+    : modelFactList
+    | modelContractConf
+    ;
+
+modelContractConf
+    : (sentenceConfig)? modelContract
+    ;
+
+modelContract
+    : ENSURES disjunction DOT
+    | REQUIRES disjunction DOT
+    | REQUIRES cardSpec DECIMAL Id DOT
+    ;
+
+cardSpec
+    : SOME
+    | ATMOST
+    | ATLEAST
+    ;
+
+modelSigConfig
+    : modelSig (config)?
+    ;
 
 modelIntro
 	: (PARTIAL)? MODEL Id OF modRef
@@ -46,22 +90,39 @@ modelSig
 	: modelIntro ((INCLUDES | EXTENDS) modRefs)?
 	;
 
+modelFactList
+    : modelFact (COMMA modelFact)* DOT
+    ;
+
+modelFact
+	: (Id IS)? funcTerm
+    ;
+
+/**************** Domain Decls *****************/
 domain 
-	: domainSig LBRACE domSentences RBRACE
+	: domainSigConfig LBRACE (domSentences)? RBRACE
 	;
+
+domainSigConfig
+    : domainSig (config)?
+    ;
 
 domainSig
 	: DOMAIN Id ((EXTENDS | INCLUDES) modRefs)? 
 	;
 
 domSentences
-	: (domSentence DOT)*
+	: (domSentenceConfig DOT)*
 	;
 
+domSentenceConfig
+    : (sentenceConfig)? domSentence
+    ;
+
 domSentence
-	: typeDecl # DomTypeSentence
-	| formulaRule # DomRuleSentence
-	| CONFORMS disjunction # DomConformsSentence
+	: typeDecl
+	| formulaRule
+	| CONFORMS disjunction
 	;
 
 /**************** Type Decls *****************/
@@ -99,18 +160,9 @@ enumCnst
 	: constant | DECIMAL RANGE DECIMAL;
 
 
-/************* Facts, Rules, and Comprehensions **************/
-modelFactList
-	: modelFact (COMMA modelFact)* DOT 
-	;
-
-modelFact
-	: compositionalTerm
-	| compositionalTermWithoutAlias
-	;
-
+/************* Constraints **************/
 formulaRule 
-	: terms RULE disjunction DOT				
+	: funcTermList RULE disjunction
 	;
 
 /* 
@@ -124,95 +176,56 @@ The example does not make sense but should be fully supported in FORMULA as a ve
 feature.
 */
 setComprehension
-	: LBRACE terms (PIPE conjunction)? RBRACE
+	: LBRACE funcTermList (PIPE conjunction)? RBRACE
 	;
 
 /*
 Disjunction of conjunction of constraints.
 */
 disjunction 
-	: conjunction (SEMICOLON conjunction)
+	: conjunction (SEMICOLON conjunction)*
 	;
 
 /*
-Conjunction of constraints.
+Conjunction of constraints and they are only used in the body of a rule.
 */
 conjunction 
-	: constraint (COMMA constraint)
+	: constraint (COMMA constraint)*
 	;
 
 /******************* Terms and Constraints *******************/
 
 /*
 TODO: Is it possible to have variable of integer type to compare aggregation result.
-
-Seven kinds of constraints in FORMULA rules or queries.
-1. Existence or absence of compositional term. e.g. no A(a, b).
-2. Aggregation over set comprehension and compare with numeric value. count({x|...}) = 1.
-3. Binary relation over arithmetic terms.
-4. Type constraint for variables
-5. Variable constraints binding to predicates with other variables as arguments.
-Binary constraint are matched only for arithmetic terms over binary relation
-6. Derived constant x is provable
-7. true if set comprehension is empty otherwise false.
-and only limited numeric types.
 */
 constraint
-	: (NO)? compositionalTermWithoutAlias # PredConstraint
+	: (NO)? funcTerm # TermConstraint // e.g. no Edge(Node(x), Node("hello"))
+	| Id (IS | EQ) funcTerm # TermConstraintWithAlias // e.g. e1 is Edge(x,y)
+	| arithmeticTerm relOp arithmeticTerm # BinaryArithmeticConstraint // e.g. a + b * c > d
 	| (NO)? COUNT LPAREN setComprehension RPAREN relOp DECIMAL # AggregationCountConstraint
-	| arithmeticTerm relOp arithmeticTerm # BinaryConstraint
-	| Id (IS | EQ) Id # TypeConstraint
-	| Id (IS | EQ) compositionalTermWithoutAlias # VariableBindingConstraint
-	| (NO)? Id # DerivedConstantConstraint
-	| NO setComprehension # SetComprehensionConstraint
+	| NO setComprehension # SetComprehensionConstraint // e.g. no {a | a is Node}
+	| (NO)? Id # DerivedConstantConstraint // e.g. no hasCycle
+	| Id IS Id # TypeConstraint // e.g. n1 is Node
 	;
-
-/*
-A term can be variable, constant, arithmetic expression or 
-compositional term consists of variable, constant or itself as arguments.
-Arithmetic term can be viewed as compositional term as well in the form of <op>(a, b). 
-term = "hello"
-term = x
-term = Edge(x, y)
-term = Edge(Node(x+2), Node(y*3))
-
-Note that arithmetic term may not be allowed in model fact but allowed in rule head.
-
-*/
-term
-	: compositionalTermWithoutAlias | arithmeticTerm | atom
-	;
-
-/*
-terms can be used in the head of FORMULA rule and its head
-should only contain boolean variables or compositional terms with
-some variables or arithmetic expressions inside it.
-*/
-terms 
-	: term (COMMA term)*
-	;
-
 
 /*
 Antlr4 only supports mutually recursive definition written in one rule instead of
-multiple rules.
+multiple rules. Arithmetic terms are not allowed in functerm like Node(a+1) :- Node(a) and
+it should be written as Node(b) :- Node(a), b = a + 1.
 */
-compositionalTerm 
-	: Id (IS | EQ) compositionalTermWithoutAlias
-	;
+funcTerm
+    : Id LPAREN funcTerm (COMMA funcTerm)* RPAREN
+    | atom
+    ;
 
-/*
-Terms in model facts should not contain any arithmetic expressions,
-while terms in FORMULA rules can have them.
-*/
-compositionalTermWithoutAlias
-	: Id LPAREN compositionalTermWithoutAlias (COMMA compositionalTermWithoutAlias)* RPAREN # NestedCompositionalTerm
-	| Id LPAREN atom (COMMA atom)* RPAREN # NonNestedCompositionalTerm
-	;
+funcTermList
+    : funcTerm (COMMA funcTerm)*
+    ;
 
 /*
 Operator precedence (* or /) -> MOD -> (+ or -) and no right associativity is needed.
-The basic arithmetic term is either variable or constant.
+The basic arithmetic term is either variable or constant since these operators don't
+apply to instances of compositional types.
 */
 arithmeticTerm
 	: LPAREN arithmeticTerm RPAREN # ParenthesisArithTerm
@@ -231,6 +244,7 @@ binOp : MUL | DIV | MOD | PLUS | MINUS ;
 relOp : EQ | NE | LT | LE | GT | GE | COLON ;
 
 funModifier : '->' | '=>';
+
 
 /*
  * Lexer Rules

@@ -1,12 +1,11 @@
-import random
 import datetime
+import random
 
-from modules.rule import Rule
-from modules.relation import Relation
-from modules.term import Atom, Variable, Composite
-from modules.constraint import PredType, Predicate
 from compiler import Compiler
-
+from executer import Atom, Variable, Composite
+from executer import Predicate
+from executer import Rule
+from executer.relation import BasicType
 from utils import utils
 
 
@@ -81,10 +80,10 @@ class GraphGenerator:
         self.create_nodes(node_num)
         self.create_edges(edge_num)
 
-        node = Relation('node', ['id'], ['string'])
-        edge = Relation('edge', ['src', 'dst'], ['node', 'node'])
-        hop = Relation('hop', ['src', 'dst'], ['node', 'node'])
-        six_hop = Relation('six_hop', ['src', 'dst'], ['node', 'node'])
+        node = BasicType('node', ['id'], ['string'])
+        edge = BasicType('edge', ['src', 'dst'], ['node', 'node'])
+        hop = BasicType('hop', ['src', 'dst'], ['node', 'node'])
+        six_hop = BasicType('six_hop', ['src', 'dst'], ['node', 'node'])
 
         relations = [node, edge, hop, six_hop]
 

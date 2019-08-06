@@ -1,7 +1,7 @@
-from typing import *
 from collections import Counter
+from typing import *
 
-from modules.constraint import Constraint, PredType, Predicate
+from executer.constraint import Constraint, PredType
 
 
 class Bindings(dict):
@@ -124,11 +124,50 @@ class Rule:
         return rules
 
     def find_match_without_counting(self):
+        """
+        Implementatino of DRed Algorithm for semi-naive rule evaluation
+        :return:
+        """
         bindings_counter = BindingsCounter({Bindings(): 1})
         for constraint in self.term_constraints:
             factset = constraint.get_factset_for_pred()
+            new_bindings_counter = BindingsCounter()
+
+            if len(factset) == 0:
+                return BindingsCounter()
+
+            for bindings in bindings_counter:
+                partial_binded_term = constraint.term.propagate_bindings(bindings)
+                if partial_binded_term.is_ground_term:
+                    if partial_binded_term in factset:
+                        new_bindings_counter.update({bindings: 1})
+                else:
+                    for fact in factset:
+                        new_bindings = Bindings(partial_binded_term.get_bindings(fact))
+                        if len(new_bindings) > 0:
+                            new_bindings.update(bindings)
+                            new_bindings_counter.update({new_bindings: 1})
+            bindings_counter = new_bindings_counter
+
+        for negated_constraint in self.negated_constraints:
+            delete_bindings_list = []
+            negated_term = negated_constraint.term
+            for bindings in bindings_counter:
+                binded_negated_term = negated_term.propagate_bindings(bindings)
+                if binded_negated_term.is_ground_term:
+                    pass
+
+            ''' Delete some bindings that don't satisfy negated constraint terms.'''
+            for delete_bindings in delete_bindings_list:
+                del bindings_counter[delete_bindings]
+
+        return bindings_counter
 
     def find_match(self):
+        """
+        Implementation of Counting Algorithm for rule execution
+        :return:
+        """
         bindings_counter = BindingsCounter({Bindings(): 1})
         '''
         Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
@@ -140,7 +179,7 @@ class Rule:
 
             ''' No bindings since factset is empty, return [] immediately '''
             if len(factset) == 0:
-                return []
+                return BindingsCounter()
 
             for bindings in bindings_counter:
                 bindings_count = bindings_counter[bindings]

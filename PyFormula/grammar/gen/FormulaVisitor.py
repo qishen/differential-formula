@@ -1,4 +1,4 @@
-# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/parser\Formula.g4 by ANTLR 4.7.2
+# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .FormulaParser import FormulaParser
@@ -8,6 +8,26 @@ else:
 # This class defines a complete generic visitor for a parse tree produced by FormulaParser.
 
 class FormulaVisitor(ParseTreeVisitor):
+
+    # Visit a parse tree produced by FormulaParser#config.
+    def visitConfig(self, ctx:FormulaParser.ConfigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#sentenceConfig.
+    def visitSentenceConfig(self, ctx:FormulaParser.SentenceConfigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#settingList.
+    def visitSettingList(self, ctx:FormulaParser.SettingListContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#setting.
+    def visitSetting(self, ctx:FormulaParser.SettingContext):
+        return self.visitChildren(ctx)
+
 
     # Visit a parse tree produced by FormulaParser#program.
     def visitProgram(self, ctx:FormulaParser.ProgramContext):
@@ -44,6 +64,36 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FormulaParser#modelBody.
+    def visitModelBody(self, ctx:FormulaParser.ModelBodyContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#modelSentence.
+    def visitModelSentence(self, ctx:FormulaParser.ModelSentenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#modelContractConf.
+    def visitModelContractConf(self, ctx:FormulaParser.ModelContractConfContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#modelContract.
+    def visitModelContract(self, ctx:FormulaParser.ModelContractContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#cardSpec.
+    def visitCardSpec(self, ctx:FormulaParser.CardSpecContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#modelSigConfig.
+    def visitModelSigConfig(self, ctx:FormulaParser.ModelSigConfigContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FormulaParser#modelIntro.
     def visitModelIntro(self, ctx:FormulaParser.ModelIntroContext):
         return self.visitChildren(ctx)
@@ -54,8 +104,23 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FormulaParser#modelFactList.
+    def visitModelFactList(self, ctx:FormulaParser.ModelFactListContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#modelFact.
+    def visitModelFact(self, ctx:FormulaParser.ModelFactContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FormulaParser#domain.
     def visitDomain(self, ctx:FormulaParser.DomainContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#domainSigConfig.
+    def visitDomainSigConfig(self, ctx:FormulaParser.DomainSigConfigContext):
         return self.visitChildren(ctx)
 
 
@@ -69,18 +134,13 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#DomTypeSentence.
-    def visitDomTypeSentence(self, ctx:FormulaParser.DomTypeSentenceContext):
+    # Visit a parse tree produced by FormulaParser#domSentenceConfig.
+    def visitDomSentenceConfig(self, ctx:FormulaParser.DomSentenceConfigContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#DomRuleSentence.
-    def visitDomRuleSentence(self, ctx:FormulaParser.DomRuleSentenceContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#DomConformsSentence.
-    def visitDomConformsSentence(self, ctx:FormulaParser.DomConformsSentenceContext):
+    # Visit a parse tree produced by FormulaParser#domSentence.
+    def visitDomSentence(self, ctx:FormulaParser.DomSentenceContext):
         return self.visitChildren(ctx)
 
 
@@ -129,16 +189,6 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#modelFactList.
-    def visitModelFactList(self, ctx:FormulaParser.ModelFactListContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#modelFact.
-    def visitModelFact(self, ctx:FormulaParser.ModelFactContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by FormulaParser#formulaRule.
     def visitFormulaRule(self, ctx:FormulaParser.FormulaRuleContext):
         return self.visitChildren(ctx)
@@ -159,8 +209,18 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#PredConstraint.
-    def visitPredConstraint(self, ctx:FormulaParser.PredConstraintContext):
+    # Visit a parse tree produced by FormulaParser#TermConstraint.
+    def visitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#TermConstraintWithAlias.
+    def visitTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def visitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
         return self.visitChildren(ctx)
 
 
@@ -169,18 +229,8 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#BinaryConstraint.
-    def visitBinaryConstraint(self, ctx:FormulaParser.BinaryConstraintContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#TypeConstraint.
-    def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#VariableBindingConstraint.
-    def visitVariableBindingConstraint(self, ctx:FormulaParser.VariableBindingConstraintContext):
+    # Visit a parse tree produced by FormulaParser#SetComprehensionConstraint.
+    def visitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
         return self.visitChildren(ctx)
 
 
@@ -189,33 +239,18 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def visitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
+    # Visit a parse tree produced by FormulaParser#TypeConstraint.
+    def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#term.
-    def visitTerm(self, ctx:FormulaParser.TermContext):
+    # Visit a parse tree produced by FormulaParser#funcTerm.
+    def visitFuncTerm(self, ctx:FormulaParser.FuncTermContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#terms.
-    def visitTerms(self, ctx:FormulaParser.TermsContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#compositionalTerm.
-    def visitCompositionalTerm(self, ctx:FormulaParser.CompositionalTermContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#NestedCompositionalTerm.
-    def visitNestedCompositionalTerm(self, ctx:FormulaParser.NestedCompositionalTermContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#NonNestedCompositionalTerm.
-    def visitNonNestedCompositionalTerm(self, ctx:FormulaParser.NonNestedCompositionalTermContext):
+    # Visit a parse tree produced by FormulaParser#funcTermList.
+    def visitFuncTermList(self, ctx:FormulaParser.FuncTermListContext):
         return self.visitChildren(ctx)
 
 

@@ -1,11 +1,17 @@
 import unittest
 
-from modules.term import *
+from executer.term import *
+from executer.relation import *
 
 
 class TermTestCase(unittest.TestCase):
     def setUp(self):
-        self.node = Relation('node', ['id'], ['string'])
+        self.node = BasicType('node', ['id'], ['string'])
+
+    def test_variables(self):
+        v1 = Variable('hello.my.friend', None)
+        self.assertEqual(v1.var, 'hello')
+        self.assertEqual(v1.fragments, ['my', 'friend'])
 
     def test_atoms(self):
         self.assertEqual(Atom('hello'), Atom('hello'))
@@ -21,7 +27,7 @@ class TermTestCase(unittest.TestCase):
         self.assertEqual(world, world_clone)
 
     def test_bindings_propagation(self):
-        link = Relation('link', ['src', 'dst'], ["string", "string"])
+        link = BasicType('link', ['src', 'dst'], ["string", "string"])
         string_sort = Relation('string')
         link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
         bindings = {Variable('X', string_sort): Atom('hello'), Variable('Z', string_sort): Atom('world')}

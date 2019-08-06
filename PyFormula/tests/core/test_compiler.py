@@ -1,13 +1,10 @@
 import unittest
-import logging
-import sys
-import networkx as nx
 
-from modules.rule import Rule
-from modules.relation import Relation
-from modules.term import Atom, Variable, Composite
-from modules.constraint import PredType, Predicate
 from compiler import Compiler
+from executer.constraint import PredType, Predicate
+from executer.relation import BasicType
+from executer.rule import Rule
+from executer.term import Atom, Variable, Composite
 
 
 class RuleTransformationTestCase(unittest.TestCase):
@@ -15,11 +12,11 @@ class RuleTransformationTestCase(unittest.TestCase):
         pass
 
     def test_rules_stratification(self):
-        string_sort = Relation('string')
-        link = Relation('link', ['src', 'dst'], ["string", "string"])
-        reachable = Relation('reachable', ['src', 'dst'], ['string', 'string'])
-        node = Relation('node', ['x'], ['string'])
-        unreachable = Relation('unreachable', ['src', 'dst'], ['string', 'string'])
+        string_sort = BasicType('string')
+        link = BasicType('link', ['src', 'dst'], ["string", "string"])
+        reachable = BasicType('reachable', ['src', 'dst'], ['string', 'string'])
+        node = BasicType('node', ['x'], ['string'])
+        unreachable = BasicType('unreachable', ['src', 'dst'], ['string', 'string'])
 
         relations = [link, reachable, node, unreachable]
 
@@ -55,15 +52,15 @@ class RuleTransformationTestCase(unittest.TestCase):
 class BaseLinkTestCase(unittest.TestCase):
     def setUp(self):
         # Define algebraic data type.
-        self.link = Relation('link', ['src', 'dst'], ["string", "string"])
-        self.hop = Relation('hop', ['src', 'dst'], ["string", "string"])
-        self.tri_hop = Relation('tri_hop', ['src', 'dst'], ["string", "string"])
-        self.only_tri_hop = Relation('only_tri_hop', ['src', 'dst'], ['string', 'string'])
+        self.link = BasicType('link', ['src', 'dst'], ["string", "string"])
+        self.hop = BasicType('hop', ['src', 'dst'], ["string", "string"])
+        self.tri_hop = BasicType('tri_hop', ['src', 'dst'], ["string", "string"])
+        self.only_tri_hop = BasicType('only_tri_hop', ['src', 'dst'], ['string', 'string'])
 
         '''
         Define terms that will be used in rules. 
         '''
-        string_sort = Relation('string')
+        string_sort = BasicType('string')
         self.link_x_z_term = Composite(self.link, [Variable('X', string_sort), Variable('Z', string_sort)])
         self.link_z_y_term = Composite(self.link, [Variable('Z', string_sort), Variable('Y', string_sort)])
         self.hop_x_y_term = Composite(self.hop, [Variable('X', string_sort), Variable('Y', string_sort)])
@@ -98,8 +95,8 @@ class FullyConnectedGraphTestCase(BaseLinkTestCase):
 
     def setUp(self):
         super().setUp()
-        string_sort = Relation('string')
-        self.p = Relation('p', ['x', 'y', 'z'], ['string', 'string', 'string'])
+        string_sort = BasicType('string')
+        self.p = BasicType('p', ['x', 'y', 'z'], ['string', 'string', 'string'])
         self.link_y_z_term = Composite(self.link, [Variable('Y', string_sort), Variable('Z', string_sort)])
         self.p_x_y_z_term = Composite(self.p, [Variable('X', string_sort), Variable('Y', string_sort), Variable('Z', string_sort)])
         self.link_y_z = Predicate(self.link_y_z_term)
@@ -150,7 +147,7 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
         self.compiler = Compiler(relations, rules)
         self.logger = self.compiler.logger
 
-    @unittest.skip("Skip temporarily")
+    #@unittest.skip("Skip temporarily")
     def test_first_input(self):
         link_facts_raw = [['a', 'b'], ['a', 'd'], ['d', 'c'], ['b', 'c'], ['c', 'h'], ['f', 'g']]
         link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
@@ -218,7 +215,7 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
 class RecursiveLinkClass(BaseLinkTestCase):
     def setUp(self):
         super().setUp()
-        string_sort = Relation('string')
+        string_sort = BasicType('string')
         self.link_x_y_term = Composite(self.link, [Variable('X', string_sort), Variable('Y', string_sort)])
         self.link_x_y = Predicate(self.link_x_y_term)
         self.recursive_link_rule = Rule([self.link_x_y], [self.link_x_z, self.link_z_y])

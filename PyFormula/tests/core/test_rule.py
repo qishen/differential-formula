@@ -1,15 +1,15 @@
 import unittest
 
-from modules.rule import Rule, Bindings, BindingsCounter
-from modules.relation import Relation
-from modules.term import Atom, Variable, Composite
-from modules.constraint import PredType, Predicate
+from executer.constraint import Predicate
+from executer.relation import BasicType
+from executer.rule import Rule, Bindings, BindingsCounter
+from executer.term import Atom, Variable, Composite
 
 
 class BindingsTestCase(unittest.TestCase):
     def setUp(self):
-        self.node = Relation('node', ['id'], ['string'])
-        self.edge = Relation('edge', ['src', 'dst'], ['node', 'node'])
+        self.node = BasicType('node', ['id'], ['string'])
+        self.edge = BasicType('edge', ['src', 'dst'], ['node', 'node'])
         self.x = Variable('X', self.node)
         self.y = Variable('Y', self.node)
         self.z = Variable('Z', self.node)
@@ -50,10 +50,10 @@ class BindingsTestCase(unittest.TestCase):
 
 class RuleTestCase(unittest.TestCase):
     def setUp(self):
-        node = Relation('node', ['id'], ['string'])
-        edge = Relation('edge', ['src', 'dst'], ['node', 'node'])
-        hop = Relation('hop', ['src', 'dst'], ['node', 'node'])
-        six_hop = Relation('six_hop', ['src', 'dst'], ['node', 'node'])
+        node = BasicType('node', ['id'], ['string'])
+        edge = BasicType('edge', ['src', 'dst'], ['node', 'node'])
+        hop = BasicType('hop', ['src', 'dst'], ['node', 'node'])
+        six_hop = BasicType('six_hop', ['src', 'dst'], ['node', 'node'])
 
         relations = [node, edge, hop, six_hop]
 

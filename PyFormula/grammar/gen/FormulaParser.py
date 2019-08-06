@@ -1,185 +1,217 @@
-# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/parser\Formula.g4 by ANTLR 4.7.2
+# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
-from typing import TextIO
+from typing.io import TextIO
 import sys
 
 
 def serializedATN():
     with StringIO() as buf:
         buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3F")
-        buf.write("\u0180\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
+        buf.write("\u01c5\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
         buf.write("\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4\r\t\r\4\16")
         buf.write("\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\4\23\t\23")
         buf.write("\4\24\t\24\4\25\t\25\4\26\t\26\4\27\t\27\4\30\t\30\4\31")
         buf.write("\t\31\4\32\t\32\4\33\t\33\4\34\t\34\4\35\t\35\4\36\t\36")
         buf.write("\4\37\t\37\4 \t \4!\t!\4\"\t\"\4#\t#\4$\t$\4%\t%\4&\t")
-        buf.write("&\4\'\t\'\3\2\3\2\5\2Q\n\2\3\2\5\2T\n\2\3\3\3\3\3\3\3")
-        buf.write("\3\3\3\3\3\3\3\3\4\7\4^\n\4\f\4\16\4a\13\4\3\5\3\5\5\5")
-        buf.write("e\n\5\3\6\3\6\3\6\7\6j\n\6\f\6\16\6m\13\6\3\7\3\7\3\7")
-        buf.write("\3\7\3\7\3\7\3\7\3\7\3\7\3\7\3\7\3\7\5\7{\n\7\3\b\3\b")
-        buf.write("\3\b\7\b\u0080\n\b\f\b\16\b\u0083\13\b\3\b\3\b\3\t\5\t")
-        buf.write("\u0088\n\t\3\t\3\t\3\t\3\t\3\t\3\n\3\n\3\n\5\n\u0092\n")
-        buf.write("\n\3\13\3\13\3\13\3\13\3\13\3\f\3\f\3\f\3\f\5\f\u009d")
-        buf.write("\n\f\3\r\3\r\3\r\7\r\u00a2\n\r\f\r\16\r\u00a5\13\r\3\16")
-        buf.write("\3\16\3\16\3\16\5\16\u00ab\n\16\3\17\3\17\3\17\5\17\u00b0")
-        buf.write("\n\17\3\17\3\17\3\17\3\17\3\17\3\17\3\17\5\17\u00b9\n")
-        buf.write("\17\3\20\3\20\3\20\7\20\u00be\n\20\f\20\16\20\u00c1\13")
-        buf.write("\20\3\21\3\21\3\22\3\22\3\22\5\22\u00c8\n\22\3\22\7\22")
-        buf.write("\u00cb\n\22\f\22\16\22\u00ce\13\22\3\23\3\23\5\23\u00d2")
-        buf.write("\n\23\3\23\5\23\u00d5\n\23\3\23\3\23\5\23\u00d9\n\23\3")
-        buf.write("\24\3\24\3\24\3\24\3\24\5\24\u00e0\n\24\3\25\3\25\3\25")
-        buf.write("\7\25\u00e5\n\25\f\25\16\25\u00e8\13\25\3\26\3\26\3\26")
-        buf.write("\3\26\5\26\u00ee\n\26\3\27\3\27\3\27\7\27\u00f3\n\27\f")
-        buf.write("\27\16\27\u00f6\13\27\3\27\3\27\3\30\3\30\5\30\u00fc\n")
-        buf.write("\30\3\31\3\31\3\31\3\31\3\31\3\32\3\32\3\32\3\32\5\32")
-        buf.write("\u0107\n\32\3\32\3\32\3\33\3\33\3\33\3\33\3\34\3\34\3")
-        buf.write("\34\3\34\3\35\5\35\u0114\n\35\3\35\3\35\5\35\u0118\n\35")
-        buf.write("\3\35\3\35\3\35\3\35\3\35\3\35\3\35\3\35\3\35\3\35\3\35")
-        buf.write("\3\35\3\35\3\35\3\35\3\35\3\35\3\35\5\35\u012c\n\35\3")
-        buf.write("\35\3\35\3\35\5\35\u0131\n\35\3\36\3\36\3\36\5\36\u0136")
-        buf.write("\n\36\3\37\3\37\3\37\7\37\u013b\n\37\f\37\16\37\u013e")
-        buf.write("\13\37\3 \3 \3 \3 \3!\3!\3!\3!\3!\7!\u0149\n!\f!\16!\u014c")
-        buf.write("\13!\3!\3!\3!\3!\3!\3!\3!\7!\u0155\n!\f!\16!\u0158\13")
-        buf.write("!\3!\3!\5!\u015c\n!\3\"\3\"\3\"\3\"\3\"\3\"\5\"\u0164")
-        buf.write("\n\"\3\"\3\"\3\"\3\"\3\"\3\"\3\"\3\"\3\"\7\"\u016f\n\"")
-        buf.write("\f\"\16\"\u0172\13\"\3#\3#\5#\u0176\n#\3$\3$\3%\3%\3&")
-        buf.write("\3&\3\'\3\'\3\'\2\3B(\2\4\6\b\n\f\16\20\22\24\26\30\32")
-        buf.write("\34\36 \"$&(*,.\60\62\64\668:<>@BDFHJL\2\13\3\2\7\b\4")
-        buf.write("\2\17\23\25\25\4\2\r\r\63\63\3\2;<\3\29:\3\2&)\3\29=\4")
-        buf.write("\2\60\60\638\3\2>?\2\u018a\2S\3\2\2\2\4U\3\2\2\2\6_\3")
-        buf.write("\2\2\2\bd\3\2\2\2\nf\3\2\2\2\fz\3\2\2\2\16|\3\2\2\2\20")
-        buf.write("\u0087\3\2\2\2\22\u008e\3\2\2\2\24\u0093\3\2\2\2\26\u0098")
-        buf.write("\3\2\2\2\30\u00a3\3\2\2\2\32\u00aa\3\2\2\2\34\u00b8\3")
-        buf.write("\2\2\2\36\u00ba\3\2\2\2 \u00c2\3\2\2\2\"\u00c4\3\2\2\2")
-        buf.write("$\u00d1\3\2\2\2&\u00df\3\2\2\2(\u00e1\3\2\2\2*\u00ed\3")
-        buf.write("\2\2\2,\u00ef\3\2\2\2.\u00fb\3\2\2\2\60\u00fd\3\2\2\2")
-        buf.write("\62\u0102\3\2\2\2\64\u010a\3\2\2\2\66\u010e\3\2\2\28\u0130")
-        buf.write("\3\2\2\2:\u0135\3\2\2\2<\u0137\3\2\2\2>\u013f\3\2\2\2")
-        buf.write("@\u015b\3\2\2\2B\u0163\3\2\2\2D\u0175\3\2\2\2F\u0177\3")
-        buf.write("\2\2\2H\u0179\3\2\2\2J\u017b\3\2\2\2L\u017d\3\2\2\2NT")
-        buf.write("\7\2\2\3OQ\5\4\3\2PO\3\2\2\2PQ\3\2\2\2QR\3\2\2\2RT\5\6")
-        buf.write("\4\2SN\3\2\2\2SP\3\2\2\2T\3\3\2\2\2UV\7\"\2\2VW\7%\2\2")
-        buf.write("WX\7#\2\2XY\7)\2\2YZ\7$\2\2Z[\7%\2\2[\5\3\2\2\2\\^\5\b")
-        buf.write("\5\2]\\\3\2\2\2^a\3\2\2\2_]\3\2\2\2_`\3\2\2\2`\7\3\2\2")
-        buf.write("\2a_\3\2\2\2be\5\24\13\2ce\5\16\b\2db\3\2\2\2dc\3\2\2")
-        buf.write("\2e\t\3\2\2\2fk\5\f\7\2gh\7\61\2\2hj\5\f\7\2ig\3\2\2\2")
-        buf.write("jm\3\2\2\2ki\3\2\2\2kl\3\2\2\2l\13\3\2\2\2mk\3\2\2\2n")
-        buf.write("{\7%\2\2op\7%\2\2pq\7\13\2\2q{\7)\2\2rs\7%\2\2st\7-\2")
-        buf.write("\2t{\7%\2\2uv\7%\2\2vw\7-\2\2wx\7%\2\2xy\7\13\2\2y{\7")
-        buf.write(")\2\2zn\3\2\2\2zo\3\2\2\2zr\3\2\2\2zu\3\2\2\2{\r\3\2\2")
-        buf.write("\2|}\5\22\n\2}\u0081\7@\2\2~\u0080\5,\27\2\177~\3\2\2")
-        buf.write("\2\u0080\u0083\3\2\2\2\u0081\177\3\2\2\2\u0081\u0082\3")
-        buf.write("\2\2\2\u0082\u0084\3\2\2\2\u0083\u0081\3\2\2\2\u0084\u0085")
-        buf.write("\7A\2\2\u0085\17\3\2\2\2\u0086\u0088\7\35\2\2\u0087\u0086")
-        buf.write("\3\2\2\2\u0087\u0088\3\2\2\2\u0088\u0089\3\2\2\2\u0089")
-        buf.write("\u008a\7\4\2\2\u008a\u008b\7%\2\2\u008b\u008c\7\t\2\2")
-        buf.write("\u008c\u008d\5\f\7\2\u008d\21\3\2\2\2\u008e\u0091\5\20")
-        buf.write("\t\2\u008f\u0090\t\2\2\2\u0090\u0092\5\n\6\2\u0091\u008f")
-        buf.write("\3\2\2\2\u0091\u0092\3\2\2\2\u0092\23\3\2\2\2\u0093\u0094")
-        buf.write("\5\26\f\2\u0094\u0095\7@\2\2\u0095\u0096\5\30\r\2\u0096")
-        buf.write("\u0097\7A\2\2\u0097\25\3\2\2\2\u0098\u0099\7\3\2\2\u0099")
-        buf.write("\u009c\7%\2\2\u009a\u009b\t\2\2\2\u009b\u009d\5\n\6\2")
-        buf.write("\u009c\u009a\3\2\2\2\u009c\u009d\3\2\2\2\u009d\27\3\2")
-        buf.write("\2\2\u009e\u009f\5\32\16\2\u009f\u00a0\7/\2\2\u00a0\u00a2")
-        buf.write("\3\2\2\2\u00a1\u009e\3\2\2\2\u00a2\u00a5\3\2\2\2\u00a3")
-        buf.write("\u00a1\3\2\2\2\u00a3\u00a4\3\2\2\2\u00a4\31\3\2\2\2\u00a5")
-        buf.write("\u00a3\3\2\2\2\u00a6\u00ab\5\34\17\2\u00a7\u00ab\5\60")
-        buf.write("\31\2\u00a8\u00a9\7\31\2\2\u00a9\u00ab\5\64\33\2\u00aa")
-        buf.write("\u00a6\3\2\2\2\u00aa\u00a7\3\2\2\2\u00aa\u00a8\3\2\2\2")
-        buf.write("\u00ab\33\3\2\2\2\u00ac\u00ad\7%\2\2\u00ad\u00af\7+\2")
-        buf.write("\2\u00ae\u00b0\5 \21\2\u00af\u00ae\3\2\2\2\u00af\u00b0")
-        buf.write("\3\2\2\2\u00b0\u00b1\3\2\2\2\u00b1\u00b2\7D\2\2\u00b2")
-        buf.write("\u00b3\5\"\22\2\u00b3\u00b4\7E\2\2\u00b4\u00b9\3\2\2\2")
-        buf.write("\u00b5\u00b6\7%\2\2\u00b6\u00b7\7+\2\2\u00b7\u00b9\5\36")
-        buf.write("\20\2\u00b8\u00ac\3\2\2\2\u00b8\u00b5\3\2\2\2\u00b9\35")
-        buf.write("\3\2\2\2\u00ba\u00bf\5&\24\2\u00bb\u00bc\79\2\2\u00bc")
-        buf.write("\u00be\5&\24\2\u00bd\u00bb\3\2\2\2\u00be\u00c1\3\2\2\2")
-        buf.write("\u00bf\u00bd\3\2\2\2\u00bf\u00c0\3\2\2\2\u00c0\37\3\2")
-        buf.write("\2\2\u00c1\u00bf\3\2\2\2\u00c2\u00c3\t\3\2\2\u00c3!\3")
-        buf.write("\2\2\2\u00c4\u00cc\5$\23\2\u00c5\u00c8\7\61\2\2\u00c6")
-        buf.write("\u00c8\5L\'\2\u00c7\u00c5\3\2\2\2\u00c7\u00c6\3\2\2\2")
-        buf.write("\u00c8\u00c9\3\2\2\2\u00c9\u00cb\5$\23\2\u00ca\u00c7\3")
-        buf.write("\2\2\2\u00cb\u00ce\3\2\2\2\u00cc\u00ca\3\2\2\2\u00cc\u00cd")
-        buf.write("\3\2\2\2\u00cd#\3\2\2\2\u00ce\u00cc\3\2\2\2\u00cf\u00d0")
-        buf.write("\7%\2\2\u00d0\u00d2\7\60\2\2\u00d1\u00cf\3\2\2\2\u00d1")
-        buf.write("\u00d2\3\2\2\2\u00d2\u00d4\3\2\2\2\u00d3\u00d5\7\24\2")
-        buf.write("\2\u00d4\u00d3\3\2\2\2\u00d4\u00d5\3\2\2\2\u00d5\u00d8")
-        buf.write("\3\2\2\2\u00d6\u00d9\7%\2\2\u00d7\u00d9\5\36\20\2\u00d8")
-        buf.write("\u00d6\3\2\2\2\u00d8\u00d7\3\2\2\2\u00d9%\3\2\2\2\u00da")
-        buf.write("\u00e0\7%\2\2\u00db\u00dc\7@\2\2\u00dc\u00dd\5(\25\2\u00dd")
-        buf.write("\u00de\7A\2\2\u00de\u00e0\3\2\2\2\u00df\u00da\3\2\2\2")
-        buf.write("\u00df\u00db\3\2\2\2\u00e0\'\3\2\2\2\u00e1\u00e6\5*\26")
-        buf.write("\2\u00e2\u00e3\7\61\2\2\u00e3\u00e5\5*\26\2\u00e4\u00e2")
-        buf.write("\3\2\2\2\u00e5\u00e8\3\2\2\2\u00e6\u00e4\3\2\2\2\u00e6")
-        buf.write("\u00e7\3\2\2\2\u00e7)\3\2\2\2\u00e8\u00e6\3\2\2\2\u00e9")
-        buf.write("\u00ee\5F$\2\u00ea\u00eb\7&\2\2\u00eb\u00ec\7.\2\2\u00ec")
-        buf.write("\u00ee\7&\2\2\u00ed\u00e9\3\2\2\2\u00ed\u00ea\3\2\2\2")
-        buf.write("\u00ee+\3\2\2\2\u00ef\u00f4\5.\30\2\u00f0\u00f1\7\61\2")
-        buf.write("\2\u00f1\u00f3\5.\30\2\u00f2\u00f0\3\2\2\2\u00f3\u00f6")
-        buf.write("\3\2\2\2\u00f4\u00f2\3\2\2\2\u00f4\u00f5\3\2\2\2\u00f5")
-        buf.write("\u00f7\3\2\2\2\u00f6\u00f4\3\2\2\2\u00f7\u00f8\7/\2\2")
-        buf.write("\u00f8-\3\2\2\2\u00f9\u00fc\5> \2\u00fa\u00fc\5@!\2\u00fb")
-        buf.write("\u00f9\3\2\2\2\u00fb\u00fa\3\2\2\2\u00fc/\3\2\2\2\u00fd")
-        buf.write("\u00fe\5<\37\2\u00fe\u00ff\7,\2\2\u00ff\u0100\5\64\33")
-        buf.write("\2\u0100\u0101\7/\2\2\u0101\61\3\2\2\2\u0102\u0103\7@")
-        buf.write("\2\2\u0103\u0106\5<\37\2\u0104\u0105\7*\2\2\u0105\u0107")
-        buf.write("\5\66\34\2\u0106\u0104\3\2\2\2\u0106\u0107\3\2\2\2\u0107")
-        buf.write("\u0108\3\2\2\2\u0108\u0109\7A\2\2\u0109\63\3\2\2\2\u010a")
-        buf.write("\u010b\5\66\34\2\u010b\u010c\7\62\2\2\u010c\u010d\5\66")
-        buf.write("\34\2\u010d\65\3\2\2\2\u010e\u010f\58\35\2\u010f\u0110")
-        buf.write("\7\61\2\2\u0110\u0111\58\35\2\u0111\67\3\2\2\2\u0112\u0114")
-        buf.write("\7\16\2\2\u0113\u0112\3\2\2\2\u0113\u0114\3\2\2\2\u0114")
-        buf.write("\u0115\3\2\2\2\u0115\u0131\5@!\2\u0116\u0118\7\16\2\2")
-        buf.write("\u0117\u0116\3\2\2\2\u0117\u0118\3\2\2\2\u0118\u0119\3")
-        buf.write("\2\2\2\u0119\u011a\7\26\2\2\u011a\u011b\7D\2\2\u011b\u011c")
-        buf.write("\5\62\32\2\u011c\u011d\7E\2\2\u011d\u011e\5J&\2\u011e")
-        buf.write("\u011f\7&\2\2\u011f\u0131\3\2\2\2\u0120\u0121\5B\"\2\u0121")
-        buf.write("\u0122\5J&\2\u0122\u0123\5B\"\2\u0123\u0131\3\2\2\2\u0124")
-        buf.write("\u0125\7%\2\2\u0125\u0126\t\4\2\2\u0126\u0131\7%\2\2\u0127")
-        buf.write("\u0128\7%\2\2\u0128\u0129\t\4\2\2\u0129\u0131\5@!\2\u012a")
-        buf.write("\u012c\7\16\2\2\u012b\u012a\3\2\2\2\u012b\u012c\3\2\2")
-        buf.write("\2\u012c\u012d\3\2\2\2\u012d\u0131\7%\2\2\u012e\u012f")
-        buf.write("\7\16\2\2\u012f\u0131\5\62\32\2\u0130\u0113\3\2\2\2\u0130")
-        buf.write("\u0117\3\2\2\2\u0130\u0120\3\2\2\2\u0130\u0124\3\2\2\2")
-        buf.write("\u0130\u0127\3\2\2\2\u0130\u012b\3\2\2\2\u0130\u012e\3")
-        buf.write("\2\2\2\u01319\3\2\2\2\u0132\u0136\5@!\2\u0133\u0136\5")
-        buf.write("B\"\2\u0134\u0136\5D#\2\u0135\u0132\3\2\2\2\u0135\u0133")
-        buf.write("\3\2\2\2\u0135\u0134\3\2\2\2\u0136;\3\2\2\2\u0137\u013c")
-        buf.write("\5:\36\2\u0138\u0139\7\61\2\2\u0139\u013b\5:\36\2\u013a")
-        buf.write("\u0138\3\2\2\2\u013b\u013e\3\2\2\2\u013c\u013a\3\2\2\2")
-        buf.write("\u013c\u013d\3\2\2\2\u013d=\3\2\2\2\u013e\u013c\3\2\2")
-        buf.write("\2\u013f\u0140\7%\2\2\u0140\u0141\t\4\2\2\u0141\u0142")
-        buf.write("\5@!\2\u0142?\3\2\2\2\u0143\u0144\7%\2\2\u0144\u0145\7")
-        buf.write("D\2\2\u0145\u014a\5@!\2\u0146\u0147\7\61\2\2\u0147\u0149")
-        buf.write("\5@!\2\u0148\u0146\3\2\2\2\u0149\u014c\3\2\2\2\u014a\u0148")
-        buf.write("\3\2\2\2\u014a\u014b\3\2\2\2\u014b\u014d\3\2\2\2\u014c")
-        buf.write("\u014a\3\2\2\2\u014d\u014e\7E\2\2\u014e\u015c\3\2\2\2")
-        buf.write("\u014f\u0150\7%\2\2\u0150\u0151\7D\2\2\u0151\u0156\5D")
-        buf.write("#\2\u0152\u0153\7\61\2\2\u0153\u0155\5D#\2\u0154\u0152")
-        buf.write("\3\2\2\2\u0155\u0158\3\2\2\2\u0156\u0154\3\2\2\2\u0156")
-        buf.write("\u0157\3\2\2\2\u0157\u0159\3\2\2\2\u0158\u0156\3\2\2\2")
-        buf.write("\u0159\u015a\7E\2\2\u015a\u015c\3\2\2\2\u015b\u0143\3")
-        buf.write("\2\2\2\u015b\u014f\3\2\2\2\u015cA\3\2\2\2\u015d\u015e")
-        buf.write("\b\"\1\2\u015e\u015f\7D\2\2\u015f\u0160\5B\"\2\u0160\u0161")
-        buf.write("\7E\2\2\u0161\u0164\3\2\2\2\u0162\u0164\5D#\2\u0163\u015d")
-        buf.write("\3\2\2\2\u0163\u0162\3\2\2\2\u0164\u0170\3\2\2\2\u0165")
-        buf.write("\u0166\f\6\2\2\u0166\u0167\t\5\2\2\u0167\u016f\5B\"\7")
-        buf.write("\u0168\u0169\f\5\2\2\u0169\u016a\7=\2\2\u016a\u016f\5")
-        buf.write("B\"\6\u016b\u016c\f\4\2\2\u016c\u016d\t\6\2\2\u016d\u016f")
-        buf.write("\5B\"\5\u016e\u0165\3\2\2\2\u016e\u0168\3\2\2\2\u016e")
-        buf.write("\u016b\3\2\2\2\u016f\u0172\3\2\2\2\u0170\u016e\3\2\2\2")
-        buf.write("\u0170\u0171\3\2\2\2\u0171C\3\2\2\2\u0172\u0170\3\2\2")
-        buf.write("\2\u0173\u0176\7%\2\2\u0174\u0176\5F$\2\u0175\u0173\3")
-        buf.write("\2\2\2\u0175\u0174\3\2\2\2\u0176E\3\2\2\2\u0177\u0178")
-        buf.write("\t\7\2\2\u0178G\3\2\2\2\u0179\u017a\t\b\2\2\u017aI\3\2")
-        buf.write("\2\2\u017b\u017c\t\t\2\2\u017cK\3\2\2\2\u017d\u017e\t")
-        buf.write("\n\2\2\u017eM\3\2\2\2)PS_dkz\u0081\u0087\u0091\u009c\u00a3")
-        buf.write("\u00aa\u00af\u00b8\u00bf\u00c7\u00cc\u00d1\u00d4\u00d8")
-        buf.write("\u00df\u00e6\u00ed\u00f4\u00fb\u0106\u0113\u0117\u012b")
-        buf.write("\u0130\u0135\u013c\u014a\u0156\u015b\u0163\u016e\u0170")
-        buf.write("\u0175")
+        buf.write("&\4\'\t\'\4(\t(\4)\t)\4*\t*\4+\t+\4,\t,\4-\t-\4.\t.\4")
+        buf.write("/\t/\4\60\t\60\4\61\t\61\3\2\3\2\3\2\3\2\3\3\3\3\3\3\3")
+        buf.write("\3\3\4\3\4\3\4\7\4n\n\4\f\4\16\4q\13\4\3\5\3\5\3\5\3\5")
+        buf.write("\3\6\3\6\5\6y\n\6\3\6\5\6|\n\6\3\7\3\7\3\7\3\7\3\7\3\7")
+        buf.write("\3\7\3\b\7\b\u0086\n\b\f\b\16\b\u0089\13\b\3\t\3\t\5\t")
+        buf.write("\u008d\n\t\3\n\3\n\3\n\7\n\u0092\n\n\f\n\16\n\u0095\13")
+        buf.write("\n\3\13\3\13\3\13\5\13\u009a\n\13\3\13\3\13\5\13\u009e")
+        buf.write("\n\13\3\f\3\f\3\f\5\f\u00a3\n\f\3\f\3\f\3\r\7\r\u00a8")
+        buf.write("\n\r\f\r\16\r\u00ab\13\r\3\16\3\16\5\16\u00af\n\16\3\17")
+        buf.write("\5\17\u00b2\n\17\3\17\3\17\3\20\3\20\3\20\3\20\3\20\3")
+        buf.write("\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20\5\20\u00c4")
+        buf.write("\n\20\3\21\3\21\3\22\3\22\5\22\u00ca\n\22\3\23\5\23\u00cd")
+        buf.write("\n\23\3\23\3\23\3\23\3\23\3\23\3\24\3\24\3\24\5\24\u00d7")
+        buf.write("\n\24\3\25\3\25\3\25\7\25\u00dc\n\25\f\25\16\25\u00df")
+        buf.write("\13\25\3\25\3\25\3\26\3\26\5\26\u00e5\n\26\3\26\3\26\3")
+        buf.write("\27\3\27\3\27\5\27\u00ec\n\27\3\27\3\27\3\30\3\30\5\30")
+        buf.write("\u00f2\n\30\3\31\3\31\3\31\3\31\5\31\u00f8\n\31\3\32\3")
+        buf.write("\32\3\32\7\32\u00fd\n\32\f\32\16\32\u0100\13\32\3\33\5")
+        buf.write("\33\u0103\n\33\3\33\3\33\3\34\3\34\3\34\3\34\5\34\u010b")
+        buf.write("\n\34\3\35\3\35\3\35\5\35\u0110\n\35\3\35\3\35\3\35\3")
+        buf.write("\35\3\35\3\35\3\35\5\35\u0119\n\35\3\36\3\36\3\36\7\36")
+        buf.write("\u011e\n\36\f\36\16\36\u0121\13\36\3\37\3\37\3 \3 \3 ")
+        buf.write("\5 \u0128\n \3 \7 \u012b\n \f \16 \u012e\13 \3!\3!\5!")
+        buf.write("\u0132\n!\3!\5!\u0135\n!\3!\3!\5!\u0139\n!\3\"\3\"\3\"")
+        buf.write("\3\"\3\"\5\"\u0140\n\"\3#\3#\3#\7#\u0145\n#\f#\16#\u0148")
+        buf.write("\13#\3$\3$\3$\3$\5$\u014e\n$\3%\3%\3%\3%\3&\3&\3&\3&\5")
+        buf.write("&\u0158\n&\3&\3&\3\'\3\'\3\'\7\'\u015f\n\'\f\'\16\'\u0162")
+        buf.write("\13\'\3(\3(\3(\7(\u0167\n(\f(\16(\u016a\13(\3)\5)\u016d")
+        buf.write("\n)\3)\3)\3)\3)\3)\3)\3)\3)\3)\5)\u0178\n)\3)\3)\3)\3")
+        buf.write(")\3)\3)\3)\3)\3)\3)\5)\u0184\n)\3)\3)\3)\3)\5)\u018a\n")
+        buf.write(")\3*\3*\3*\3*\3*\7*\u0191\n*\f*\16*\u0194\13*\3*\3*\3")
+        buf.write("*\5*\u0199\n*\3+\3+\3+\7+\u019e\n+\f+\16+\u01a1\13+\3")
+        buf.write(",\3,\3,\3,\3,\3,\5,\u01a9\n,\3,\3,\3,\3,\3,\3,\3,\3,\3")
+        buf.write(",\7,\u01b4\n,\f,\16,\u01b7\13,\3-\3-\5-\u01bb\n-\3.\3")
+        buf.write(".\3/\3/\3\60\3\60\3\61\3\61\3\61\2\3V\62\2\4\6\b\n\f\16")
+        buf.write("\20\22\24\26\30\32\34\36 \"$&(*,.\60\62\64\668:<>@BDF")
+        buf.write("HJLNPRTVXZ\\^`\2\f\3\2\32\34\3\2\7\b\4\2\17\23\25\25\4")
+        buf.write("\2\r\r\63\63\3\2;<\3\29:\3\2&)\3\29=\4\2\60\60\638\3\2")
+        buf.write(">?\2\u01cd\2b\3\2\2\2\4f\3\2\2\2\6j\3\2\2\2\br\3\2\2\2")
+        buf.write("\n{\3\2\2\2\f}\3\2\2\2\16\u0087\3\2\2\2\20\u008c\3\2\2")
+        buf.write("\2\22\u008e\3\2\2\2\24\u0096\3\2\2\2\26\u009f\3\2\2\2")
+        buf.write("\30\u00a9\3\2\2\2\32\u00ae\3\2\2\2\34\u00b1\3\2\2\2\36")
+        buf.write("\u00c3\3\2\2\2 \u00c5\3\2\2\2\"\u00c7\3\2\2\2$\u00cc\3")
+        buf.write("\2\2\2&\u00d3\3\2\2\2(\u00d8\3\2\2\2*\u00e4\3\2\2\2,\u00e8")
+        buf.write("\3\2\2\2.\u00ef\3\2\2\2\60\u00f3\3\2\2\2\62\u00fe\3\2")
+        buf.write("\2\2\64\u0102\3\2\2\2\66\u010a\3\2\2\28\u0118\3\2\2\2")
+        buf.write(":\u011a\3\2\2\2<\u0122\3\2\2\2>\u0124\3\2\2\2@\u0131\3")
+        buf.write("\2\2\2B\u013f\3\2\2\2D\u0141\3\2\2\2F\u014d\3\2\2\2H\u014f")
+        buf.write("\3\2\2\2J\u0153\3\2\2\2L\u015b\3\2\2\2N\u0163\3\2\2\2")
+        buf.write("P\u0189\3\2\2\2R\u0198\3\2\2\2T\u019a\3\2\2\2V\u01a8\3")
+        buf.write("\2\2\2X\u01ba\3\2\2\2Z\u01bc\3\2\2\2\\\u01be\3\2\2\2^")
+        buf.write("\u01c0\3\2\2\2`\u01c2\3\2\2\2bc\7B\2\2cd\5\6\4\2de\7C")
+        buf.write("\2\2e\3\3\2\2\2fg\7B\2\2gh\5\6\4\2hi\7C\2\2i\5\3\2\2\2")
+        buf.write("jo\5\b\5\2kl\7\61\2\2ln\5\b\5\2mk\3\2\2\2nq\3\2\2\2om")
+        buf.write("\3\2\2\2op\3\2\2\2p\7\3\2\2\2qo\3\2\2\2rs\7%\2\2st\7\63")
+        buf.write("\2\2tu\5Z.\2u\t\3\2\2\2v|\7\2\2\3wy\5\f\7\2xw\3\2\2\2")
+        buf.write("xy\3\2\2\2yz\3\2\2\2z|\5\16\b\2{v\3\2\2\2{x\3\2\2\2|\13")
+        buf.write("\3\2\2\2}~\7\"\2\2~\177\7%\2\2\177\u0080\7#\2\2\u0080")
+        buf.write("\u0081\7)\2\2\u0081\u0082\7$\2\2\u0082\u0083\7%\2\2\u0083")
+        buf.write("\r\3\2\2\2\u0084\u0086\5\20\t\2\u0085\u0084\3\2\2\2\u0086")
+        buf.write("\u0089\3\2\2\2\u0087\u0085\3\2\2\2\u0087\u0088\3\2\2\2")
+        buf.write("\u0088\17\3\2\2\2\u0089\u0087\3\2\2\2\u008a\u008d\5,\27")
+        buf.write("\2\u008b\u008d\5\26\f\2\u008c\u008a\3\2\2\2\u008c\u008b")
+        buf.write("\3\2\2\2\u008d\21\3\2\2\2\u008e\u0093\5\24\13\2\u008f")
+        buf.write("\u0090\7\61\2\2\u0090\u0092\5\24\13\2\u0091\u008f\3\2")
+        buf.write("\2\2\u0092\u0095\3\2\2\2\u0093\u0091\3\2\2\2\u0093\u0094")
+        buf.write("\3\2\2\2\u0094\23\3\2\2\2\u0095\u0093\3\2\2\2\u0096\u0099")
+        buf.write("\7%\2\2\u0097\u0098\7-\2\2\u0098\u009a\7%\2\2\u0099\u0097")
+        buf.write("\3\2\2\2\u0099\u009a\3\2\2\2\u009a\u009d\3\2\2\2\u009b")
+        buf.write("\u009c\7\13\2\2\u009c\u009e\7)\2\2\u009d\u009b\3\2\2\2")
+        buf.write("\u009d\u009e\3\2\2\2\u009e\25\3\2\2\2\u009f\u00a0\5\"")
+        buf.write("\22\2\u00a0\u00a2\7@\2\2\u00a1\u00a3\5\30\r\2\u00a2\u00a1")
+        buf.write("\3\2\2\2\u00a2\u00a3\3\2\2\2\u00a3\u00a4\3\2\2\2\u00a4")
+        buf.write("\u00a5\7A\2\2\u00a5\27\3\2\2\2\u00a6\u00a8\5\32\16\2\u00a7")
+        buf.write("\u00a6\3\2\2\2\u00a8\u00ab\3\2\2\2\u00a9\u00a7\3\2\2\2")
+        buf.write("\u00a9\u00aa\3\2\2\2\u00aa\31\3\2\2\2\u00ab\u00a9\3\2")
+        buf.write("\2\2\u00ac\u00af\5(\25\2\u00ad\u00af\5\34\17\2\u00ae\u00ac")
+        buf.write("\3\2\2\2\u00ae\u00ad\3\2\2\2\u00af\33\3\2\2\2\u00b0\u00b2")
+        buf.write("\5\4\3\2\u00b1\u00b0\3\2\2\2\u00b1\u00b2\3\2\2\2\u00b2")
+        buf.write("\u00b3\3\2\2\2\u00b3\u00b4\5\36\20\2\u00b4\35\3\2\2\2")
+        buf.write("\u00b5\u00b6\7\27\2\2\u00b6\u00b7\5L\'\2\u00b7\u00b8\7")
+        buf.write("/\2\2\u00b8\u00c4\3\2\2\2\u00b9\u00ba\7\30\2\2\u00ba\u00bb")
+        buf.write("\5L\'\2\u00bb\u00bc\7/\2\2\u00bc\u00c4\3\2\2\2\u00bd\u00be")
+        buf.write("\7\30\2\2\u00be\u00bf\5 \21\2\u00bf\u00c0\7&\2\2\u00c0")
+        buf.write("\u00c1\7%\2\2\u00c1\u00c2\7/\2\2\u00c2\u00c4\3\2\2\2\u00c3")
+        buf.write("\u00b5\3\2\2\2\u00c3\u00b9\3\2\2\2\u00c3\u00bd\3\2\2\2")
+        buf.write("\u00c4\37\3\2\2\2\u00c5\u00c6\t\2\2\2\u00c6!\3\2\2\2\u00c7")
+        buf.write("\u00c9\5&\24\2\u00c8\u00ca\5\2\2\2\u00c9\u00c8\3\2\2\2")
+        buf.write("\u00c9\u00ca\3\2\2\2\u00ca#\3\2\2\2\u00cb\u00cd\7\35\2")
+        buf.write("\2\u00cc\u00cb\3\2\2\2\u00cc\u00cd\3\2\2\2\u00cd\u00ce")
+        buf.write("\3\2\2\2\u00ce\u00cf\7\4\2\2\u00cf\u00d0\7%\2\2\u00d0")
+        buf.write("\u00d1\7\t\2\2\u00d1\u00d2\5\24\13\2\u00d2%\3\2\2\2\u00d3")
+        buf.write("\u00d6\5$\23\2\u00d4\u00d5\t\3\2\2\u00d5\u00d7\5\22\n")
+        buf.write("\2\u00d6\u00d4\3\2\2\2\u00d6\u00d7\3\2\2\2\u00d7\'\3\2")
+        buf.write("\2\2\u00d8\u00dd\5*\26\2\u00d9\u00da\7\61\2\2\u00da\u00dc")
+        buf.write("\5*\26\2\u00db\u00d9\3\2\2\2\u00dc\u00df\3\2\2\2\u00dd")
+        buf.write("\u00db\3\2\2\2\u00dd\u00de\3\2\2\2\u00de\u00e0\3\2\2\2")
+        buf.write("\u00df\u00dd\3\2\2\2\u00e0\u00e1\7/\2\2\u00e1)\3\2\2\2")
+        buf.write("\u00e2\u00e3\7%\2\2\u00e3\u00e5\7\r\2\2\u00e4\u00e2\3")
+        buf.write("\2\2\2\u00e4\u00e5\3\2\2\2\u00e5\u00e6\3\2\2\2\u00e6\u00e7")
+        buf.write("\5R*\2\u00e7+\3\2\2\2\u00e8\u00e9\5.\30\2\u00e9\u00eb")
+        buf.write("\7@\2\2\u00ea\u00ec\5\62\32\2\u00eb\u00ea\3\2\2\2\u00eb")
+        buf.write("\u00ec\3\2\2\2\u00ec\u00ed\3\2\2\2\u00ed\u00ee\7A\2\2")
+        buf.write("\u00ee-\3\2\2\2\u00ef\u00f1\5\60\31\2\u00f0\u00f2\5\2")
+        buf.write("\2\2\u00f1\u00f0\3\2\2\2\u00f1\u00f2\3\2\2\2\u00f2/\3")
+        buf.write("\2\2\2\u00f3\u00f4\7\3\2\2\u00f4\u00f7\7%\2\2\u00f5\u00f6")
+        buf.write("\t\3\2\2\u00f6\u00f8\5\22\n\2\u00f7\u00f5\3\2\2\2\u00f7")
+        buf.write("\u00f8\3\2\2\2\u00f8\61\3\2\2\2\u00f9\u00fa\5\64\33\2")
+        buf.write("\u00fa\u00fb\7/\2\2\u00fb\u00fd\3\2\2\2\u00fc\u00f9\3")
+        buf.write("\2\2\2\u00fd\u0100\3\2\2\2\u00fe\u00fc\3\2\2\2\u00fe\u00ff")
+        buf.write("\3\2\2\2\u00ff\63\3\2\2\2\u0100\u00fe\3\2\2\2\u0101\u0103")
+        buf.write("\5\4\3\2\u0102\u0101\3\2\2\2\u0102\u0103\3\2\2\2\u0103")
+        buf.write("\u0104\3\2\2\2\u0104\u0105\5\66\34\2\u0105\65\3\2\2\2")
+        buf.write("\u0106\u010b\58\35\2\u0107\u010b\5H%\2\u0108\u0109\7\31")
+        buf.write("\2\2\u0109\u010b\5L\'\2\u010a\u0106\3\2\2\2\u010a\u0107")
+        buf.write("\3\2\2\2\u010a\u0108\3\2\2\2\u010b\67\3\2\2\2\u010c\u010d")
+        buf.write("\7%\2\2\u010d\u010f\7+\2\2\u010e\u0110\5<\37\2\u010f\u010e")
+        buf.write("\3\2\2\2\u010f\u0110\3\2\2\2\u0110\u0111\3\2\2\2\u0111")
+        buf.write("\u0112\7D\2\2\u0112\u0113\5> \2\u0113\u0114\7E\2\2\u0114")
+        buf.write("\u0119\3\2\2\2\u0115\u0116\7%\2\2\u0116\u0117\7+\2\2\u0117")
+        buf.write("\u0119\5:\36\2\u0118\u010c\3\2\2\2\u0118\u0115\3\2\2\2")
+        buf.write("\u01199\3\2\2\2\u011a\u011f\5B\"\2\u011b\u011c\79\2\2")
+        buf.write("\u011c\u011e\5B\"\2\u011d\u011b\3\2\2\2\u011e\u0121\3")
+        buf.write("\2\2\2\u011f\u011d\3\2\2\2\u011f\u0120\3\2\2\2\u0120;")
+        buf.write("\3\2\2\2\u0121\u011f\3\2\2\2\u0122\u0123\t\4\2\2\u0123")
+        buf.write("=\3\2\2\2\u0124\u012c\5@!\2\u0125\u0128\7\61\2\2\u0126")
+        buf.write("\u0128\5`\61\2\u0127\u0125\3\2\2\2\u0127\u0126\3\2\2\2")
+        buf.write("\u0128\u0129\3\2\2\2\u0129\u012b\5@!\2\u012a\u0127\3\2")
+        buf.write("\2\2\u012b\u012e\3\2\2\2\u012c\u012a\3\2\2\2\u012c\u012d")
+        buf.write("\3\2\2\2\u012d?\3\2\2\2\u012e\u012c\3\2\2\2\u012f\u0130")
+        buf.write("\7%\2\2\u0130\u0132\7\60\2\2\u0131\u012f\3\2\2\2\u0131")
+        buf.write("\u0132\3\2\2\2\u0132\u0134\3\2\2\2\u0133\u0135\7\24\2")
+        buf.write("\2\u0134\u0133\3\2\2\2\u0134\u0135\3\2\2\2\u0135\u0138")
+        buf.write("\3\2\2\2\u0136\u0139\7%\2\2\u0137\u0139\5:\36\2\u0138")
+        buf.write("\u0136\3\2\2\2\u0138\u0137\3\2\2\2\u0139A\3\2\2\2\u013a")
+        buf.write("\u0140\7%\2\2\u013b\u013c\7@\2\2\u013c\u013d\5D#\2\u013d")
+        buf.write("\u013e\7A\2\2\u013e\u0140\3\2\2\2\u013f\u013a\3\2\2\2")
+        buf.write("\u013f\u013b\3\2\2\2\u0140C\3\2\2\2\u0141\u0146\5F$\2")
+        buf.write("\u0142\u0143\7\61\2\2\u0143\u0145\5F$\2\u0144\u0142\3")
+        buf.write("\2\2\2\u0145\u0148\3\2\2\2\u0146\u0144\3\2\2\2\u0146\u0147")
+        buf.write("\3\2\2\2\u0147E\3\2\2\2\u0148\u0146\3\2\2\2\u0149\u014e")
+        buf.write("\5Z.\2\u014a\u014b\7&\2\2\u014b\u014c\7.\2\2\u014c\u014e")
+        buf.write("\7&\2\2\u014d\u0149\3\2\2\2\u014d\u014a\3\2\2\2\u014e")
+        buf.write("G\3\2\2\2\u014f\u0150\5T+\2\u0150\u0151\7,\2\2\u0151\u0152")
+        buf.write("\5L\'\2\u0152I\3\2\2\2\u0153\u0154\7@\2\2\u0154\u0157")
+        buf.write("\5T+\2\u0155\u0156\7*\2\2\u0156\u0158\5N(\2\u0157\u0155")
+        buf.write("\3\2\2\2\u0157\u0158\3\2\2\2\u0158\u0159\3\2\2\2\u0159")
+        buf.write("\u015a\7A\2\2\u015aK\3\2\2\2\u015b\u0160\5N(\2\u015c\u015d")
+        buf.write("\7\62\2\2\u015d\u015f\5N(\2\u015e\u015c\3\2\2\2\u015f")
+        buf.write("\u0162\3\2\2\2\u0160\u015e\3\2\2\2\u0160\u0161\3\2\2\2")
+        buf.write("\u0161M\3\2\2\2\u0162\u0160\3\2\2\2\u0163\u0168\5P)\2")
+        buf.write("\u0164\u0165\7\61\2\2\u0165\u0167\5P)\2\u0166\u0164\3")
+        buf.write("\2\2\2\u0167\u016a\3\2\2\2\u0168\u0166\3\2\2\2\u0168\u0169")
+        buf.write("\3\2\2\2\u0169O\3\2\2\2\u016a\u0168\3\2\2\2\u016b\u016d")
+        buf.write("\7\16\2\2\u016c\u016b\3\2\2\2\u016c\u016d\3\2\2\2\u016d")
+        buf.write("\u016e\3\2\2\2\u016e\u018a\5R*\2\u016f\u0170\7%\2\2\u0170")
+        buf.write("\u0171\t\5\2\2\u0171\u018a\5R*\2\u0172\u0173\5V,\2\u0173")
+        buf.write("\u0174\5^\60\2\u0174\u0175\5V,\2\u0175\u018a\3\2\2\2\u0176")
+        buf.write("\u0178\7\16\2\2\u0177\u0176\3\2\2\2\u0177\u0178\3\2\2")
+        buf.write("\2\u0178\u0179\3\2\2\2\u0179\u017a\7\26\2\2\u017a\u017b")
+        buf.write("\7D\2\2\u017b\u017c\5J&\2\u017c\u017d\7E\2\2\u017d\u017e")
+        buf.write("\5^\60\2\u017e\u017f\7&\2\2\u017f\u018a\3\2\2\2\u0180")
+        buf.write("\u0181\7\16\2\2\u0181\u018a\5J&\2\u0182\u0184\7\16\2\2")
+        buf.write("\u0183\u0182\3\2\2\2\u0183\u0184\3\2\2\2\u0184\u0185\3")
+        buf.write("\2\2\2\u0185\u018a\7%\2\2\u0186\u0187\7%\2\2\u0187\u0188")
+        buf.write("\7\r\2\2\u0188\u018a\7%\2\2\u0189\u016c\3\2\2\2\u0189")
+        buf.write("\u016f\3\2\2\2\u0189\u0172\3\2\2\2\u0189\u0177\3\2\2\2")
+        buf.write("\u0189\u0180\3\2\2\2\u0189\u0183\3\2\2\2\u0189\u0186\3")
+        buf.write("\2\2\2\u018aQ\3\2\2\2\u018b\u018c\7%\2\2\u018c\u018d\7")
+        buf.write("D\2\2\u018d\u0192\5R*\2\u018e\u018f\7\61\2\2\u018f\u0191")
+        buf.write("\5R*\2\u0190\u018e\3\2\2\2\u0191\u0194\3\2\2\2\u0192\u0190")
+        buf.write("\3\2\2\2\u0192\u0193\3\2\2\2\u0193\u0195\3\2\2\2\u0194")
+        buf.write("\u0192\3\2\2\2\u0195\u0196\7E\2\2\u0196\u0199\3\2\2\2")
+        buf.write("\u0197\u0199\5X-\2\u0198\u018b\3\2\2\2\u0198\u0197\3\2")
+        buf.write("\2\2\u0199S\3\2\2\2\u019a\u019f\5R*\2\u019b\u019c\7\61")
+        buf.write("\2\2\u019c\u019e\5R*\2\u019d\u019b\3\2\2\2\u019e\u01a1")
+        buf.write("\3\2\2\2\u019f\u019d\3\2\2\2\u019f\u01a0\3\2\2\2\u01a0")
+        buf.write("U\3\2\2\2\u01a1\u019f\3\2\2\2\u01a2\u01a3\b,\1\2\u01a3")
+        buf.write("\u01a4\7D\2\2\u01a4\u01a5\5V,\2\u01a5\u01a6\7E\2\2\u01a6")
+        buf.write("\u01a9\3\2\2\2\u01a7\u01a9\5X-\2\u01a8\u01a2\3\2\2\2\u01a8")
+        buf.write("\u01a7\3\2\2\2\u01a9\u01b5\3\2\2\2\u01aa\u01ab\f\6\2\2")
+        buf.write("\u01ab\u01ac\t\6\2\2\u01ac\u01b4\5V,\7\u01ad\u01ae\f\5")
+        buf.write("\2\2\u01ae\u01af\7=\2\2\u01af\u01b4\5V,\6\u01b0\u01b1")
+        buf.write("\f\4\2\2\u01b1\u01b2\t\7\2\2\u01b2\u01b4\5V,\5\u01b3\u01aa")
+        buf.write("\3\2\2\2\u01b3\u01ad\3\2\2\2\u01b3\u01b0\3\2\2\2\u01b4")
+        buf.write("\u01b7\3\2\2\2\u01b5\u01b3\3\2\2\2\u01b5\u01b6\3\2\2\2")
+        buf.write("\u01b6W\3\2\2\2\u01b7\u01b5\3\2\2\2\u01b8\u01bb\7%\2\2")
+        buf.write("\u01b9\u01bb\5Z.\2\u01ba\u01b8\3\2\2\2\u01ba\u01b9\3\2")
+        buf.write("\2\2\u01bbY\3\2\2\2\u01bc\u01bd\t\b\2\2\u01bd[\3\2\2\2")
+        buf.write("\u01be\u01bf\t\t\2\2\u01bf]\3\2\2\2\u01c0\u01c1\t\n\2")
+        buf.write("\2\u01c1_\3\2\2\2\u01c2\u01c3\t\13\2\2\u01c3a\3\2\2\2")
+        buf.write("\63ox{\u0087\u008c\u0093\u0099\u009d\u00a2\u00a9\u00ae")
+        buf.write("\u00b1\u00c3\u00c9\u00cc\u00d6\u00dd\u00e4\u00eb\u00f1")
+        buf.write("\u00f7\u00fe\u0102\u010a\u010f\u0118\u011f\u0127\u012c")
+        buf.write("\u0131\u0134\u0138\u013f\u0146\u014d\u0157\u0160\u0168")
+        buf.write("\u016c\u0177\u0183\u0189\u0192\u0198\u019f\u01a8\u01b3")
+        buf.write("\u01b5\u01ba")
         return buf.getvalue()
 
 
@@ -220,54 +252,66 @@ class FormulaParser ( Parser ):
                       "WEAKARROW", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET", 
                       "LPAREN", "RPAREN", "WS" ]
 
-    RULE_program = 0
-    RULE_importModule = 1
-    RULE_moduleList = 2
-    RULE_module = 3
-    RULE_modRefs = 4
-    RULE_modRef = 5
-    RULE_model = 6
-    RULE_modelIntro = 7
-    RULE_modelSig = 8
-    RULE_domain = 9
-    RULE_domainSig = 10
-    RULE_domSentences = 11
-    RULE_domSentence = 12
-    RULE_typeDecl = 13
-    RULE_unnBody = 14
-    RULE_funcDecl = 15
-    RULE_fields = 16
-    RULE_field = 17
-    RULE_unnElem = 18
-    RULE_enumList = 19
-    RULE_enumCnst = 20
-    RULE_modelFactList = 21
-    RULE_modelFact = 22
-    RULE_formulaRule = 23
-    RULE_setComprehension = 24
-    RULE_disjunction = 25
-    RULE_conjunction = 26
-    RULE_constraint = 27
-    RULE_term = 28
-    RULE_terms = 29
-    RULE_compositionalTerm = 30
-    RULE_compositionalTermWithoutAlias = 31
-    RULE_arithmeticTerm = 32
-    RULE_atom = 33
-    RULE_constant = 34
-    RULE_binOp = 35
-    RULE_relOp = 36
-    RULE_funModifier = 37
+    RULE_config = 0
+    RULE_sentenceConfig = 1
+    RULE_settingList = 2
+    RULE_setting = 3
+    RULE_program = 4
+    RULE_importModule = 5
+    RULE_moduleList = 6
+    RULE_module = 7
+    RULE_modRefs = 8
+    RULE_modRef = 9
+    RULE_model = 10
+    RULE_modelBody = 11
+    RULE_modelSentence = 12
+    RULE_modelContractConf = 13
+    RULE_modelContract = 14
+    RULE_cardSpec = 15
+    RULE_modelSigConfig = 16
+    RULE_modelIntro = 17
+    RULE_modelSig = 18
+    RULE_modelFactList = 19
+    RULE_modelFact = 20
+    RULE_domain = 21
+    RULE_domainSigConfig = 22
+    RULE_domainSig = 23
+    RULE_domSentences = 24
+    RULE_domSentenceConfig = 25
+    RULE_domSentence = 26
+    RULE_typeDecl = 27
+    RULE_unnBody = 28
+    RULE_funcDecl = 29
+    RULE_fields = 30
+    RULE_field = 31
+    RULE_unnElem = 32
+    RULE_enumList = 33
+    RULE_enumCnst = 34
+    RULE_formulaRule = 35
+    RULE_setComprehension = 36
+    RULE_disjunction = 37
+    RULE_conjunction = 38
+    RULE_constraint = 39
+    RULE_funcTerm = 40
+    RULE_funcTermList = 41
+    RULE_arithmeticTerm = 42
+    RULE_atom = 43
+    RULE_constant = 44
+    RULE_binOp = 45
+    RULE_relOp = 46
+    RULE_funModifier = 47
 
-    ruleNames =  [ "program", "importModule", "moduleList", "module", "modRefs", 
-                   "modRef", "model", "modelIntro", "modelSig", "domain", 
-                   "domainSig", "domSentences", "domSentence", "typeDecl", 
-                   "unnBody", "funcDecl", "fields", "field", "unnElem", 
-                   "enumList", "enumCnst", "modelFactList", "modelFact", 
-                   "formulaRule", "setComprehension", "disjunction", "conjunction", 
-                   "constraint", "term", "terms", "compositionalTerm", "compositionalTermWithoutAlias", 
-                   "arithmeticTerm", "atom", "constant", "binOp", "relOp", 
-                   "funModifier" ]
+    ruleNames =  [ "config", "sentenceConfig", "settingList", "setting", 
+                   "program", "importModule", "moduleList", "module", "modRefs", 
+                   "modRef", "model", "modelBody", "modelSentence", "modelContractConf", 
+                   "modelContract", "cardSpec", "modelSigConfig", "modelIntro", 
+                   "modelSig", "modelFactList", "modelFact", "domain", "domainSigConfig", 
+                   "domainSig", "domSentences", "domSentenceConfig", "domSentence", 
+                   "typeDecl", "unnBody", "funcDecl", "fields", "field", 
+                   "unnElem", "enumList", "enumCnst", "formulaRule", "setComprehension", 
+                   "disjunction", "conjunction", "constraint", "funcTerm", 
+                   "funcTermList", "arithmeticTerm", "atom", "constant", 
+                   "binOp", "relOp", "funModifier" ]
 
     EOF = Token.EOF
     DOMAIN=1
@@ -348,6 +392,246 @@ class FormulaParser ( Parser ):
 
 
 
+    class ConfigContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def LBRACKET(self):
+            return self.getToken(FormulaParser.LBRACKET, 0)
+
+        def settingList(self):
+            return self.getTypedRuleContext(FormulaParser.SettingListContext,0)
+
+
+        def RBRACKET(self):
+            return self.getToken(FormulaParser.RBRACKET, 0)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_config
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterConfig" ):
+                listener.enterConfig(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitConfig" ):
+                listener.exitConfig(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitConfig" ):
+                return visitor.visitConfig(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def config(self):
+
+        localctx = FormulaParser.ConfigContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 0, self.RULE_config)
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 96
+            self.match(FormulaParser.LBRACKET)
+            self.state = 97
+            self.settingList()
+            self.state = 98
+            self.match(FormulaParser.RBRACKET)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class SentenceConfigContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def LBRACKET(self):
+            return self.getToken(FormulaParser.LBRACKET, 0)
+
+        def settingList(self):
+            return self.getTypedRuleContext(FormulaParser.SettingListContext,0)
+
+
+        def RBRACKET(self):
+            return self.getToken(FormulaParser.RBRACKET, 0)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_sentenceConfig
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterSentenceConfig" ):
+                listener.enterSentenceConfig(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitSentenceConfig" ):
+                listener.exitSentenceConfig(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitSentenceConfig" ):
+                return visitor.visitSentenceConfig(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def sentenceConfig(self):
+
+        localctx = FormulaParser.SentenceConfigContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 2, self.RULE_sentenceConfig)
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 100
+            self.match(FormulaParser.LBRACKET)
+            self.state = 101
+            self.settingList()
+            self.state = 102
+            self.match(FormulaParser.RBRACKET)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class SettingListContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def setting(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(FormulaParser.SettingContext)
+            else:
+                return self.getTypedRuleContext(FormulaParser.SettingContext,i)
+
+
+        def COMMA(self, i:int=None):
+            if i is None:
+                return self.getTokens(FormulaParser.COMMA)
+            else:
+                return self.getToken(FormulaParser.COMMA, i)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_settingList
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterSettingList" ):
+                listener.enterSettingList(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitSettingList" ):
+                listener.exitSettingList(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitSettingList" ):
+                return visitor.visitSettingList(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def settingList(self):
+
+        localctx = FormulaParser.SettingListContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 4, self.RULE_settingList)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 104
+            self.setting()
+            self.state = 109
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while _la==FormulaParser.COMMA:
+                self.state = 105
+                self.match(FormulaParser.COMMA)
+                self.state = 106
+                self.setting()
+                self.state = 111
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class SettingContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def Id(self):
+            return self.getToken(FormulaParser.Id, 0)
+
+        def EQ(self):
+            return self.getToken(FormulaParser.EQ, 0)
+
+        def constant(self):
+            return self.getTypedRuleContext(FormulaParser.ConstantContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_setting
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterSetting" ):
+                listener.enterSetting(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitSetting" ):
+                listener.exitSetting(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitSetting" ):
+                return visitor.visitSetting(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def setting(self):
+
+        localctx = FormulaParser.SettingContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 6, self.RULE_setting)
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 112
+            self.match(FormulaParser.Id)
+            self.state = 113
+            self.match(FormulaParser.EQ)
+            self.state = 114
+            self.constant()
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
     class ProgramContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -388,29 +672,29 @@ class FormulaParser ( Parser ):
     def program(self):
 
         localctx = FormulaParser.ProgramContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 0, self.RULE_program)
+        self.enterRule(localctx, 8, self.RULE_program)
         self._la = 0 # Token type
         try:
-            self.state = 81
+            self.state = 121
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,1,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,2,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 76
+                self.state = 116
                 self.match(FormulaParser.EOF)
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 78
+                self.state = 118
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 if _la==FormulaParser.IMPORT:
-                    self.state = 77
+                    self.state = 117
                     self.importModule()
 
 
-                self.state = 80
+                self.state = 120
                 self.moduleList()
                 pass
 
@@ -471,20 +755,20 @@ class FormulaParser ( Parser ):
     def importModule(self):
 
         localctx = FormulaParser.ImportModuleContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 2, self.RULE_importModule)
+        self.enterRule(localctx, 10, self.RULE_importModule)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 83
+            self.state = 123
             self.match(FormulaParser.IMPORT)
-            self.state = 84
+            self.state = 124
             self.match(FormulaParser.Id)
-            self.state = 85
+            self.state = 125
             self.match(FormulaParser.FROM)
-            self.state = 86
+            self.state = 126
             self.match(FormulaParser.STRING)
-            self.state = 87
+            self.state = 127
             self.match(FormulaParser.AS)
-            self.state = 88
+            self.state = 128
             self.match(FormulaParser.Id)
         except RecognitionException as re:
             localctx.exception = re
@@ -531,17 +815,17 @@ class FormulaParser ( Parser ):
     def moduleList(self):
 
         localctx = FormulaParser.ModuleListContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 4, self.RULE_moduleList)
+        self.enterRule(localctx, 12, self.RULE_moduleList)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 93
+            self.state = 133
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.DOMAIN) | (1 << FormulaParser.MODEL) | (1 << FormulaParser.PARTIAL))) != 0):
-                self.state = 90
+                self.state = 130
                 self.module()
-                self.state = 95
+                self.state = 135
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -591,19 +875,19 @@ class FormulaParser ( Parser ):
     def module(self):
 
         localctx = FormulaParser.ModuleContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 6, self.RULE_module)
+        self.enterRule(localctx, 14, self.RULE_module)
         try:
-            self.state = 98
+            self.state = 138
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [FormulaParser.DOMAIN]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 96
+                self.state = 136
                 self.domain()
                 pass
             elif token in [FormulaParser.MODEL, FormulaParser.PARTIAL]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 97
+                self.state = 137
                 self.model()
                 pass
             else:
@@ -660,21 +944,21 @@ class FormulaParser ( Parser ):
     def modRefs(self):
 
         localctx = FormulaParser.ModRefsContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 8, self.RULE_modRefs)
+        self.enterRule(localctx, 16, self.RULE_modRefs)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 100
+            self.state = 140
             self.modRef()
-            self.state = 105
+            self.state = 145
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==FormulaParser.COMMA:
-                self.state = 101
+                self.state = 141
                 self.match(FormulaParser.COMMA)
-                self.state = 102
+                self.state = 142
                 self.modRef()
-                self.state = 107
+                self.state = 147
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -699,14 +983,14 @@ class FormulaParser ( Parser ):
             else:
                 return self.getToken(FormulaParser.Id, i)
 
+        def RENAMES(self):
+            return self.getToken(FormulaParser.RENAMES, 0)
+
         def AT(self):
             return self.getToken(FormulaParser.AT, 0)
 
         def STRING(self):
             return self.getToken(FormulaParser.STRING, 0)
-
-        def RENAMES(self):
-            return self.getToken(FormulaParser.RENAMES, 0)
 
         def getRuleIndex(self):
             return FormulaParser.RULE_modRef
@@ -731,50 +1015,30 @@ class FormulaParser ( Parser ):
     def modRef(self):
 
         localctx = FormulaParser.ModRefContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 10, self.RULE_modRef)
+        self.enterRule(localctx, 18, self.RULE_modRef)
+        self._la = 0 # Token type
         try:
-            self.state = 120
+            self.enterOuterAlt(localctx, 1)
+            self.state = 148
+            self.match(FormulaParser.Id)
+            self.state = 151
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,5,self._ctx)
-            if la_ == 1:
-                self.enterOuterAlt(localctx, 1)
-                self.state = 108
-                self.match(FormulaParser.Id)
-                pass
-
-            elif la_ == 2:
-                self.enterOuterAlt(localctx, 2)
-                self.state = 109
-                self.match(FormulaParser.Id)
-                self.state = 110
-                self.match(FormulaParser.AT)
-                self.state = 111
-                self.match(FormulaParser.STRING)
-                pass
-
-            elif la_ == 3:
-                self.enterOuterAlt(localctx, 3)
-                self.state = 112
-                self.match(FormulaParser.Id)
-                self.state = 113
+            _la = self._input.LA(1)
+            if _la==FormulaParser.RENAMES:
+                self.state = 149
                 self.match(FormulaParser.RENAMES)
-                self.state = 114
+                self.state = 150
                 self.match(FormulaParser.Id)
-                pass
 
-            elif la_ == 4:
-                self.enterOuterAlt(localctx, 4)
-                self.state = 115
-                self.match(FormulaParser.Id)
-                self.state = 116
-                self.match(FormulaParser.RENAMES)
-                self.state = 117
-                self.match(FormulaParser.Id)
-                self.state = 118
+
+            self.state = 155
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la==FormulaParser.AT:
+                self.state = 153
                 self.match(FormulaParser.AT)
-                self.state = 119
+                self.state = 154
                 self.match(FormulaParser.STRING)
-                pass
 
 
         except RecognitionException as re:
@@ -792,8 +1056,8 @@ class FormulaParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def modelSig(self):
-            return self.getTypedRuleContext(FormulaParser.ModelSigContext,0)
+        def modelSigConfig(self):
+            return self.getTypedRuleContext(FormulaParser.ModelSigConfigContext,0)
 
 
         def LBRACE(self):
@@ -802,11 +1066,8 @@ class FormulaParser ( Parser ):
         def RBRACE(self):
             return self.getToken(FormulaParser.RBRACE, 0)
 
-        def modelFactList(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(FormulaParser.ModelFactListContext)
-            else:
-                return self.getTypedRuleContext(FormulaParser.ModelFactListContext,i)
+        def modelBody(self):
+            return self.getTypedRuleContext(FormulaParser.ModelBodyContext,0)
 
 
         def getRuleIndex(self):
@@ -832,26 +1093,425 @@ class FormulaParser ( Parser ):
     def model(self):
 
         localctx = FormulaParser.ModelContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 12, self.RULE_model)
+        self.enterRule(localctx, 20, self.RULE_model)
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 157
+            self.modelSigConfig()
+            self.state = 158
+            self.match(FormulaParser.LBRACE)
+            self.state = 160
+            self._errHandler.sync(self)
+            la_ = self._interp.adaptivePredict(self._input,8,self._ctx)
+            if la_ == 1:
+                self.state = 159
+                self.modelBody()
+
+
+            self.state = 162
+            self.match(FormulaParser.RBRACE)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelBodyContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def modelSentence(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(FormulaParser.ModelSentenceContext)
+            else:
+                return self.getTypedRuleContext(FormulaParser.ModelSentenceContext,i)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelBody
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelBody" ):
+                listener.enterModelBody(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelBody" ):
+                listener.exitModelBody(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelBody" ):
+                return visitor.visitModelBody(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelBody(self):
+
+        localctx = FormulaParser.ModelBodyContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 22, self.RULE_modelBody)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 122
-            self.modelSig()
-            self.state = 123
-            self.match(FormulaParser.LBRACE)
-            self.state = 127
+            self.state = 167
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==FormulaParser.Id:
-                self.state = 124
-                self.modelFactList()
-                self.state = 129
+            while ((((_la - 21)) & ~0x3f) == 0 and ((1 << (_la - 21)) & ((1 << (FormulaParser.ENSURES - 21)) | (1 << (FormulaParser.REQUIRES - 21)) | (1 << (FormulaParser.Id - 21)) | (1 << (FormulaParser.DECIMAL - 21)) | (1 << (FormulaParser.REAL - 21)) | (1 << (FormulaParser.FRAC - 21)) | (1 << (FormulaParser.STRING - 21)) | (1 << (FormulaParser.LBRACKET - 21)))) != 0):
+                self.state = 164
+                self.modelSentence()
+                self.state = 169
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 130
-            self.match(FormulaParser.RBRACE)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelSentenceContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def modelFactList(self):
+            return self.getTypedRuleContext(FormulaParser.ModelFactListContext,0)
+
+
+        def modelContractConf(self):
+            return self.getTypedRuleContext(FormulaParser.ModelContractConfContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelSentence
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelSentence" ):
+                listener.enterModelSentence(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelSentence" ):
+                listener.exitModelSentence(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelSentence" ):
+                return visitor.visitModelSentence(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelSentence(self):
+
+        localctx = FormulaParser.ModelSentenceContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 24, self.RULE_modelSentence)
+        try:
+            self.state = 172
+            self._errHandler.sync(self)
+            token = self._input.LA(1)
+            if token in [FormulaParser.Id, FormulaParser.DECIMAL, FormulaParser.REAL, FormulaParser.FRAC, FormulaParser.STRING]:
+                self.enterOuterAlt(localctx, 1)
+                self.state = 170
+                self.modelFactList()
+                pass
+            elif token in [FormulaParser.ENSURES, FormulaParser.REQUIRES, FormulaParser.LBRACKET]:
+                self.enterOuterAlt(localctx, 2)
+                self.state = 171
+                self.modelContractConf()
+                pass
+            else:
+                raise NoViableAltException(self)
+
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelContractConfContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def modelContract(self):
+            return self.getTypedRuleContext(FormulaParser.ModelContractContext,0)
+
+
+        def sentenceConfig(self):
+            return self.getTypedRuleContext(FormulaParser.SentenceConfigContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelContractConf
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelContractConf" ):
+                listener.enterModelContractConf(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelContractConf" ):
+                listener.exitModelContractConf(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelContractConf" ):
+                return visitor.visitModelContractConf(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelContractConf(self):
+
+        localctx = FormulaParser.ModelContractConfContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 26, self.RULE_modelContractConf)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 175
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la==FormulaParser.LBRACKET:
+                self.state = 174
+                self.sentenceConfig()
+
+
+            self.state = 177
+            self.modelContract()
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelContractContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def ENSURES(self):
+            return self.getToken(FormulaParser.ENSURES, 0)
+
+        def disjunction(self):
+            return self.getTypedRuleContext(FormulaParser.DisjunctionContext,0)
+
+
+        def DOT(self):
+            return self.getToken(FormulaParser.DOT, 0)
+
+        def REQUIRES(self):
+            return self.getToken(FormulaParser.REQUIRES, 0)
+
+        def cardSpec(self):
+            return self.getTypedRuleContext(FormulaParser.CardSpecContext,0)
+
+
+        def DECIMAL(self):
+            return self.getToken(FormulaParser.DECIMAL, 0)
+
+        def Id(self):
+            return self.getToken(FormulaParser.Id, 0)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelContract
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelContract" ):
+                listener.enterModelContract(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelContract" ):
+                listener.exitModelContract(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelContract" ):
+                return visitor.visitModelContract(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelContract(self):
+
+        localctx = FormulaParser.ModelContractContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 28, self.RULE_modelContract)
+        try:
+            self.state = 193
+            self._errHandler.sync(self)
+            la_ = self._interp.adaptivePredict(self._input,12,self._ctx)
+            if la_ == 1:
+                self.enterOuterAlt(localctx, 1)
+                self.state = 179
+                self.match(FormulaParser.ENSURES)
+                self.state = 180
+                self.disjunction()
+                self.state = 181
+                self.match(FormulaParser.DOT)
+                pass
+
+            elif la_ == 2:
+                self.enterOuterAlt(localctx, 2)
+                self.state = 183
+                self.match(FormulaParser.REQUIRES)
+                self.state = 184
+                self.disjunction()
+                self.state = 185
+                self.match(FormulaParser.DOT)
+                pass
+
+            elif la_ == 3:
+                self.enterOuterAlt(localctx, 3)
+                self.state = 187
+                self.match(FormulaParser.REQUIRES)
+                self.state = 188
+                self.cardSpec()
+                self.state = 189
+                self.match(FormulaParser.DECIMAL)
+                self.state = 190
+                self.match(FormulaParser.Id)
+                self.state = 191
+                self.match(FormulaParser.DOT)
+                pass
+
+
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class CardSpecContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def SOME(self):
+            return self.getToken(FormulaParser.SOME, 0)
+
+        def ATMOST(self):
+            return self.getToken(FormulaParser.ATMOST, 0)
+
+        def ATLEAST(self):
+            return self.getToken(FormulaParser.ATLEAST, 0)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_cardSpec
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterCardSpec" ):
+                listener.enterCardSpec(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitCardSpec" ):
+                listener.exitCardSpec(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitCardSpec" ):
+                return visitor.visitCardSpec(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def cardSpec(self):
+
+        localctx = FormulaParser.CardSpecContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 30, self.RULE_cardSpec)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 195
+            _la = self._input.LA(1)
+            if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.SOME) | (1 << FormulaParser.ATLEAST) | (1 << FormulaParser.ATMOST))) != 0)):
+                self._errHandler.recoverInline(self)
+            else:
+                self._errHandler.reportMatch(self)
+                self.consume()
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelSigConfigContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def modelSig(self):
+            return self.getTypedRuleContext(FormulaParser.ModelSigContext,0)
+
+
+        def config(self):
+            return self.getTypedRuleContext(FormulaParser.ConfigContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelSigConfig
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelSigConfig" ):
+                listener.enterModelSigConfig(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelSigConfig" ):
+                listener.exitModelSigConfig(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelSigConfig" ):
+                return visitor.visitModelSigConfig(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelSigConfig(self):
+
+        localctx = FormulaParser.ModelSigConfigContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 32, self.RULE_modelSigConfig)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 197
+            self.modelSig()
+            self.state = 199
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la==FormulaParser.LBRACKET:
+                self.state = 198
+                self.config()
+
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -906,25 +1566,25 @@ class FormulaParser ( Parser ):
     def modelIntro(self):
 
         localctx = FormulaParser.ModelIntroContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 14, self.RULE_modelIntro)
+        self.enterRule(localctx, 34, self.RULE_modelIntro)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 133
+            self.state = 202
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==FormulaParser.PARTIAL:
-                self.state = 132
+                self.state = 201
                 self.match(FormulaParser.PARTIAL)
 
 
-            self.state = 135
+            self.state = 204
             self.match(FormulaParser.MODEL)
-            self.state = 136
+            self.state = 205
             self.match(FormulaParser.Id)
-            self.state = 137
+            self.state = 206
             self.match(FormulaParser.OF)
-            self.state = 138
+            self.state = 207
             self.modRef()
         except RecognitionException as re:
             localctx.exception = re
@@ -978,27 +1638,164 @@ class FormulaParser ( Parser ):
     def modelSig(self):
 
         localctx = FormulaParser.ModelSigContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 16, self.RULE_modelSig)
+        self.enterRule(localctx, 36, self.RULE_modelSig)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 140
+            self.state = 209
             self.modelIntro()
-            self.state = 143
+            self.state = 212
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==FormulaParser.INCLUDES or _la==FormulaParser.EXTENDS:
-                self.state = 141
+                self.state = 210
                 _la = self._input.LA(1)
                 if not(_la==FormulaParser.INCLUDES or _la==FormulaParser.EXTENDS):
                     self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
                     self.consume()
-                self.state = 142
+                self.state = 211
                 self.modRefs()
 
 
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelFactListContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def modelFact(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(FormulaParser.ModelFactContext)
+            else:
+                return self.getTypedRuleContext(FormulaParser.ModelFactContext,i)
+
+
+        def DOT(self):
+            return self.getToken(FormulaParser.DOT, 0)
+
+        def COMMA(self, i:int=None):
+            if i is None:
+                return self.getTokens(FormulaParser.COMMA)
+            else:
+                return self.getToken(FormulaParser.COMMA, i)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelFactList
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelFactList" ):
+                listener.enterModelFactList(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelFactList" ):
+                listener.exitModelFactList(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelFactList" ):
+                return visitor.visitModelFactList(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelFactList(self):
+
+        localctx = FormulaParser.ModelFactListContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 38, self.RULE_modelFactList)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 214
+            self.modelFact()
+            self.state = 219
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while _la==FormulaParser.COMMA:
+                self.state = 215
+                self.match(FormulaParser.COMMA)
+                self.state = 216
+                self.modelFact()
+                self.state = 221
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+
+            self.state = 222
+            self.match(FormulaParser.DOT)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ModelFactContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def funcTerm(self):
+            return self.getTypedRuleContext(FormulaParser.FuncTermContext,0)
+
+
+        def Id(self):
+            return self.getToken(FormulaParser.Id, 0)
+
+        def IS(self):
+            return self.getToken(FormulaParser.IS, 0)
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_modelFact
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModelFact" ):
+                listener.enterModelFact(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModelFact" ):
+                listener.exitModelFact(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModelFact" ):
+                return visitor.visitModelFact(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def modelFact(self):
+
+        localctx = FormulaParser.ModelFactContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 40, self.RULE_modelFact)
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 226
+            self._errHandler.sync(self)
+            la_ = self._interp.adaptivePredict(self._input,17,self._ctx)
+            if la_ == 1:
+                self.state = 224
+                self.match(FormulaParser.Id)
+                self.state = 225
+                self.match(FormulaParser.IS)
+
+
+            self.state = 228
+            self.funcTerm()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1014,19 +1811,19 @@ class FormulaParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def domainSig(self):
-            return self.getTypedRuleContext(FormulaParser.DomainSigContext,0)
+        def domainSigConfig(self):
+            return self.getTypedRuleContext(FormulaParser.DomainSigConfigContext,0)
 
 
         def LBRACE(self):
             return self.getToken(FormulaParser.LBRACE, 0)
 
+        def RBRACE(self):
+            return self.getToken(FormulaParser.RBRACE, 0)
+
         def domSentences(self):
             return self.getTypedRuleContext(FormulaParser.DomSentencesContext,0)
 
-
-        def RBRACE(self):
-            return self.getToken(FormulaParser.RBRACE, 0)
 
         def getRuleIndex(self):
             return FormulaParser.RULE_domain
@@ -1051,17 +1848,83 @@ class FormulaParser ( Parser ):
     def domain(self):
 
         localctx = FormulaParser.DomainContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 18, self.RULE_domain)
+        self.enterRule(localctx, 42, self.RULE_domain)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 145
-            self.domainSig()
-            self.state = 146
+            self.state = 230
+            self.domainSigConfig()
+            self.state = 231
             self.match(FormulaParser.LBRACE)
-            self.state = 147
-            self.domSentences()
-            self.state = 148
+            self.state = 233
+            self._errHandler.sync(self)
+            la_ = self._interp.adaptivePredict(self._input,18,self._ctx)
+            if la_ == 1:
+                self.state = 232
+                self.domSentences()
+
+
+            self.state = 235
             self.match(FormulaParser.RBRACE)
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class DomainSigConfigContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def domainSig(self):
+            return self.getTypedRuleContext(FormulaParser.DomainSigContext,0)
+
+
+        def config(self):
+            return self.getTypedRuleContext(FormulaParser.ConfigContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_domainSigConfig
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterDomainSigConfig" ):
+                listener.enterDomainSigConfig(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitDomainSigConfig" ):
+                listener.exitDomainSigConfig(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitDomainSigConfig" ):
+                return visitor.visitDomainSigConfig(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def domainSigConfig(self):
+
+        localctx = FormulaParser.DomainSigConfigContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 44, self.RULE_domainSigConfig)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 237
+            self.domainSig()
+            self.state = 239
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la==FormulaParser.LBRACKET:
+                self.state = 238
+                self.config()
+
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1116,26 +1979,26 @@ class FormulaParser ( Parser ):
     def domainSig(self):
 
         localctx = FormulaParser.DomainSigContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 20, self.RULE_domainSig)
+        self.enterRule(localctx, 46, self.RULE_domainSig)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 150
+            self.state = 241
             self.match(FormulaParser.DOMAIN)
-            self.state = 151
+            self.state = 242
             self.match(FormulaParser.Id)
-            self.state = 154
+            self.state = 245
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==FormulaParser.INCLUDES or _la==FormulaParser.EXTENDS:
-                self.state = 152
+                self.state = 243
                 _la = self._input.LA(1)
                 if not(_la==FormulaParser.INCLUDES or _la==FormulaParser.EXTENDS):
                     self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
                     self.consume()
-                self.state = 153
+                self.state = 244
                 self.modRefs()
 
 
@@ -1154,11 +2017,11 @@ class FormulaParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def domSentence(self, i:int=None):
+        def domSentenceConfig(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(FormulaParser.DomSentenceContext)
+                return self.getTypedRuleContexts(FormulaParser.DomSentenceConfigContext)
             else:
-                return self.getTypedRuleContext(FormulaParser.DomSentenceContext,i)
+                return self.getTypedRuleContext(FormulaParser.DomSentenceConfigContext,i)
 
 
         def DOT(self, i:int=None):
@@ -1190,22 +2053,82 @@ class FormulaParser ( Parser ):
     def domSentences(self):
 
         localctx = FormulaParser.DomSentencesContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 22, self.RULE_domSentences)
+        self.enterRule(localctx, 48, self.RULE_domSentences)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 161
+            self.state = 252
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while ((((_la - 23)) & ~0x3f) == 0 and ((1 << (_la - 23)) & ((1 << (FormulaParser.CONFORMS - 23)) | (1 << (FormulaParser.Id - 23)) | (1 << (FormulaParser.DECIMAL - 23)) | (1 << (FormulaParser.REAL - 23)) | (1 << (FormulaParser.FRAC - 23)) | (1 << (FormulaParser.STRING - 23)) | (1 << (FormulaParser.LPAREN - 23)))) != 0):
-                self.state = 156
-                self.domSentence()
-                self.state = 157
+            while ((((_la - 23)) & ~0x3f) == 0 and ((1 << (_la - 23)) & ((1 << (FormulaParser.CONFORMS - 23)) | (1 << (FormulaParser.Id - 23)) | (1 << (FormulaParser.DECIMAL - 23)) | (1 << (FormulaParser.REAL - 23)) | (1 << (FormulaParser.FRAC - 23)) | (1 << (FormulaParser.STRING - 23)) | (1 << (FormulaParser.LBRACKET - 23)))) != 0):
+                self.state = 247
+                self.domSentenceConfig()
+                self.state = 248
                 self.match(FormulaParser.DOT)
-                self.state = 163
+                self.state = 254
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class DomSentenceConfigContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def domSentence(self):
+            return self.getTypedRuleContext(FormulaParser.DomSentenceContext,0)
+
+
+        def sentenceConfig(self):
+            return self.getTypedRuleContext(FormulaParser.SentenceConfigContext,0)
+
+
+        def getRuleIndex(self):
+            return FormulaParser.RULE_domSentenceConfig
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterDomSentenceConfig" ):
+                listener.enterDomSentenceConfig(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitDomSentenceConfig" ):
+                listener.exitDomSentenceConfig(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitDomSentenceConfig" ):
+                return visitor.visitDomSentenceConfig(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def domSentenceConfig(self):
+
+        localctx = FormulaParser.DomSentenceConfigContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 50, self.RULE_domSentenceConfig)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 256
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la==FormulaParser.LBRACKET:
+                self.state = 255
+                self.sentenceConfig()
+
+
+            self.state = 258
+            self.domSentence()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1221,122 +2144,66 @@ class FormulaParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-
-        def getRuleIndex(self):
-            return FormulaParser.RULE_domSentence
-
-     
-        def copyFrom(self, ctx:ParserRuleContext):
-            super().copyFrom(ctx)
-
-
-
-    class DomTypeSentenceContext(DomSentenceContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.DomSentenceContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
         def typeDecl(self):
             return self.getTypedRuleContext(FormulaParser.TypeDeclContext,0)
 
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterDomTypeSentence" ):
-                listener.enterDomTypeSentence(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitDomTypeSentence" ):
-                listener.exitDomTypeSentence(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitDomTypeSentence" ):
-                return visitor.visitDomTypeSentence(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-    class DomRuleSentenceContext(DomSentenceContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.DomSentenceContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
 
         def formulaRule(self):
             return self.getTypedRuleContext(FormulaParser.FormulaRuleContext,0)
 
 
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterDomRuleSentence" ):
-                listener.enterDomRuleSentence(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitDomRuleSentence" ):
-                listener.exitDomRuleSentence(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitDomRuleSentence" ):
-                return visitor.visitDomRuleSentence(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-    class DomConformsSentenceContext(DomSentenceContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.DomSentenceContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
         def CONFORMS(self):
             return self.getToken(FormulaParser.CONFORMS, 0)
+
         def disjunction(self):
             return self.getTypedRuleContext(FormulaParser.DisjunctionContext,0)
 
 
+        def getRuleIndex(self):
+            return FormulaParser.RULE_domSentence
+
         def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterDomConformsSentence" ):
-                listener.enterDomConformsSentence(self)
+            if hasattr( listener, "enterDomSentence" ):
+                listener.enterDomSentence(self)
 
         def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitDomConformsSentence" ):
-                listener.exitDomConformsSentence(self)
+            if hasattr( listener, "exitDomSentence" ):
+                listener.exitDomSentence(self)
 
         def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitDomConformsSentence" ):
-                return visitor.visitDomConformsSentence(self)
+            if hasattr( visitor, "visitDomSentence" ):
+                return visitor.visitDomSentence(self)
             else:
                 return visitor.visitChildren(self)
+
 
 
 
     def domSentence(self):
 
         localctx = FormulaParser.DomSentenceContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 24, self.RULE_domSentence)
+        self.enterRule(localctx, 52, self.RULE_domSentence)
         try:
-            self.state = 168
+            self.state = 264
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,11,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,23,self._ctx)
             if la_ == 1:
-                localctx = FormulaParser.DomTypeSentenceContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 164
+                self.state = 260
                 self.typeDecl()
                 pass
 
             elif la_ == 2:
-                localctx = FormulaParser.DomRuleSentenceContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 165
+                self.state = 261
                 self.formulaRule()
                 pass
 
             elif la_ == 3:
-                localctx = FormulaParser.DomConformsSentenceContext(self, localctx)
                 self.enterOuterAlt(localctx, 3)
-                self.state = 166
+                self.state = 262
                 self.match(FormulaParser.CONFORMS)
-                self.state = 167
+                self.state = 263
                 self.disjunction()
                 pass
 
@@ -1435,43 +2302,43 @@ class FormulaParser ( Parser ):
     def typeDecl(self):
 
         localctx = FormulaParser.TypeDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 26, self.RULE_typeDecl)
+        self.enterRule(localctx, 54, self.RULE_typeDecl)
         self._la = 0 # Token type
         try:
-            self.state = 182
+            self.state = 278
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,13,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,25,self._ctx)
             if la_ == 1:
                 localctx = FormulaParser.RegularTypeDeclContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 170
+                self.state = 266
                 self.match(FormulaParser.Id)
-                self.state = 171
+                self.state = 267
                 self.match(FormulaParser.TYPEDEF)
-                self.state = 173
+                self.state = 269
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.NEW) | (1 << FormulaParser.FUN) | (1 << FormulaParser.INJ) | (1 << FormulaParser.BIJ) | (1 << FormulaParser.SUR) | (1 << FormulaParser.SUB))) != 0):
-                    self.state = 172
+                    self.state = 268
                     self.funcDecl()
 
 
-                self.state = 175
+                self.state = 271
                 self.match(FormulaParser.LPAREN)
-                self.state = 176
+                self.state = 272
                 self.fields()
-                self.state = 177
+                self.state = 273
                 self.match(FormulaParser.RPAREN)
                 pass
 
             elif la_ == 2:
                 localctx = FormulaParser.UnionTypeDeclContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 179
+                self.state = 275
                 self.match(FormulaParser.Id)
-                self.state = 180
+                self.state = 276
                 self.match(FormulaParser.TYPEDEF)
-                self.state = 181
+                self.state = 277
                 self.unnBody()
                 pass
 
@@ -1527,21 +2394,21 @@ class FormulaParser ( Parser ):
     def unnBody(self):
 
         localctx = FormulaParser.UnnBodyContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 28, self.RULE_unnBody)
+        self.enterRule(localctx, 56, self.RULE_unnBody)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 184
+            self.state = 280
             self.unnElem()
-            self.state = 189
+            self.state = 285
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==FormulaParser.PLUS:
-                self.state = 185
+                self.state = 281
                 self.match(FormulaParser.PLUS)
-                self.state = 186
+                self.state = 282
                 self.unnElem()
-                self.state = 191
+                self.state = 287
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -1601,11 +2468,11 @@ class FormulaParser ( Parser ):
     def funcDecl(self):
 
         localctx = FormulaParser.FuncDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 30, self.RULE_funcDecl)
+        self.enterRule(localctx, 58, self.RULE_funcDecl)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 192
+            self.state = 288
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.NEW) | (1 << FormulaParser.FUN) | (1 << FormulaParser.INJ) | (1 << FormulaParser.BIJ) | (1 << FormulaParser.SUR) | (1 << FormulaParser.SUB))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -1670,33 +2537,33 @@ class FormulaParser ( Parser ):
     def fields(self):
 
         localctx = FormulaParser.FieldsContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 32, self.RULE_fields)
+        self.enterRule(localctx, 60, self.RULE_fields)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 194
+            self.state = 290
             self.field()
-            self.state = 202
+            self.state = 298
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.COMMA) | (1 << FormulaParser.STRONGARROW) | (1 << FormulaParser.WEAKARROW))) != 0):
-                self.state = 197
+                self.state = 293
                 self._errHandler.sync(self)
                 token = self._input.LA(1)
                 if token in [FormulaParser.COMMA]:
-                    self.state = 195
+                    self.state = 291
                     self.match(FormulaParser.COMMA)
                     pass
                 elif token in [FormulaParser.STRONGARROW, FormulaParser.WEAKARROW]:
-                    self.state = 196
+                    self.state = 292
                     self.funModifier()
                     pass
                 else:
                     raise NoViableAltException(self)
 
-                self.state = 199
+                self.state = 295
                 self.field()
-                self.state = 204
+                self.state = 300
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -1754,38 +2621,38 @@ class FormulaParser ( Parser ):
     def field(self):
 
         localctx = FormulaParser.FieldContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 34, self.RULE_field)
+        self.enterRule(localctx, 62, self.RULE_field)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 207
+            self.state = 303
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,17,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,29,self._ctx)
             if la_ == 1:
-                self.state = 205
+                self.state = 301
                 self.match(FormulaParser.Id)
-                self.state = 206
+                self.state = 302
                 self.match(FormulaParser.COLON)
 
 
-            self.state = 210
+            self.state = 306
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==FormulaParser.ANY:
-                self.state = 209
+                self.state = 305
                 self.match(FormulaParser.ANY)
 
 
-            self.state = 214
+            self.state = 310
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,19,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,31,self._ctx)
             if la_ == 1:
-                self.state = 212
+                self.state = 308
                 self.match(FormulaParser.Id)
                 pass
 
             elif la_ == 2:
-                self.state = 213
+                self.state = 309
                 self.unnBody()
                 pass
 
@@ -1841,23 +2708,23 @@ class FormulaParser ( Parser ):
     def unnElem(self):
 
         localctx = FormulaParser.UnnElemContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 36, self.RULE_unnElem)
+        self.enterRule(localctx, 64, self.RULE_unnElem)
         try:
-            self.state = 221
+            self.state = 317
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [FormulaParser.Id]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 216
+                self.state = 312
                 self.match(FormulaParser.Id)
                 pass
             elif token in [FormulaParser.LBRACE]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 217
+                self.state = 313
                 self.match(FormulaParser.LBRACE)
-                self.state = 218
+                self.state = 314
                 self.enumList()
-                self.state = 219
+                self.state = 315
                 self.match(FormulaParser.RBRACE)
                 pass
             else:
@@ -1914,21 +2781,21 @@ class FormulaParser ( Parser ):
     def enumList(self):
 
         localctx = FormulaParser.EnumListContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 38, self.RULE_enumList)
+        self.enterRule(localctx, 66, self.RULE_enumList)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 223
+            self.state = 319
             self.enumCnst()
-            self.state = 228
+            self.state = 324
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==FormulaParser.COMMA:
-                self.state = 224
+                self.state = 320
                 self.match(FormulaParser.COMMA)
-                self.state = 225
+                self.state = 321
                 self.enumCnst()
-                self.state = 230
+                self.state = 326
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -1983,163 +2850,25 @@ class FormulaParser ( Parser ):
     def enumCnst(self):
 
         localctx = FormulaParser.EnumCnstContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 40, self.RULE_enumCnst)
+        self.enterRule(localctx, 68, self.RULE_enumCnst)
         try:
-            self.state = 235
+            self.state = 331
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,22,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,34,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 231
+                self.state = 327
                 self.constant()
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 232
+                self.state = 328
                 self.match(FormulaParser.DECIMAL)
-                self.state = 233
+                self.state = 329
                 self.match(FormulaParser.RANGE)
-                self.state = 234
+                self.state = 330
                 self.match(FormulaParser.DECIMAL)
-                pass
-
-
-        except RecognitionException as re:
-            localctx.exception = re
-            self._errHandler.reportError(self, re)
-            self._errHandler.recover(self, re)
-        finally:
-            self.exitRule()
-        return localctx
-
-
-    class ModelFactListContext(ParserRuleContext):
-
-        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
-            super().__init__(parent, invokingState)
-            self.parser = parser
-
-        def modelFact(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(FormulaParser.ModelFactContext)
-            else:
-                return self.getTypedRuleContext(FormulaParser.ModelFactContext,i)
-
-
-        def DOT(self):
-            return self.getToken(FormulaParser.DOT, 0)
-
-        def COMMA(self, i:int=None):
-            if i is None:
-                return self.getTokens(FormulaParser.COMMA)
-            else:
-                return self.getToken(FormulaParser.COMMA, i)
-
-        def getRuleIndex(self):
-            return FormulaParser.RULE_modelFactList
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterModelFactList" ):
-                listener.enterModelFactList(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitModelFactList" ):
-                listener.exitModelFactList(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitModelFactList" ):
-                return visitor.visitModelFactList(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-
-
-    def modelFactList(self):
-
-        localctx = FormulaParser.ModelFactListContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 42, self.RULE_modelFactList)
-        self._la = 0 # Token type
-        try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 237
-            self.modelFact()
-            self.state = 242
-            self._errHandler.sync(self)
-            _la = self._input.LA(1)
-            while _la==FormulaParser.COMMA:
-                self.state = 238
-                self.match(FormulaParser.COMMA)
-                self.state = 239
-                self.modelFact()
-                self.state = 244
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-
-            self.state = 245
-            self.match(FormulaParser.DOT)
-        except RecognitionException as re:
-            localctx.exception = re
-            self._errHandler.reportError(self, re)
-            self._errHandler.recover(self, re)
-        finally:
-            self.exitRule()
-        return localctx
-
-
-    class ModelFactContext(ParserRuleContext):
-
-        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
-            super().__init__(parent, invokingState)
-            self.parser = parser
-
-        def compositionalTerm(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermContext,0)
-
-
-        def compositionalTermWithoutAlias(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,0)
-
-
-        def getRuleIndex(self):
-            return FormulaParser.RULE_modelFact
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterModelFact" ):
-                listener.enterModelFact(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitModelFact" ):
-                listener.exitModelFact(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitModelFact" ):
-                return visitor.visitModelFact(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-
-
-    def modelFact(self):
-
-        localctx = FormulaParser.ModelFactContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 44, self.RULE_modelFact)
-        try:
-            self.state = 249
-            self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,24,self._ctx)
-            if la_ == 1:
-                self.enterOuterAlt(localctx, 1)
-                self.state = 247
-                self.compositionalTerm()
-                pass
-
-            elif la_ == 2:
-                self.enterOuterAlt(localctx, 2)
-                self.state = 248
-                self.compositionalTermWithoutAlias()
                 pass
 
 
@@ -2158,8 +2887,8 @@ class FormulaParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def terms(self):
-            return self.getTypedRuleContext(FormulaParser.TermsContext,0)
+        def funcTermList(self):
+            return self.getTypedRuleContext(FormulaParser.FuncTermListContext,0)
 
 
         def RULE(self):
@@ -2168,9 +2897,6 @@ class FormulaParser ( Parser ):
         def disjunction(self):
             return self.getTypedRuleContext(FormulaParser.DisjunctionContext,0)
 
-
-        def DOT(self):
-            return self.getToken(FormulaParser.DOT, 0)
 
         def getRuleIndex(self):
             return FormulaParser.RULE_formulaRule
@@ -2195,17 +2921,15 @@ class FormulaParser ( Parser ):
     def formulaRule(self):
 
         localctx = FormulaParser.FormulaRuleContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 46, self.RULE_formulaRule)
+        self.enterRule(localctx, 70, self.RULE_formulaRule)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 251
-            self.terms()
-            self.state = 252
+            self.state = 333
+            self.funcTermList()
+            self.state = 334
             self.match(FormulaParser.RULE)
-            self.state = 253
+            self.state = 335
             self.disjunction()
-            self.state = 254
-            self.match(FormulaParser.DOT)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -2224,8 +2948,8 @@ class FormulaParser ( Parser ):
         def LBRACE(self):
             return self.getToken(FormulaParser.LBRACE, 0)
 
-        def terms(self):
-            return self.getTypedRuleContext(FormulaParser.TermsContext,0)
+        def funcTermList(self):
+            return self.getTypedRuleContext(FormulaParser.FuncTermListContext,0)
 
 
         def RBRACE(self):
@@ -2261,25 +2985,25 @@ class FormulaParser ( Parser ):
     def setComprehension(self):
 
         localctx = FormulaParser.SetComprehensionContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 48, self.RULE_setComprehension)
+        self.enterRule(localctx, 72, self.RULE_setComprehension)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 256
+            self.state = 337
             self.match(FormulaParser.LBRACE)
-            self.state = 257
-            self.terms()
-            self.state = 260
+            self.state = 338
+            self.funcTermList()
+            self.state = 341
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==FormulaParser.PIPE:
-                self.state = 258
+                self.state = 339
                 self.match(FormulaParser.PIPE)
-                self.state = 259
+                self.state = 340
                 self.conjunction()
 
 
-            self.state = 262
+            self.state = 343
             self.match(FormulaParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -2303,8 +3027,11 @@ class FormulaParser ( Parser ):
                 return self.getTypedRuleContext(FormulaParser.ConjunctionContext,i)
 
 
-        def SEMICOLON(self):
-            return self.getToken(FormulaParser.SEMICOLON, 0)
+        def SEMICOLON(self, i:int=None):
+            if i is None:
+                return self.getTokens(FormulaParser.SEMICOLON)
+            else:
+                return self.getToken(FormulaParser.SEMICOLON, i)
 
         def getRuleIndex(self):
             return FormulaParser.RULE_disjunction
@@ -2329,16 +3056,24 @@ class FormulaParser ( Parser ):
     def disjunction(self):
 
         localctx = FormulaParser.DisjunctionContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 50, self.RULE_disjunction)
+        self.enterRule(localctx, 74, self.RULE_disjunction)
+        self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 264
+            self.state = 345
             self.conjunction()
+            self.state = 350
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while _la==FormulaParser.SEMICOLON:
+                self.state = 346
+                self.match(FormulaParser.SEMICOLON)
+                self.state = 347
+                self.conjunction()
+                self.state = 352
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
 
-            self.state = 265
-            self.match(FormulaParser.SEMICOLON)
-            self.state = 266
-            self.conjunction()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -2361,8 +3096,11 @@ class FormulaParser ( Parser ):
                 return self.getTypedRuleContext(FormulaParser.ConstraintContext,i)
 
 
-        def COMMA(self):
-            return self.getToken(FormulaParser.COMMA, 0)
+        def COMMA(self, i:int=None):
+            if i is None:
+                return self.getTokens(FormulaParser.COMMA)
+            else:
+                return self.getToken(FormulaParser.COMMA, i)
 
         def getRuleIndex(self):
             return FormulaParser.RULE_conjunction
@@ -2387,16 +3125,24 @@ class FormulaParser ( Parser ):
     def conjunction(self):
 
         localctx = FormulaParser.ConjunctionContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 52, self.RULE_conjunction)
+        self.enterRule(localctx, 76, self.RULE_conjunction)
+        self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 268
+            self.state = 353
             self.constraint()
+            self.state = 358
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while _la==FormulaParser.COMMA:
+                self.state = 354
+                self.match(FormulaParser.COMMA)
+                self.state = 355
+                self.constraint()
+                self.state = 360
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
 
-            self.state = 269
-            self.match(FormulaParser.COMMA)
-            self.state = 270
-            self.constraint()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -2460,91 +3206,29 @@ class FormulaParser ( Parser ):
                 return visitor.visitChildren(self)
 
 
-    class PredConstraintContext(ConstraintContext):
+    class TermConstraintContext(ConstraintContext):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.ConstraintContext
             super().__init__(parser)
             self.copyFrom(ctx)
 
-        def compositionalTermWithoutAlias(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,0)
+        def funcTerm(self):
+            return self.getTypedRuleContext(FormulaParser.FuncTermContext,0)
 
         def NO(self):
             return self.getToken(FormulaParser.NO, 0)
 
         def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterPredConstraint" ):
-                listener.enterPredConstraint(self)
+            if hasattr( listener, "enterTermConstraint" ):
+                listener.enterTermConstraint(self)
 
         def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitPredConstraint" ):
-                listener.exitPredConstraint(self)
+            if hasattr( listener, "exitTermConstraint" ):
+                listener.exitTermConstraint(self)
 
         def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitPredConstraint" ):
-                return visitor.visitPredConstraint(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-    class VariableBindingConstraintContext(ConstraintContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.ConstraintContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
-        def Id(self):
-            return self.getToken(FormulaParser.Id, 0)
-        def compositionalTermWithoutAlias(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,0)
-
-        def IS(self):
-            return self.getToken(FormulaParser.IS, 0)
-        def EQ(self):
-            return self.getToken(FormulaParser.EQ, 0)
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterVariableBindingConstraint" ):
-                listener.enterVariableBindingConstraint(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitVariableBindingConstraint" ):
-                listener.exitVariableBindingConstraint(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitVariableBindingConstraint" ):
-                return visitor.visitVariableBindingConstraint(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-    class BinaryConstraintContext(ConstraintContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.ConstraintContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
-        def arithmeticTerm(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(FormulaParser.ArithmeticTermContext)
-            else:
-                return self.getTypedRuleContext(FormulaParser.ArithmeticTermContext,i)
-
-        def relOp(self):
-            return self.getTypedRuleContext(FormulaParser.RelOpContext,0)
-
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterBinaryConstraint" ):
-                listener.enterBinaryConstraint(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitBinaryConstraint" ):
-                listener.exitBinaryConstraint(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitBinaryConstraint" ):
-                return visitor.visitBinaryConstraint(self)
+            if hasattr( visitor, "visitTermConstraint" ):
+                return visitor.visitTermConstraint(self)
             else:
                 return visitor.visitChildren(self)
 
@@ -2562,8 +3246,6 @@ class FormulaParser ( Parser ):
                 return self.getToken(FormulaParser.Id, i)
         def IS(self):
             return self.getToken(FormulaParser.IS, 0)
-        def EQ(self):
-            return self.getToken(FormulaParser.EQ, 0)
 
         def enterRule(self, listener:ParseTreeListener):
             if hasattr( listener, "enterTypeConstraint" ):
@@ -2576,6 +3258,68 @@ class FormulaParser ( Parser ):
         def accept(self, visitor:ParseTreeVisitor):
             if hasattr( visitor, "visitTypeConstraint" ):
                 return visitor.visitTypeConstraint(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+    class BinaryArithmeticConstraintContext(ConstraintContext):
+
+        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.ConstraintContext
+            super().__init__(parser)
+            self.copyFrom(ctx)
+
+        def arithmeticTerm(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(FormulaParser.ArithmeticTermContext)
+            else:
+                return self.getTypedRuleContext(FormulaParser.ArithmeticTermContext,i)
+
+        def relOp(self):
+            return self.getTypedRuleContext(FormulaParser.RelOpContext,0)
+
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterBinaryArithmeticConstraint" ):
+                listener.enterBinaryArithmeticConstraint(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitBinaryArithmeticConstraint" ):
+                listener.exitBinaryArithmeticConstraint(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitBinaryArithmeticConstraint" ):
+                return visitor.visitBinaryArithmeticConstraint(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+    class TermConstraintWithAliasContext(ConstraintContext):
+
+        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.ConstraintContext
+            super().__init__(parser)
+            self.copyFrom(ctx)
+
+        def Id(self):
+            return self.getToken(FormulaParser.Id, 0)
+        def funcTerm(self):
+            return self.getTypedRuleContext(FormulaParser.FuncTermContext,0)
+
+        def IS(self):
+            return self.getToken(FormulaParser.IS, 0)
+        def EQ(self):
+            return self.getToken(FormulaParser.EQ, 0)
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterTermConstraintWithAlias" ):
+                listener.enterTermConstraintWithAlias(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitTermConstraintWithAlias" ):
+                listener.exitTermConstraintWithAlias(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitTermConstraintWithAlias" ):
+                return visitor.visitTermConstraintWithAlias(self)
             else:
                 return visitor.visitChildren(self)
 
@@ -2637,117 +3381,112 @@ class FormulaParser ( Parser ):
     def constraint(self):
 
         localctx = FormulaParser.ConstraintContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 54, self.RULE_constraint)
+        self.enterRule(localctx, 78, self.RULE_constraint)
         self._la = 0 # Token type
         try:
-            self.state = 302
+            self.state = 391
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,29,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,41,self._ctx)
             if la_ == 1:
-                localctx = FormulaParser.PredConstraintContext(self, localctx)
+                localctx = FormulaParser.TermConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 273
+                self.state = 362
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 if _la==FormulaParser.NO:
-                    self.state = 272
+                    self.state = 361
                     self.match(FormulaParser.NO)
 
 
-                self.state = 275
-                self.compositionalTermWithoutAlias()
+                self.state = 364
+                self.funcTerm()
                 pass
 
             elif la_ == 2:
-                localctx = FormulaParser.AggregationCountConstraintContext(self, localctx)
+                localctx = FormulaParser.TermConstraintWithAliasContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 277
-                self._errHandler.sync(self)
+                self.state = 365
+                self.match(FormulaParser.Id)
+                self.state = 366
                 _la = self._input.LA(1)
-                if _la==FormulaParser.NO:
-                    self.state = 276
-                    self.match(FormulaParser.NO)
-
-
-                self.state = 279
-                self.match(FormulaParser.COUNT)
-                self.state = 280
-                self.match(FormulaParser.LPAREN)
-                self.state = 281
-                self.setComprehension()
-                self.state = 282
-                self.match(FormulaParser.RPAREN)
-                self.state = 283
-                self.relOp()
-                self.state = 284
-                self.match(FormulaParser.DECIMAL)
+                if not(_la==FormulaParser.IS or _la==FormulaParser.EQ):
+                    self._errHandler.recoverInline(self)
+                else:
+                    self._errHandler.reportMatch(self)
+                    self.consume()
+                self.state = 367
+                self.funcTerm()
                 pass
 
             elif la_ == 3:
-                localctx = FormulaParser.BinaryConstraintContext(self, localctx)
+                localctx = FormulaParser.BinaryArithmeticConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 3)
-                self.state = 286
+                self.state = 368
                 self.arithmeticTerm(0)
-                self.state = 287
+                self.state = 369
                 self.relOp()
-                self.state = 288
+                self.state = 370
                 self.arithmeticTerm(0)
                 pass
 
             elif la_ == 4:
-                localctx = FormulaParser.TypeConstraintContext(self, localctx)
+                localctx = FormulaParser.AggregationCountConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 4)
-                self.state = 290
-                self.match(FormulaParser.Id)
-                self.state = 291
+                self.state = 373
+                self._errHandler.sync(self)
                 _la = self._input.LA(1)
-                if not(_la==FormulaParser.IS or _la==FormulaParser.EQ):
-                    self._errHandler.recoverInline(self)
-                else:
-                    self._errHandler.reportMatch(self)
-                    self.consume()
-                self.state = 292
-                self.match(FormulaParser.Id)
+                if _la==FormulaParser.NO:
+                    self.state = 372
+                    self.match(FormulaParser.NO)
+
+
+                self.state = 375
+                self.match(FormulaParser.COUNT)
+                self.state = 376
+                self.match(FormulaParser.LPAREN)
+                self.state = 377
+                self.setComprehension()
+                self.state = 378
+                self.match(FormulaParser.RPAREN)
+                self.state = 379
+                self.relOp()
+                self.state = 380
+                self.match(FormulaParser.DECIMAL)
                 pass
 
             elif la_ == 5:
-                localctx = FormulaParser.VariableBindingConstraintContext(self, localctx)
+                localctx = FormulaParser.SetComprehensionConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 5)
-                self.state = 293
-                self.match(FormulaParser.Id)
-                self.state = 294
-                _la = self._input.LA(1)
-                if not(_la==FormulaParser.IS or _la==FormulaParser.EQ):
-                    self._errHandler.recoverInline(self)
-                else:
-                    self._errHandler.reportMatch(self)
-                    self.consume()
-                self.state = 295
-                self.compositionalTermWithoutAlias()
+                self.state = 382
+                self.match(FormulaParser.NO)
+                self.state = 383
+                self.setComprehension()
                 pass
 
             elif la_ == 6:
                 localctx = FormulaParser.DerivedConstantConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 6)
-                self.state = 297
+                self.state = 385
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 if _la==FormulaParser.NO:
-                    self.state = 296
+                    self.state = 384
                     self.match(FormulaParser.NO)
 
 
-                self.state = 299
+                self.state = 387
                 self.match(FormulaParser.Id)
                 pass
 
             elif la_ == 7:
-                localctx = FormulaParser.SetComprehensionConstraintContext(self, localctx)
+                localctx = FormulaParser.TypeConstraintContext(self, localctx)
                 self.enterOuterAlt(localctx, 7)
-                self.state = 300
-                self.match(FormulaParser.NO)
-                self.state = 301
-                self.setComprehension()
+                self.state = 388
+                self.match(FormulaParser.Id)
+                self.state = 389
+                self.match(FormulaParser.IS)
+                self.state = 390
+                self.match(FormulaParser.Id)
                 pass
 
 
@@ -2760,67 +3499,94 @@ class FormulaParser ( Parser ):
         return localctx
 
 
-    class TermContext(ParserRuleContext):
+    class FuncTermContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def compositionalTermWithoutAlias(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,0)
+        def Id(self):
+            return self.getToken(FormulaParser.Id, 0)
+
+        def LPAREN(self):
+            return self.getToken(FormulaParser.LPAREN, 0)
+
+        def funcTerm(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(FormulaParser.FuncTermContext)
+            else:
+                return self.getTypedRuleContext(FormulaParser.FuncTermContext,i)
 
 
-        def arithmeticTerm(self):
-            return self.getTypedRuleContext(FormulaParser.ArithmeticTermContext,0)
+        def RPAREN(self):
+            return self.getToken(FormulaParser.RPAREN, 0)
 
+        def COMMA(self, i:int=None):
+            if i is None:
+                return self.getTokens(FormulaParser.COMMA)
+            else:
+                return self.getToken(FormulaParser.COMMA, i)
 
         def atom(self):
             return self.getTypedRuleContext(FormulaParser.AtomContext,0)
 
 
         def getRuleIndex(self):
-            return FormulaParser.RULE_term
+            return FormulaParser.RULE_funcTerm
 
         def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterTerm" ):
-                listener.enterTerm(self)
+            if hasattr( listener, "enterFuncTerm" ):
+                listener.enterFuncTerm(self)
 
         def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitTerm" ):
-                listener.exitTerm(self)
+            if hasattr( listener, "exitFuncTerm" ):
+                listener.exitFuncTerm(self)
 
         def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitTerm" ):
-                return visitor.visitTerm(self)
+            if hasattr( visitor, "visitFuncTerm" ):
+                return visitor.visitFuncTerm(self)
             else:
                 return visitor.visitChildren(self)
 
 
 
 
-    def term(self):
+    def funcTerm(self):
 
-        localctx = FormulaParser.TermContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 56, self.RULE_term)
+        localctx = FormulaParser.FuncTermContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 80, self.RULE_funcTerm)
+        self._la = 0 # Token type
         try:
-            self.state = 307
+            self.state = 406
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,30,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,43,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 304
-                self.compositionalTermWithoutAlias()
+                self.state = 393
+                self.match(FormulaParser.Id)
+                self.state = 394
+                self.match(FormulaParser.LPAREN)
+                self.state = 395
+                self.funcTerm()
+                self.state = 400
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                while _la==FormulaParser.COMMA:
+                    self.state = 396
+                    self.match(FormulaParser.COMMA)
+                    self.state = 397
+                    self.funcTerm()
+                    self.state = 402
+                    self._errHandler.sync(self)
+                    _la = self._input.LA(1)
+
+                self.state = 403
+                self.match(FormulaParser.RPAREN)
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 305
-                self.arithmeticTerm(0)
-                pass
-
-            elif la_ == 3:
-                self.enterOuterAlt(localctx, 3)
-                self.state = 306
+                self.state = 405
                 self.atom()
                 pass
 
@@ -2834,17 +3600,17 @@ class FormulaParser ( Parser ):
         return localctx
 
 
-    class TermsContext(ParserRuleContext):
+    class FuncTermListContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
             self.parser = parser
 
-        def term(self, i:int=None):
+        def funcTerm(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(FormulaParser.TermContext)
+                return self.getTypedRuleContexts(FormulaParser.FuncTermContext)
             else:
-                return self.getTypedRuleContext(FormulaParser.TermContext,i)
+                return self.getTypedRuleContext(FormulaParser.FuncTermContext,i)
 
 
         def COMMA(self, i:int=None):
@@ -2854,275 +3620,45 @@ class FormulaParser ( Parser ):
                 return self.getToken(FormulaParser.COMMA, i)
 
         def getRuleIndex(self):
-            return FormulaParser.RULE_terms
+            return FormulaParser.RULE_funcTermList
 
         def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterTerms" ):
-                listener.enterTerms(self)
+            if hasattr( listener, "enterFuncTermList" ):
+                listener.enterFuncTermList(self)
 
         def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitTerms" ):
-                listener.exitTerms(self)
+            if hasattr( listener, "exitFuncTermList" ):
+                listener.exitFuncTermList(self)
 
         def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitTerms" ):
-                return visitor.visitTerms(self)
+            if hasattr( visitor, "visitFuncTermList" ):
+                return visitor.visitFuncTermList(self)
             else:
                 return visitor.visitChildren(self)
 
 
 
 
-    def terms(self):
+    def funcTermList(self):
 
-        localctx = FormulaParser.TermsContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 58, self.RULE_terms)
+        localctx = FormulaParser.FuncTermListContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 82, self.RULE_funcTermList)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 309
-            self.term()
-            self.state = 314
+            self.state = 408
+            self.funcTerm()
+            self.state = 413
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==FormulaParser.COMMA:
-                self.state = 310
+                self.state = 409
                 self.match(FormulaParser.COMMA)
-                self.state = 311
-                self.term()
-                self.state = 316
+                self.state = 410
+                self.funcTerm()
+                self.state = 415
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
-
-        except RecognitionException as re:
-            localctx.exception = re
-            self._errHandler.reportError(self, re)
-            self._errHandler.recover(self, re)
-        finally:
-            self.exitRule()
-        return localctx
-
-
-    class CompositionalTermContext(ParserRuleContext):
-
-        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
-            super().__init__(parent, invokingState)
-            self.parser = parser
-
-        def Id(self):
-            return self.getToken(FormulaParser.Id, 0)
-
-        def compositionalTermWithoutAlias(self):
-            return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,0)
-
-
-        def IS(self):
-            return self.getToken(FormulaParser.IS, 0)
-
-        def EQ(self):
-            return self.getToken(FormulaParser.EQ, 0)
-
-        def getRuleIndex(self):
-            return FormulaParser.RULE_compositionalTerm
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterCompositionalTerm" ):
-                listener.enterCompositionalTerm(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitCompositionalTerm" ):
-                listener.exitCompositionalTerm(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitCompositionalTerm" ):
-                return visitor.visitCompositionalTerm(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-
-
-    def compositionalTerm(self):
-
-        localctx = FormulaParser.CompositionalTermContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 60, self.RULE_compositionalTerm)
-        self._la = 0 # Token type
-        try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 317
-            self.match(FormulaParser.Id)
-            self.state = 318
-            _la = self._input.LA(1)
-            if not(_la==FormulaParser.IS or _la==FormulaParser.EQ):
-                self._errHandler.recoverInline(self)
-            else:
-                self._errHandler.reportMatch(self)
-                self.consume()
-            self.state = 319
-            self.compositionalTermWithoutAlias()
-        except RecognitionException as re:
-            localctx.exception = re
-            self._errHandler.reportError(self, re)
-            self._errHandler.recover(self, re)
-        finally:
-            self.exitRule()
-        return localctx
-
-
-    class CompositionalTermWithoutAliasContext(ParserRuleContext):
-
-        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
-            super().__init__(parent, invokingState)
-            self.parser = parser
-
-
-        def getRuleIndex(self):
-            return FormulaParser.RULE_compositionalTermWithoutAlias
-
-     
-        def copyFrom(self, ctx:ParserRuleContext):
-            super().copyFrom(ctx)
-
-
-
-    class NestedCompositionalTermContext(CompositionalTermWithoutAliasContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.CompositionalTermWithoutAliasContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
-        def Id(self):
-            return self.getToken(FormulaParser.Id, 0)
-        def LPAREN(self):
-            return self.getToken(FormulaParser.LPAREN, 0)
-        def compositionalTermWithoutAlias(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(FormulaParser.CompositionalTermWithoutAliasContext)
-            else:
-                return self.getTypedRuleContext(FormulaParser.CompositionalTermWithoutAliasContext,i)
-
-        def RPAREN(self):
-            return self.getToken(FormulaParser.RPAREN, 0)
-        def COMMA(self, i:int=None):
-            if i is None:
-                return self.getTokens(FormulaParser.COMMA)
-            else:
-                return self.getToken(FormulaParser.COMMA, i)
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterNestedCompositionalTerm" ):
-                listener.enterNestedCompositionalTerm(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitNestedCompositionalTerm" ):
-                listener.exitNestedCompositionalTerm(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitNestedCompositionalTerm" ):
-                return visitor.visitNestedCompositionalTerm(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-    class NonNestedCompositionalTermContext(CompositionalTermWithoutAliasContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a FormulaParser.CompositionalTermWithoutAliasContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
-        def Id(self):
-            return self.getToken(FormulaParser.Id, 0)
-        def LPAREN(self):
-            return self.getToken(FormulaParser.LPAREN, 0)
-        def atom(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(FormulaParser.AtomContext)
-            else:
-                return self.getTypedRuleContext(FormulaParser.AtomContext,i)
-
-        def RPAREN(self):
-            return self.getToken(FormulaParser.RPAREN, 0)
-        def COMMA(self, i:int=None):
-            if i is None:
-                return self.getTokens(FormulaParser.COMMA)
-            else:
-                return self.getToken(FormulaParser.COMMA, i)
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterNonNestedCompositionalTerm" ):
-                listener.enterNonNestedCompositionalTerm(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitNonNestedCompositionalTerm" ):
-                listener.exitNonNestedCompositionalTerm(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitNonNestedCompositionalTerm" ):
-                return visitor.visitNonNestedCompositionalTerm(self)
-            else:
-                return visitor.visitChildren(self)
-
-
-
-    def compositionalTermWithoutAlias(self):
-
-        localctx = FormulaParser.CompositionalTermWithoutAliasContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 62, self.RULE_compositionalTermWithoutAlias)
-        self._la = 0 # Token type
-        try:
-            self.state = 345
-            self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,34,self._ctx)
-            if la_ == 1:
-                localctx = FormulaParser.NestedCompositionalTermContext(self, localctx)
-                self.enterOuterAlt(localctx, 1)
-                self.state = 321
-                self.match(FormulaParser.Id)
-                self.state = 322
-                self.match(FormulaParser.LPAREN)
-                self.state = 323
-                self.compositionalTermWithoutAlias()
-                self.state = 328
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                while _la==FormulaParser.COMMA:
-                    self.state = 324
-                    self.match(FormulaParser.COMMA)
-                    self.state = 325
-                    self.compositionalTermWithoutAlias()
-                    self.state = 330
-                    self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-
-                self.state = 331
-                self.match(FormulaParser.RPAREN)
-                pass
-
-            elif la_ == 2:
-                localctx = FormulaParser.NonNestedCompositionalTermContext(self, localctx)
-                self.enterOuterAlt(localctx, 2)
-                self.state = 333
-                self.match(FormulaParser.Id)
-                self.state = 334
-                self.match(FormulaParser.LPAREN)
-                self.state = 335
-                self.atom()
-                self.state = 340
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                while _la==FormulaParser.COMMA:
-                    self.state = 336
-                    self.match(FormulaParser.COMMA)
-                    self.state = 337
-                    self.atom()
-                    self.state = 342
-                    self._errHandler.sync(self)
-                    _la = self._input.LA(1)
-
-                self.state = 343
-                self.match(FormulaParser.RPAREN)
-                pass
-
 
         except RecognitionException as re:
             localctx.exception = re
@@ -3302,12 +3838,12 @@ class FormulaParser ( Parser ):
         _parentState = self.state
         localctx = FormulaParser.ArithmeticTermContext(self, self._ctx, _parentState)
         _prevctx = localctx
-        _startState = 64
-        self.enterRecursionRule(localctx, 64, self.RULE_arithmeticTerm, _p)
+        _startState = 84
+        self.enterRecursionRule(localctx, 84, self.RULE_arithmeticTerm, _p)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 353
+            self.state = 422
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [FormulaParser.LPAREN]:
@@ -3315,88 +3851,88 @@ class FormulaParser ( Parser ):
                 self._ctx = localctx
                 _prevctx = localctx
 
-                self.state = 348
+                self.state = 417
                 self.match(FormulaParser.LPAREN)
-                self.state = 349
+                self.state = 418
                 self.arithmeticTerm(0)
-                self.state = 350
+                self.state = 419
                 self.match(FormulaParser.RPAREN)
                 pass
             elif token in [FormulaParser.Id, FormulaParser.DECIMAL, FormulaParser.REAL, FormulaParser.FRAC, FormulaParser.STRING]:
                 localctx = FormulaParser.AtomTermContext(self, localctx)
                 self._ctx = localctx
                 _prevctx = localctx
-                self.state = 352
+                self.state = 421
                 self.atom()
                 pass
             else:
                 raise NoViableAltException(self)
 
             self._ctx.stop = self._input.LT(-1)
-            self.state = 366
+            self.state = 435
             self._errHandler.sync(self)
-            _alt = self._interp.adaptivePredict(self._input,37,self._ctx)
+            _alt = self._interp.adaptivePredict(self._input,47,self._ctx)
             while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
                 if _alt==1:
                     if self._parseListeners is not None:
                         self.triggerExitRuleEvent()
                     _prevctx = localctx
-                    self.state = 364
+                    self.state = 433
                     self._errHandler.sync(self)
-                    la_ = self._interp.adaptivePredict(self._input,36,self._ctx)
+                    la_ = self._interp.adaptivePredict(self._input,46,self._ctx)
                     if la_ == 1:
                         localctx = FormulaParser.MulDivArithTermContext(self, FormulaParser.ArithmeticTermContext(self, _parentctx, _parentState))
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_arithmeticTerm)
-                        self.state = 355
+                        self.state = 424
                         if not self.precpred(self._ctx, 4):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 4)")
-                        self.state = 356
+                        self.state = 425
                         _la = self._input.LA(1)
                         if not(_la==FormulaParser.MUL or _la==FormulaParser.DIV):
                             self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 357
+                        self.state = 426
                         self.arithmeticTerm(5)
                         pass
 
                     elif la_ == 2:
                         localctx = FormulaParser.ModArithTermContext(self, FormulaParser.ArithmeticTermContext(self, _parentctx, _parentState))
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_arithmeticTerm)
-                        self.state = 358
+                        self.state = 427
                         if not self.precpred(self._ctx, 3):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 3)")
-                        self.state = 359
+                        self.state = 428
                         self.match(FormulaParser.MOD)
-                        self.state = 360
+                        self.state = 429
                         self.arithmeticTerm(4)
                         pass
 
                     elif la_ == 3:
                         localctx = FormulaParser.AddSubArithTermContext(self, FormulaParser.ArithmeticTermContext(self, _parentctx, _parentState))
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_arithmeticTerm)
-                        self.state = 361
+                        self.state = 430
                         if not self.precpred(self._ctx, 2):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
-                        self.state = 362
+                        self.state = 431
                         _la = self._input.LA(1)
                         if not(_la==FormulaParser.PLUS or _la==FormulaParser.MINUS):
                             self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 363
+                        self.state = 432
                         self.arithmeticTerm(3)
                         pass
 
              
-                self.state = 368
+                self.state = 437
                 self._errHandler.sync(self)
-                _alt = self._interp.adaptivePredict(self._input,37,self._ctx)
+                _alt = self._interp.adaptivePredict(self._input,47,self._ctx)
 
         except RecognitionException as re:
             localctx.exception = re
@@ -3443,19 +3979,19 @@ class FormulaParser ( Parser ):
     def atom(self):
 
         localctx = FormulaParser.AtomContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 66, self.RULE_atom)
+        self.enterRule(localctx, 86, self.RULE_atom)
         try:
-            self.state = 371
+            self.state = 440
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [FormulaParser.Id]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 369
+                self.state = 438
                 self.match(FormulaParser.Id)
                 pass
             elif token in [FormulaParser.DECIMAL, FormulaParser.REAL, FormulaParser.FRAC, FormulaParser.STRING]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 370
+                self.state = 439
                 self.constant()
                 pass
             else:
@@ -3511,11 +4047,11 @@ class FormulaParser ( Parser ):
     def constant(self):
 
         localctx = FormulaParser.ConstantContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 68, self.RULE_constant)
+        self.enterRule(localctx, 88, self.RULE_constant)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 373
+            self.state = 442
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.DECIMAL) | (1 << FormulaParser.REAL) | (1 << FormulaParser.FRAC) | (1 << FormulaParser.STRING))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -3575,11 +4111,11 @@ class FormulaParser ( Parser ):
     def binOp(self):
 
         localctx = FormulaParser.BinOpContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 70, self.RULE_binOp)
+        self.enterRule(localctx, 90, self.RULE_binOp)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 375
+            self.state = 444
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.PLUS) | (1 << FormulaParser.MINUS) | (1 << FormulaParser.MUL) | (1 << FormulaParser.DIV) | (1 << FormulaParser.MOD))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -3645,11 +4181,11 @@ class FormulaParser ( Parser ):
     def relOp(self):
 
         localctx = FormulaParser.RelOpContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 72, self.RULE_relOp)
+        self.enterRule(localctx, 92, self.RULE_relOp)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 377
+            self.state = 446
             _la = self._input.LA(1)
             if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << FormulaParser.COLON) | (1 << FormulaParser.EQ) | (1 << FormulaParser.NE) | (1 << FormulaParser.LE) | (1 << FormulaParser.GE) | (1 << FormulaParser.LT) | (1 << FormulaParser.GT))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -3700,11 +4236,11 @@ class FormulaParser ( Parser ):
     def funModifier(self):
 
         localctx = FormulaParser.FunModifierContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 74, self.RULE_funModifier)
+        self.enterRule(localctx, 94, self.RULE_funModifier)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 379
+            self.state = 448
             _la = self._input.LA(1)
             if not(_la==FormulaParser.STRONGARROW or _la==FormulaParser.WEAKARROW):
                 self._errHandler.recoverInline(self)
@@ -3724,7 +4260,7 @@ class FormulaParser ( Parser ):
     def sempred(self, localctx:RuleContext, ruleIndex:int, predIndex:int):
         if self._predicates == None:
             self._predicates = dict()
-        self._predicates[32] = self.arithmeticTerm_sempred
+        self._predicates[42] = self.arithmeticTerm_sempred
         pred = self._predicates.get(ruleIndex, None)
         if pred is None:
             raise Exception("No predicate with index:" + str(ruleIndex))

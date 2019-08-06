@@ -1,4 +1,4 @@
-# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/parser\Formula.g4 by ANTLR 4.7.2
+# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .FormulaParser import FormulaParser
@@ -7,6 +7,42 @@ else:
 
 # This class defines a complete listener for a parse tree produced by FormulaParser.
 class FormulaListener(ParseTreeListener):
+
+    # Enter a parse tree produced by FormulaParser#config.
+    def enterConfig(self, ctx:FormulaParser.ConfigContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#config.
+    def exitConfig(self, ctx:FormulaParser.ConfigContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#sentenceConfig.
+    def enterSentenceConfig(self, ctx:FormulaParser.SentenceConfigContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#sentenceConfig.
+    def exitSentenceConfig(self, ctx:FormulaParser.SentenceConfigContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#settingList.
+    def enterSettingList(self, ctx:FormulaParser.SettingListContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#settingList.
+    def exitSettingList(self, ctx:FormulaParser.SettingListContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#setting.
+    def enterSetting(self, ctx:FormulaParser.SettingContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#setting.
+    def exitSetting(self, ctx:FormulaParser.SettingContext):
+        pass
+
 
     # Enter a parse tree produced by FormulaParser#program.
     def enterProgram(self, ctx:FormulaParser.ProgramContext):
@@ -71,6 +107,60 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by FormulaParser#modelBody.
+    def enterModelBody(self, ctx:FormulaParser.ModelBodyContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelBody.
+    def exitModelBody(self, ctx:FormulaParser.ModelBodyContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#modelSentence.
+    def enterModelSentence(self, ctx:FormulaParser.ModelSentenceContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelSentence.
+    def exitModelSentence(self, ctx:FormulaParser.ModelSentenceContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#modelContractConf.
+    def enterModelContractConf(self, ctx:FormulaParser.ModelContractConfContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelContractConf.
+    def exitModelContractConf(self, ctx:FormulaParser.ModelContractConfContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#modelContract.
+    def enterModelContract(self, ctx:FormulaParser.ModelContractContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelContract.
+    def exitModelContract(self, ctx:FormulaParser.ModelContractContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#cardSpec.
+    def enterCardSpec(self, ctx:FormulaParser.CardSpecContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#cardSpec.
+    def exitCardSpec(self, ctx:FormulaParser.CardSpecContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#modelSigConfig.
+    def enterModelSigConfig(self, ctx:FormulaParser.ModelSigConfigContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelSigConfig.
+    def exitModelSigConfig(self, ctx:FormulaParser.ModelSigConfigContext):
+        pass
+
+
     # Enter a parse tree produced by FormulaParser#modelIntro.
     def enterModelIntro(self, ctx:FormulaParser.ModelIntroContext):
         pass
@@ -89,12 +179,39 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by FormulaParser#modelFactList.
+    def enterModelFactList(self, ctx:FormulaParser.ModelFactListContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelFactList.
+    def exitModelFactList(self, ctx:FormulaParser.ModelFactListContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#modelFact.
+    def enterModelFact(self, ctx:FormulaParser.ModelFactContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#modelFact.
+    def exitModelFact(self, ctx:FormulaParser.ModelFactContext):
+        pass
+
+
     # Enter a parse tree produced by FormulaParser#domain.
     def enterDomain(self, ctx:FormulaParser.DomainContext):
         pass
 
     # Exit a parse tree produced by FormulaParser#domain.
     def exitDomain(self, ctx:FormulaParser.DomainContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#domainSigConfig.
+    def enterDomainSigConfig(self, ctx:FormulaParser.DomainSigConfigContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#domainSigConfig.
+    def exitDomainSigConfig(self, ctx:FormulaParser.DomainSigConfigContext):
         pass
 
 
@@ -116,30 +233,21 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#DomTypeSentence.
-    def enterDomTypeSentence(self, ctx:FormulaParser.DomTypeSentenceContext):
+    # Enter a parse tree produced by FormulaParser#domSentenceConfig.
+    def enterDomSentenceConfig(self, ctx:FormulaParser.DomSentenceConfigContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#DomTypeSentence.
-    def exitDomTypeSentence(self, ctx:FormulaParser.DomTypeSentenceContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#DomRuleSentence.
-    def enterDomRuleSentence(self, ctx:FormulaParser.DomRuleSentenceContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#DomRuleSentence.
-    def exitDomRuleSentence(self, ctx:FormulaParser.DomRuleSentenceContext):
+    # Exit a parse tree produced by FormulaParser#domSentenceConfig.
+    def exitDomSentenceConfig(self, ctx:FormulaParser.DomSentenceConfigContext):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#DomConformsSentence.
-    def enterDomConformsSentence(self, ctx:FormulaParser.DomConformsSentenceContext):
+    # Enter a parse tree produced by FormulaParser#domSentence.
+    def enterDomSentence(self, ctx:FormulaParser.DomSentenceContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#DomConformsSentence.
-    def exitDomConformsSentence(self, ctx:FormulaParser.DomConformsSentenceContext):
+    # Exit a parse tree produced by FormulaParser#domSentence.
+    def exitDomSentence(self, ctx:FormulaParser.DomSentenceContext):
         pass
 
 
@@ -224,24 +332,6 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#modelFactList.
-    def enterModelFactList(self, ctx:FormulaParser.ModelFactListContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#modelFactList.
-    def exitModelFactList(self, ctx:FormulaParser.ModelFactListContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#modelFact.
-    def enterModelFact(self, ctx:FormulaParser.ModelFactContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#modelFact.
-    def exitModelFact(self, ctx:FormulaParser.ModelFactContext):
-        pass
-
-
     # Enter a parse tree produced by FormulaParser#formulaRule.
     def enterFormulaRule(self, ctx:FormulaParser.FormulaRuleContext):
         pass
@@ -278,12 +368,30 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#PredConstraint.
-    def enterPredConstraint(self, ctx:FormulaParser.PredConstraintContext):
+    # Enter a parse tree produced by FormulaParser#TermConstraint.
+    def enterTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#PredConstraint.
-    def exitPredConstraint(self, ctx:FormulaParser.PredConstraintContext):
+    # Exit a parse tree produced by FormulaParser#TermConstraint.
+    def exitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#TermConstraintWithAlias.
+    def enterTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#TermConstraintWithAlias.
+    def exitTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def enterBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def exitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
         pass
 
 
@@ -296,30 +404,12 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#BinaryConstraint.
-    def enterBinaryConstraint(self, ctx:FormulaParser.BinaryConstraintContext):
+    # Enter a parse tree produced by FormulaParser#SetComprehensionConstraint.
+    def enterSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#BinaryConstraint.
-    def exitBinaryConstraint(self, ctx:FormulaParser.BinaryConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#TypeConstraint.
-    def enterTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#TypeConstraint.
-    def exitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#VariableBindingConstraint.
-    def enterVariableBindingConstraint(self, ctx:FormulaParser.VariableBindingConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#VariableBindingConstraint.
-    def exitVariableBindingConstraint(self, ctx:FormulaParser.VariableBindingConstraintContext):
+    # Exit a parse tree produced by FormulaParser#SetComprehensionConstraint.
+    def exitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
         pass
 
 
@@ -332,57 +422,30 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def enterSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
+    # Enter a parse tree produced by FormulaParser#TypeConstraint.
+    def enterTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def exitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#term.
-    def enterTerm(self, ctx:FormulaParser.TermContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#term.
-    def exitTerm(self, ctx:FormulaParser.TermContext):
+    # Exit a parse tree produced by FormulaParser#TypeConstraint.
+    def exitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#terms.
-    def enterTerms(self, ctx:FormulaParser.TermsContext):
+    # Enter a parse tree produced by FormulaParser#funcTerm.
+    def enterFuncTerm(self, ctx:FormulaParser.FuncTermContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#terms.
-    def exitTerms(self, ctx:FormulaParser.TermsContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#compositionalTerm.
-    def enterCompositionalTerm(self, ctx:FormulaParser.CompositionalTermContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#compositionalTerm.
-    def exitCompositionalTerm(self, ctx:FormulaParser.CompositionalTermContext):
+    # Exit a parse tree produced by FormulaParser#funcTerm.
+    def exitFuncTerm(self, ctx:FormulaParser.FuncTermContext):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#NestedCompositionalTerm.
-    def enterNestedCompositionalTerm(self, ctx:FormulaParser.NestedCompositionalTermContext):
+    # Enter a parse tree produced by FormulaParser#funcTermList.
+    def enterFuncTermList(self, ctx:FormulaParser.FuncTermListContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#NestedCompositionalTerm.
-    def exitNestedCompositionalTerm(self, ctx:FormulaParser.NestedCompositionalTermContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#NonNestedCompositionalTerm.
-    def enterNonNestedCompositionalTerm(self, ctx:FormulaParser.NonNestedCompositionalTermContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#NonNestedCompositionalTerm.
-    def exitNonNestedCompositionalTerm(self, ctx:FormulaParser.NonNestedCompositionalTermContext):
+    # Exit a parse tree produced by FormulaParser#funcTermList.
+    def exitFuncTermList(self, ctx:FormulaParser.FuncTermListContext):
         pass
 
 

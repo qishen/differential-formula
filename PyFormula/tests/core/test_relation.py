@@ -1,12 +1,12 @@
 import unittest
 
-from modules.relation import *
+from executer.relation import *
 
 
 class RelationTestCase(unittest.TestCase):
 
     def test_relation(self):
-        link = Relation('link', ['src', 'dst'], ["string", "string"])
+        link = BasicType('link', ['src', 'dst'], ["string", "string"])
         link.data['hello'] = 1
         link.delta_data['world'] = 2
 

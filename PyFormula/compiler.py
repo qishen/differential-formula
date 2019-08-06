@@ -1,19 +1,22 @@
 import logging
-import networkx as nx
-
-from antlr4 import *
-#from parser.gen.FormulaLexer import FormulaLexer
-#from parser.gen.FormulaParser import FormulaParser
-
-
 from collections import Counter
+
+import networkx as nx
+from antlr4 import *
+
+from grammar.visitor import ExprVisitor
+from grammar.gen.FormulaLexer import FormulaLexer
+from grammar.gen.FormulaParser import FormulaParser
 
 
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
     def __init__(self, relations, rules, logger_disabled=False):
+        self.domains = {}
         self.relation_map = {}
         self.rules = rules
+        self.stratified_rules = self.stratify_rules()
+
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             self.logger.addHandler(logging.StreamHandler())
@@ -24,16 +27,18 @@ class Compiler:
         for relation in relations:
             self.relation_map[relation.name] = relation
 
-    '''
     def parse_string(self, file_str):
-        input_strean = FileStream(file_str)
-        lexer = FormulaLexer(input_strean)
+        input_stream = InputStream(file_str)
+        lexer = FormulaLexer(input_stream)
         stream = CommonTokenStream(lexer)
         parser = FormulaParser(stream)
-    '''
+        program = parser.program()
+        visitor = ExprVisitor()
+        visitor.visit(program)
+        domain_map = visitor.domains
 
     def parse_file(self, filename):
-        pass
+        file_stream = FileStream(filename)
 
     def stratify_rules(self):
         idb = {}
@@ -184,5 +189,6 @@ class Compiler:
             count = changes[fact]
             fact.relation.add_delta_fact(fact, count)
 
-        for rule in self.rules:
-            self.execute_rule(rule)
+        for cluster in self.stratified_rules:
+            for rule in cluster:
+                self.execute_rule(rule)
