@@ -7,7 +7,7 @@ from grammar.nodes.type import TypeNode, UnionTypeNode
 from grammar.nodes.enum import EnumNode, RangeNode
 from grammar.nodes.term import CompositeTermNode, VariableTermNode, ConstantNode
 from grammar.nodes.rule import RuleNode
-from grammar.nodes.constraint import *
+from grammar.nodes.constraint import TermConstraintNode
 
 from executer.rule import Rule
 from executer.relation import *
@@ -26,7 +26,7 @@ class ExprVisitor(FormulaVisitor):
         return modelrefs
 
     def visitModRef(self, ctx:FormulaParser.ModRefContext):
-        return None
+        return ctx.Id(0).getText()
 
     def visitDomain(self, ctx:FormulaParser.DomainContext):
         sig_node = self.visit(ctx.domainSigConfig())
@@ -147,15 +147,16 @@ class ExprVisitor(FormulaVisitor):
 
     def visitConstant(self, ctx:FormulaParser.ConstantContext):
         if ctx.DECIMAL():
-            return int(ctx.DECIMAL().getText())
+            constant = int(ctx.DECIMAL().getText())
         elif ctx.REAL():
-            return float(ctx.REAL().getText())
+            constant = float(ctx.REAL().getText())
         elif ctx.FRAC():
             pass
         elif ctx.STRING():
-            return ctx.STRING().getText()
+            constant = ctx.STRING().getText().strip('\"')
         else:
             raise Exception('Wrong input to represent constants!')
+        return ConstantNode(constant)
 
     def visitModel(self, ctx:FormulaParser.ModelContext):
         if ctx.modelBody():
@@ -173,18 +174,18 @@ class ExprVisitor(FormulaVisitor):
         return msc
 
     def visitModelSig(self, ctx:FormulaParser.ModelSigContext):
-        is_partial, model_name, model_ref_node = self.visit(ctx.modelIntro())
+        is_partial, model_name, model_ref_name = self.visit(ctx.modelIntro())
         # some model refs to be included or extended
         # model_refs = self.visit(ctx.modRefs())
-        return ModelSigConfigNode(is_partial, model_name, model_ref_node)
+        return ModelSigConfigNode(is_partial, model_name, model_ref_name)
 
     def visitModelIntro(self, ctx:FormulaParser.ModelIntroContext):
         is_partial = False
         if ctx.PARTIAL():
             is_partial = True
         model_name = ctx.Id().getText()
-        model_ref_node = self.visit(ctx.modRef())
-        return is_partial, model_name, model_ref_node
+        model_ref_name = self.visit(ctx.modRef())
+        return is_partial, model_name, model_ref_name
 
     def visitModelBody(self, ctx:FormulaParser.ModelBodyContext):
         fact_sentence_nodes = []
@@ -233,7 +234,7 @@ class ExprVisitor(FormulaVisitor):
             alias, fact_node = self.visit(fact)
             facts.append(fact_node)
             if alias:
-                alias_map[alias] = fact_node
+                alias_map[fact_node] = alias
         return alias_map, facts
 
     def visitFormulaRule(self, ctx:FormulaParser.FormulaRuleContext):
@@ -261,7 +262,8 @@ class ExprVisitor(FormulaVisitor):
 
     def visitAtom(self, ctx:FormulaParser.AtomContext):
         if ctx.Id():
-            return ctx.Id().getText()
+            variable = ctx.Id().getText()
+            return VariableTermNode(variable)
         else:
             return self.visit(ctx.constant())
 

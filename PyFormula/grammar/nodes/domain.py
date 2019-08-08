@@ -20,6 +20,9 @@ class DomainNode:
             elif type(node) is RuleNode:
                 self.rules.append(node)
 
+    def validate(self):
+        pass
+
 
 class DomainSigConfigNode:
     def __init__(self, name, inherit_type, modrefs):

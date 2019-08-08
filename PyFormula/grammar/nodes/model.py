@@ -1,7 +1,7 @@
 class ModelNode:
     def __init__(self, domain_sig, model_fact_list):
         self.domain_sig = domain_sig
-        self.facts = model_fact_list
+        self.fact_list_node = model_fact_list
 
 
 class ModelFactListNode:
@@ -11,7 +11,7 @@ class ModelFactListNode:
 
 
 class ModelSigConfigNode:
-    def __init__(self, is_partial, model_name, model_ref):
+    def __init__(self, is_partial, model_name, model_ref_name):
         self.is_partial = is_partial
         self.model_name = model_name
-        self.domain = model_ref
+        self.domain = model_ref_name

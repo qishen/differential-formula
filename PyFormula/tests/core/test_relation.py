@@ -4,6 +4,11 @@ from executer.relation import *
 
 
 class RelationTestCase(unittest.TestCase):
+    def test_builtin_type(self):
+        t1 = BuiltInType('String')
+        t2 = BuiltInType('String')
+        self.assertIs(t1, t2)
+        self.assertEqual(t1, t2)
 
     def test_relation(self):
         link = BasicType('link', ['src', 'dst'], ["string", "string"])

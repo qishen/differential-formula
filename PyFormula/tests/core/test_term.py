@@ -28,7 +28,7 @@ class TermTestCase(unittest.TestCase):
 
     def test_bindings_propagation(self):
         link = BasicType('link', ['src', 'dst'], ["string", "string"])
-        string_sort = Relation('string')
+        string_sort = BaseType('string')
         link_x_z_term = Composite(link, [Variable('X', string_sort), Variable('Z', string_sort)])
         bindings = {Variable('X', string_sort): Atom('hello'), Variable('Z', string_sort): Atom('world')}
         t = link_x_z_term.propagate_bindings(bindings)

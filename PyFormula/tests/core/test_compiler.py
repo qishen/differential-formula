@@ -11,6 +11,7 @@ class RuleTransformationTestCase(unittest.TestCase):
     def setUp(self) -> None:
         pass
 
+    @unittest.skip("Skip temporarily")
     def test_rules_stratification(self):
         string_sort = BasicType('string')
         link = BasicType('link', ['src', 'dst'], ["string", "string"])
@@ -108,7 +109,7 @@ class FullyConnectedGraphTestCase(BaseLinkTestCase):
         self.compiler = Compiler(relations, rules)
         self.logger = self.compiler.logger
 
-    @unittest.skip("Skip temporarily")
+    #@unittest.skip("Skip temporarily")
     def test_fully_connected_graph(self):
         nodes_raw = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
         link_facts = []

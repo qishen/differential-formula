@@ -1,6 +1,6 @@
 from enum import Enum
 
-from executer.relation import BasicType
+from executer.relation import *
 
 
 # A term can be atom, variable or composition of terms
@@ -132,11 +132,11 @@ class Atom(Term):
     def __init__(self, value):
         # Determine the sort of basic atom value.
         if type(value) is str:
-            sort = BasicType('string')
+            sort = BuiltInType('String')
         elif type(value) is int:
-            sort = BasicType('integer')
+            sort = BuiltInType('Integer')
         else:
-            sort = BasicType('float')
+            sort = BuiltInType('Float')
 
         super().__init__(sort)
         self.val = value
@@ -184,11 +184,11 @@ class Variable(Term):
             return False
 
     def propagate_bindings(self, bindings):
-        for (v, t) in bindings.items():
-            # Don't have to deep clone for a new term because ground term is immutable.
-            if self == v:
-                return bindings[v]
-        return self
+        # Don't have to deep clone for a new term because ground term is immutable.
+        if self in bindings:
+            return bindings[self]
+        else:
+            return self
 
     def check_ground_term(self):
         return False
