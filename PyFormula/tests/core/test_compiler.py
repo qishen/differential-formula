@@ -169,11 +169,11 @@ class FullyConnectedGraphTestCase(unittest.TestCase):
                 p(x,y,z) :- link(x,z), link(z,y), link(y,z).  
             }
         '''
-        # Fully connected graph has too many edges and would be easy to entered using APIs instead of writing models.
+        # Fully connected graph has too many edges and would be easy to enter data using APIs instead of writing models.
         self.compiler = Compiler()
         self.logger = self.compiler.logger
 
-    #@unittest.skip("Skip temporarily")
+    @unittest.skip("Skip temporarily")
     def test_fully_connected_graph(self):
         self.compiler.parse(file_str=self.domain_str)
 
@@ -196,18 +196,7 @@ class FullyConnectedGraphTestCase(unittest.TestCase):
         p = domain.type_map['p']
         p_index = model.type_index_map[p]
         print('Number of facts in p relation is %s' % p_index.facts_count())
-
-    @unittest.skip("Skip temporarily")
-    def test_small_graph(self):
-        link_facts_raw = [['a', 'b'], ['a', 'c'], ['a', 'd'], ['a', 'e'],
-                          ['b', 'f'], ['c', 'g'], ['d', 'h'], ['e', 'i']]
-        link_facts = [Composite(self.link, [Atom(t[0]), Atom(t[1])]) for t in link_facts_raw]
-        self.compiler.compile(link_facts)
-
-        self.logger.info('-------------------------------------')
-        self.logger.info('--- Print out initial model facts ---')
-        self.logger.info('-------------------------------------')
-        self.compiler.print_all_facts()
+        self.assertEqual(p_index.facts_count(), 1000)
 
 
 class RecursiveLinkClass(BaseLinkTestCase):

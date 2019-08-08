@@ -21,6 +21,7 @@ class Domain:
     def stratify_rules(self):
         idb = {}
         edb = {}
+        edb_only = {}
 
         # All predicates in head belong to IDB, the rest of preds belong to EDB
         for rule in self.rules:
@@ -57,6 +58,17 @@ class Domain:
         mapping = cg.graph['mapping']
 
         rule_clusters = []
+
+        '''
+        Dependency graph may be empty if some IDB are not in graph and 
+        a rule with only EDB in body can be left out.
+        '''
+        rule_cluster = []
+        for sort in idb:
+            if sort not in mapping:
+                rule_cluster += idb[sort]
+        rule_clusters.append(rule_cluster)
+
         for cluster_id in nx.topological_sort(cg):
             rule_cluster = []
             for node in mapping:
