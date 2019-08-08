@@ -20,7 +20,7 @@ from executer.rule import *
 
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
-    def __init__(self, relations, rules, logger_disabled=False):
+    def __init__(self, logger_disabled=False):
         self.programs = {}
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -29,18 +29,60 @@ class Compiler:
         if logger_disabled:
             self.logger.disabled = True
 
-    def parse_file(self, filename):
-        file_stream = FileStream(filename)
+    def print_all_facts(self, model_name):
+        model = self.find_model_by_name(model_name)
+        for index in model.type_index_map.values():
+            self.logger.debug(index)
 
-    def parse_string(self, file_str):
-        fake_filename = 'Program-' + str(hash(file_str)) + '.4ml'
-        input_stream = InputStream(file_str)
-        lexer = FormulaLexer(input_stream)
+    def execute_model(self, model_name):
+        model = self.find_model_by_name(model_name)
+        if model:
+            model.compile()
+        else:
+            self.logger.info('Cannot find the model with name %s' % model_name)
+
+    def generate_model(self, domain_name, model_name):
+        domain = self.find_domain_by_name(domain_name)
+        model = Model(model_name, domain)
+        domain.model_map[model] = model
+        return model
+
+    def make_changes_and_execute(self, model_name, changes):
+        model = self.find_model_by_name(model_name)
+        if model:
+            model.add_changes(changes)
+        else:
+            self.logger.info('Cannot find the model with name %s' % model_name)
+
+    def find_domain_by_name(self, name):
+        for program in self.programs:
+            domain_map = self.programs[program]
+            for domain in domain_map.values():
+                if domain.domain_name == name:
+                    return domain
+        raise Exception('No domain with name %s is found.' % name)
+
+    def find_model_by_name(self, name):
+        for program in self.programs:
+            domain_map = self.programs[program]
+            for domain in domain_map.values():
+                for model in domain.model_map.values():
+                    if model.model_name == name:
+                        return model
+        raise Exception('No model with name %s is found.' % name)
+
+    def parse(self, file_str=None, filename=None):
+        if file_str:
+            filename = 'Program-' + str(hash(file_str)) + '.4ml'
+            stream = InputStream(file_str)
+        else:
+            stream = FileStream(filename)
+        lexer = FormulaLexer(stream)
         stream = CommonTokenStream(lexer)
         parser = FormulaParser(stream)
         program = parser.program()
         domain_map, model_map = self.load_program(program)
-        self.programs[fake_filename] = domain_map
+        self.programs[filename] = domain_map
 
     def load_program(self, program):
         visitor = ExprVisitor()
@@ -108,7 +150,11 @@ class Compiler:
             domain_name = model_sig_node.domain
 
             for fact_node in fact_nodes:
-                alias = alias_map[fact_node]
+                if fact_node in alias_map:
+                    alias = alias_map[fact_node]
+                else:
+                    alias = None
+
                 if type(fact_node) is CompositeTermNode:
                     fact = self.load_term_node(fact_node, type_map)
                     if alias:
@@ -121,7 +167,7 @@ class Compiler:
                 self.replace_variables(fact, alias_to_fact_map)
 
             domain = domain_map[domain_name]
-            model = Model(model_name, domain)
+            model = Model(model_name, domain, facts)
             domain.add_model(model_name, model)
             model_map[model_name] = model
 
@@ -144,13 +190,7 @@ class Compiler:
                     self.replace_variables(subterm, alias_to_fact_map)
 
     def load_term_node(self, term_node, type_map, var_type=None):
-        """
-        Turn a term node from parser to a real term.
-        :param term_node:
-        :param type_map:
-        :param var_type:
-        :return:
-        """
+        # Turn AST node into a real FORMULA term.
         if type(term_node) is CompositeTermNode:
             type_name = term_node.type
             sort = type_map[type_name]
@@ -168,107 +208,3 @@ class Compiler:
         elif type(term_node) is ConstantNode:
             # TODO: Add type to atom node as well.
             return Atom(term_node.constant)
-
-    def print_all_facts(self):
-        for name in self.relation_map:
-            self.logger.debug(self.relation_map[name])
-
-    def compile(self, facts):
-        """
-        Initial compilation will treat facts as changes to empty dataset
-        and incrementally execute all rules.
-        :param facts:
-        :return:
-        """
-        changes = {}
-        for fact in facts:
-            changes[fact] = 1
-
-        self.add_changes(changes)
-        self.merge_delta_data()
-
-    def merge_delta_data(self):
-        """
-        Merge delta data dict into data dict after all rules are executed.
-        :return:
-        """
-        for name in self.relation_map:
-            relation = self.relation_map[name]
-            relation.merge_delta_into_data()
-
-    def print_bindings_list(self, bindings_counter):
-        """
-        Use default logger to print out all existing bindings of variables to terms with count.
-        :param bindings_list:
-        :return:
-        """
-        if len(bindings_counter) == 0:
-            self.logger.debug('No bindings available for current rule.')
-        else:
-            self.logger.debug(str(bindings_counter))
-
-    def execute_rule(self, rule):
-        new_fact_counter = Counter()
-        delta_rules = rule.derive_delta_rules()
-        for delta_rule in delta_rules:
-
-            self.logger.info(delta_rule)
-
-            bindings_counter = delta_rule.find_match()
-
-            self.print_bindings_list(bindings_counter)
-
-            for bindings in bindings_counter:
-                bindings_count = bindings_counter[bindings]
-                for constraint in delta_rule.head:
-                    head_term = constraint.term
-                    fact = head_term.propagate_bindings(bindings)
-
-                    self.logger.debug('%s -> %s' % (fact, bindings_count))
-
-                    # new derived fact could be a duplicate in old data set.
-                    new_fact_counter.update({fact: bindings_count})
-            self.logger.debug('\n')
-
-        ''' 
-        Note that counting algorithm is not efficient for recursive rule execution and does not 
-        terminate on some situations.
-        '''
-        if rule.has_recursion:
-            ''' Merge delta data and find all new derived facts that does not exist in data.'''
-            self.merge_delta_data()
-            non_duplicate_facts = {}
-            for fact in new_fact_counter:
-                if fact not in fact.sort.data:
-                    non_duplicate_facts[fact] = new_fact_counter[fact]
-            ''' 
-            Add all derived facts into delta data no matter if some facts are duplicates,
-            if derived facts have non-duplicate facts then execute the same rule again.
-            '''
-            self.insert_delta_facts(new_fact_counter)
-            if len(non_duplicate_facts) > 0:
-                self.execute_rule(rule)
-        else:
-            # Directly add new derived terms to delta data and merge delta data into data for non-recursive rule
-            self.insert_delta_facts(new_fact_counter)
-
-    def insert_delta_facts(self, facts_dict):
-        """
-        Add every fact into delta data section of its own relation with count.
-        :param facts_dict:
-        :return:
-        """
-        for fact in facts_dict:
-            count = facts_dict[fact]
-            fact.sort.add_delta_fact(fact, count)
-
-    def add_changes(self, changes):
-        for fact in changes:
-            count = changes[fact]
-            fact.relation.add_delta_fact(fact, count)
-
-        for cluster in self.stratified_rules:
-            for rule in cluster:
-                self.execute_rule(rule)
-
-

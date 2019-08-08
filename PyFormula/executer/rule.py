@@ -163,7 +163,7 @@ class Rule:
 
         return bindings_counter
 
-    def find_match(self):
+    def find_match(self, type_index_map):
         """
         Implementation of Counting Algorithm for rule execution
         :return:
@@ -173,11 +173,13 @@ class Rule:
         Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
         '''
         for constraint in self.term_constraints:
+            index = type_index_map[constraint.term.sort]
             ''' Can be either original, delta or combined fact set data depending on constraint prefix. '''
-            factset = constraint.get_factset_for_pred()
+            factset = constraint.get_factset_for_pred(index)
             new_bindings_counter = BindingsCounter()
 
             ''' No bindings since factset is empty, return [] immediately '''
+            # TODO: implement early termination if one of the constraint has an empty data set.
             if len(factset) == 0:
                 return BindingsCounter()
 
@@ -209,6 +211,8 @@ class Rule:
         for negated_constraint in self.negated_constraints:
             delete_bindings_list = []
             negated_term = negated_constraint.term
+            index = type_index_map[negated_term.sort]
+
             for bindings in bindings_counter:
                 count = bindings_counter[bindings]
                 binded_negated_term = negated_term.propagate_bindings(bindings)
@@ -224,10 +228,10 @@ class Rule:
                         2. t in delta Q and t not in Q --> count = -1
                         3. delta Q is empty, simply remove the binding tuple.
                         '''
-                        if binded_negated_term in negated_term.sort.delta_data and binded_negated_term not in negated_term.sort.combined_data:
-                            negated_term.sort.delta_negated_data[binded_negated_term] = 1
-                        elif binded_negated_term in negated_term.sort.delta_data and binded_negated_term not in negated_term.sort.data:
-                            negated_term.sort.delta_negated_data[binded_negated_term] = -1
+                        if binded_negated_term in index.delta_data and binded_negated_term not in index.combined_data:
+                            index.delta_negated_data[binded_negated_term] = 1
+                        elif binded_negated_term in index.delta_data and binded_negated_term not in index.data:
+                            index.delta_negated_data[binded_negated_term] = -1
                             ''' Update bindings count regarding negated constraint and 
                                 there can be only one delta negated constraint in rule'''
                             new_count = count * -1
@@ -237,14 +241,14 @@ class Rule:
                             delete_bindings_list.append(bindings)
                     else:
                         if negated_constraint.pred_type == PredType.ORIGINAL:
-                            terms = negated_term.sort.data
+                            terms = index.data
                         elif negated_constraint.pred_type == PredType.COMBINED:
-                            terms = negated_term.sort.combined_data
+                            terms = index.combined_data
                         ''' 
                         Remove the binding if negated term is not satisfied.
                         '''
                         if binded_negated_term not in terms:
-                            negated_term.sort.negated_data[binded_negated_term] = 1
+                            index.negated_data[binded_negated_term] = 1
                         else:
                             delete_bindings_list.append(bindings)
 

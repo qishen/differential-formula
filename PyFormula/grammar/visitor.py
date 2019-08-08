@@ -222,6 +222,7 @@ class ExprVisitor(FormulaVisitor):
         pass
 
     def visitModelFact(self, ctx:FormulaParser.ModelFactContext):
+        alias = None
         if ctx.Id():
             alias = ctx.Id().getText()
         fact = self.visit(ctx.funcTerm())

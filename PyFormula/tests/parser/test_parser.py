@@ -24,5 +24,5 @@ class ParserTestCase(unittest.TestCase):
                 e2 is Edge(Node("world"), n1).
             }
         '''
-        self.compiler.parse_string(formula_str)
+        self.compiler.parse(file_str=formula_str)
 

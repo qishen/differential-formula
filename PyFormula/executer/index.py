@@ -41,7 +41,7 @@ class TermIndex:
                     string += str(fact) + ' -> ' + str(data[fact]) + '\n'
             return string
 
-        output = '------------ Model facts on type %s ---------------\n' % self.name
+        output = '------------ Model facts on type %s ---------------\n' % self.type.name
 
         for t in [('Data', self.data), ('Delta Data', self.delta_data), \
                   ('Negated Data', self.negated_data), ('Delta Negated Data', self.delta_negated_data)]:

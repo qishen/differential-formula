@@ -50,7 +50,7 @@ class BasicType(BaseType):
     def __str__(self):
         type_str = self.name + '('
         for i in range(len(self.types)):
-            type_str += self.labels[i] + ':' + self.types[i].name + ','
+            type_str += self.labels[i] + ':' + self.types[i] + ','
         type_str += ')'
         return type_str
 

@@ -43,37 +43,34 @@ class Predicate(Constraint):
         factset = self.get_factset_for_pred()
         return len(factset)
 
-    def get_factset_for_pred(self, optimized=False):
+    def get_factset_for_pred(self, index, optimized=False):
         """
         Return the right factset for predicate constraint, which can be one of
         three fact sets: Existing fact set, Delta fact set and combined fact set.
         :param optimized:
         :return:
         """
-        relation = self.get_relation()
         if self.pred_type == PredType.ORIGINAL:
-            factset = relation.data
+            factset = index.data
         elif self.pred_type == PredType.DELTA:
             if optimized:
-                factset = relation.optimized_delta_data
+                factset = index.optimized_delta_data
             else:
-                factset = relation.delta_data
+                factset = index.delta_data
         else:
-            factset = relation.combined_data
+            factset = index.combined_data
         return factset
 
-    def get_factset_for_negated_pred(self):
-        relation = self.get_relation()
+    def get_factset_for_negated_pred(self, index):
         if not self.negated:
             raise Exception('The constraint has to be a negated predicate.')
         if self.pred_type == PredType.ORIGINAL:
-            factset = relation.negated_data
+            factset = index.negated_data
         elif self.pred_type == PredType.DELTA:
-            factset = relation.delta_negated_data
+            factset = index.delta_negated_data
         else:
-            factset = relation.combined_negated_data
+            factset = index.combined_negated_data
         return factset
-
 
 
 class Binary(Constraint):
