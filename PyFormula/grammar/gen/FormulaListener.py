@@ -350,6 +350,42 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by FormulaParser#aggregation.
+    def enterAggregation(self, ctx:FormulaParser.AggregationContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#aggregation.
+    def exitAggregation(self, ctx:FormulaParser.AggregationContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#oneArgAggregation.
+    def enterOneArgAggregation(self, ctx:FormulaParser.OneArgAggregationContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#oneArgAggregation.
+    def exitOneArgAggregation(self, ctx:FormulaParser.OneArgAggregationContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#twoArgAggregation.
+    def enterTwoArgAggregation(self, ctx:FormulaParser.TwoArgAggregationContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#twoArgAggregation.
+    def exitTwoArgAggregation(self, ctx:FormulaParser.TwoArgAggregationContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#threeArgAggregation.
+    def enterThreeArgAggregation(self, ctx:FormulaParser.ThreeArgAggregationContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#threeArgAggregation.
+    def exitThreeArgAggregation(self, ctx:FormulaParser.ThreeArgAggregationContext):
+        pass
+
+
     # Enter a parse tree produced by FormulaParser#disjunction.
     def enterDisjunction(self, ctx:FormulaParser.DisjunctionContext):
         pass
@@ -368,51 +404,6 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#TermConstraint.
-    def enterTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#TermConstraint.
-    def exitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#TermConstraintWithAlias.
-    def enterTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#TermConstraintWithAlias.
-    def exitTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
-    def enterBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
-    def exitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#AggregationCountConstraint.
-    def enterAggregationCountConstraint(self, ctx:FormulaParser.AggregationCountConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#AggregationCountConstraint.
-    def exitAggregationCountConstraint(self, ctx:FormulaParser.AggregationCountConstraintContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def enterSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def exitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
-        pass
-
-
     # Enter a parse tree produced by FormulaParser#DerivedConstantConstraint.
     def enterDerivedConstantConstraint(self, ctx:FormulaParser.DerivedConstantConstraintContext):
         pass
@@ -422,12 +413,48 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by FormulaParser#TermConstraint.
+    def enterTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#TermConstraint.
+    def exitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#SetEmptyConstraint.
+    def enterSetEmptyConstraint(self, ctx:FormulaParser.SetEmptyConstraintContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#SetEmptyConstraint.
+    def exitSetEmptyConstraint(self, ctx:FormulaParser.SetEmptyConstraintContext):
+        pass
+
+
     # Enter a parse tree produced by FormulaParser#TypeConstraint.
     def enterTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
         pass
 
     # Exit a parse tree produced by FormulaParser#TypeConstraint.
     def exitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#NamedTermConstraint.
+    def enterNamedTermConstraint(self, ctx:FormulaParser.NamedTermConstraintContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#NamedTermConstraint.
+    def exitNamedTermConstraint(self, ctx:FormulaParser.NamedTermConstraintContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def enterBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def exitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
         pass
 
 
@@ -449,12 +476,12 @@ class FormulaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by FormulaParser#ParenthesisArithTerm.
-    def enterParenthesisArithTerm(self, ctx:FormulaParser.ParenthesisArithTermContext):
+    # Enter a parse tree produced by FormulaParser#BaseArithTerm.
+    def enterBaseArithTerm(self, ctx:FormulaParser.BaseArithTermContext):
         pass
 
-    # Exit a parse tree produced by FormulaParser#ParenthesisArithTerm.
-    def exitParenthesisArithTerm(self, ctx:FormulaParser.ParenthesisArithTermContext):
+    # Exit a parse tree produced by FormulaParser#BaseArithTerm.
+    def exitBaseArithTerm(self, ctx:FormulaParser.BaseArithTermContext):
         pass
 
 
@@ -464,6 +491,15 @@ class FormulaListener(ParseTreeListener):
 
     # Exit a parse tree produced by FormulaParser#AddSubArithTerm.
     def exitAddSubArithTerm(self, ctx:FormulaParser.AddSubArithTermContext):
+        pass
+
+
+    # Enter a parse tree produced by FormulaParser#ParenWrappedArithTerm.
+    def enterParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
+        pass
+
+    # Exit a parse tree produced by FormulaParser#ParenWrappedArithTerm.
+    def exitParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
         pass
 
 
@@ -482,15 +518,6 @@ class FormulaListener(ParseTreeListener):
 
     # Exit a parse tree produced by FormulaParser#MulDivArithTerm.
     def exitMulDivArithTerm(self, ctx:FormulaParser.MulDivArithTermContext):
-        pass
-
-
-    # Enter a parse tree produced by FormulaParser#AtomTerm.
-    def enterAtomTerm(self, ctx:FormulaParser.AtomTermContext):
-        pass
-
-    # Exit a parse tree produced by FormulaParser#AtomTerm.
-    def exitAtomTerm(self, ctx:FormulaParser.AtomTermContext):
         pass
 
 

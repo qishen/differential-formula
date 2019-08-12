@@ -157,7 +157,7 @@ unnElem
 enumList : enumCnst (COMMA enumCnst)* ;
 
 enumCnst 
-	: constant | DECIMAL RANGE DECIMAL;
+	: constant | Id | DECIMAL RANGE DECIMAL;
 
 
 /************* Constraints **************/
@@ -180,6 +180,29 @@ setComprehension
 	;
 
 /*
+Built-in aggregation functions categorized in three types based on arguments.
+1. count({...}), sum({...})
+2. maxAll(x, {...}), minAll(x, {...}), x is the default constant value
+3. toList(x, y, {...}), x is type constant and y is the default value
+*/
+aggregation
+    : oneArgAggregation | twoArgAggregation | threeArgAggregation
+    ;
+
+oneArgAggregation:
+    Id LPAREN setComprehension RPAREN
+    ;
+
+twoArgAggregation
+    : Id LPAREN constant COMMA setComprehension RPAREN
+    ;
+
+threeArgAggregation
+    : Id LPAREN TID COMMA funcTerm COMMA setComprehension
+    ;
+
+
+/*
 Disjunction of conjunction of constraints.
 */
 disjunction 
@@ -199,13 +222,19 @@ conjunction
 TODO: Is it possible to have variable of integer type to compare aggregation result.
 */
 constraint
-	: (NO)? funcTerm # TermConstraint // e.g. no Edge(Node(x), Node("hello"))
-	| Id (IS | EQ) funcTerm # TermConstraintWithAlias // e.g. e1 is Edge(x,y)
-	| arithmeticTerm relOp arithmeticTerm # BinaryArithmeticConstraint // e.g. a + b * c > d
-	| (NO)? COUNT LPAREN setComprehension RPAREN relOp DECIMAL # AggregationCountConstraint
-	| NO setComprehension # SetComprehensionConstraint // e.g. no {a | a is Node}
-	| (NO)? Id # DerivedConstantConstraint // e.g. no hasCycle
-	| Id IS Id # TypeConstraint // e.g. n1 is Node
+	// e.g. no hasCycle
+	: (NO)? Id # DerivedConstantConstraint
+	// e.g. no Edge(Node(x), Node("hello"))
+	| (NO)? funcTerm # TermConstraint
+	// e.g. no {a | a is Node}
+	| NO setComprehension # SetEmptyConstraint
+	// e.g. n1 is Node, e1 : Edge
+	| Id (IS | COLON) Id # TypeConstraint
+	// e.g. e1 is Edge(x,y), l is toList(x,y,{...})
+	| Id (IS | EQ) (aggregation | funcTerm) # NamedTermConstraint
+	// arithmetic term contains variable, constant or an aggregation expression.
+	// e.g. a + b * c > d, count({...}) * 2 = x
+	| arithmeticTerm relOp arithmeticTerm # BinaryArithmeticConstraint
 	;
 
 /*
@@ -226,15 +255,17 @@ funcTermList
 Operator precedence (* or /) -> MOD -> (+ or -) and no right associativity is needed.
 The basic arithmetic term is either variable or constant since these operators don't
 apply to instances of compositional types.
+For example, b * (a + c) = 2, count({}) * 3 = 4
 */
 arithmeticTerm
-	: LPAREN arithmeticTerm RPAREN # ParenthesisArithTerm
+	: LPAREN arithmeticTerm RPAREN # ParenWrappedArithTerm
 	| arithmeticTerm (MUL | DIV) arithmeticTerm # MulDivArithTerm
 	| arithmeticTerm MOD arithmeticTerm # ModArithTerm
 	| arithmeticTerm (PLUS | MINUS) arithmeticTerm # AddSubArithTerm
-	| atom # AtomTerm
+	| (atom | aggregation) # BaseArithTerm
 	;
 
+// atom is either a variable or constant value.
 atom : Id | constant ;
 
 constant : DECIMAL | REAL | FRAC | STRING ;
@@ -274,7 +305,7 @@ SUR : 'sur' ;
 ANY : 'any' ;
 SUB : 'sub' ;
 
-COUNT : 'count' ;
+//COUNT : 'count' ;
 ENSURES : 'ensures' ;
 REQUIRES : 'requires' ;
 CONFORMS : 'conforms' ;
@@ -296,10 +327,13 @@ fragment SMALL_LETTER: [a-z] ;
 fragment CAPITAL_LETTER: [A-Z] ;
 fragment DIGIT : [0-9] ;
 
+TID : '#' Id ;
 Id : ALPHA ALPHANUMERIC* '\''* ;
 DECIMAL : DIGIT+ ;
 REAL : [-+]? DIGIT+ [.] DIGIT+ ;
 FRAC : [-+]? DIGIT+ [/] [-+]? DIGIT* ;
+
+// TODO: Add support for stirng with multiple lines and quote inside it.
 STRING : '"'ALPHANUMERIC* '"';
 
 PIPE : '|' ;

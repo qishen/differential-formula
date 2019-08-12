@@ -199,6 +199,26 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FormulaParser#aggregation.
+    def visitAggregation(self, ctx:FormulaParser.AggregationContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#oneArgAggregation.
+    def visitOneArgAggregation(self, ctx:FormulaParser.OneArgAggregationContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#twoArgAggregation.
+    def visitTwoArgAggregation(self, ctx:FormulaParser.TwoArgAggregationContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#threeArgAggregation.
+    def visitThreeArgAggregation(self, ctx:FormulaParser.ThreeArgAggregationContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FormulaParser#disjunction.
     def visitDisjunction(self, ctx:FormulaParser.DisjunctionContext):
         return self.visitChildren(ctx)
@@ -209,38 +229,33 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#TermConstraint.
-    def visitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#TermConstraintWithAlias.
-    def visitTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
-    def visitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#AggregationCountConstraint.
-    def visitAggregationCountConstraint(self, ctx:FormulaParser.AggregationCountConstraintContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#SetComprehensionConstraint.
-    def visitSetComprehensionConstraint(self, ctx:FormulaParser.SetComprehensionConstraintContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by FormulaParser#DerivedConstantConstraint.
     def visitDerivedConstantConstraint(self, ctx:FormulaParser.DerivedConstantConstraintContext):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FormulaParser#TermConstraint.
+    def visitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#SetEmptyConstraint.
+    def visitSetEmptyConstraint(self, ctx:FormulaParser.SetEmptyConstraintContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FormulaParser#TypeConstraint.
     def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#NamedTermConstraint.
+    def visitNamedTermConstraint(self, ctx:FormulaParser.NamedTermConstraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#BinaryArithmeticConstraint.
+    def visitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
         return self.visitChildren(ctx)
 
 
@@ -254,13 +269,18 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by FormulaParser#ParenthesisArithTerm.
-    def visitParenthesisArithTerm(self, ctx:FormulaParser.ParenthesisArithTermContext):
+    # Visit a parse tree produced by FormulaParser#BaseArithTerm.
+    def visitBaseArithTerm(self, ctx:FormulaParser.BaseArithTermContext):
         return self.visitChildren(ctx)
 
 
     # Visit a parse tree produced by FormulaParser#AddSubArithTerm.
     def visitAddSubArithTerm(self, ctx:FormulaParser.AddSubArithTermContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#ParenWrappedArithTerm.
+    def visitParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
         return self.visitChildren(ctx)
 
 
@@ -271,11 +291,6 @@ class FormulaVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by FormulaParser#MulDivArithTerm.
     def visitMulDivArithTerm(self, ctx:FormulaParser.MulDivArithTermContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by FormulaParser#AtomTerm.
-    def visitAtomTerm(self, ctx:FormulaParser.AtomTermContext):
         return self.visitChildren(ctx)
 
 

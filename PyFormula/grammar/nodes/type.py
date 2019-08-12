@@ -1,4 +1,4 @@
-class TypeNode:
+class BasicTypeNode:
     def __init__(self, name, labels, types):
         self.name = name
         self.labels = labels

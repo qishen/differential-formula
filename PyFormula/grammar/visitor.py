@@ -3,11 +3,13 @@ from grammar.gen.FormulaVisitor import FormulaVisitor
 
 from grammar.nodes.domain import DomainNode, DomainSigConfigNode
 from grammar.nodes.model import ModelFactListNode, ModelNode, ModelSigConfigNode
-from grammar.nodes.type import TypeNode, UnionTypeNode
-from grammar.nodes.enum import EnumNode, RangeNode
+from grammar.nodes.type import BasicTypeNode, UnionTypeNode
+from grammar.nodes.enum import EnumNode, EnumRangeCnstNode, EnumCnstNode
 from grammar.nodes.term import CompositeTermNode, VariableTermNode, ConstantNode
 from grammar.nodes.rule import RuleNode
-from grammar.nodes.constraint import TermConstraintNode
+from grammar.nodes.constraint import TermConstraintNode, BinaryConstraintNode, TypeConstraintNode
+from grammar.nodes.aggregation import SetComprehensionNode, AggregationNode
+from grammar.nodes.expression import BinOp, RelOp, ArithmeticExprNode
 
 from executer.rule import Rule
 from executer.relation import *
@@ -87,7 +89,7 @@ class ExprVisitor(FormulaVisitor):
             else:
                 labels.append(None)
             types.append(type_or_union)
-        return TypeNode(type_name, labels, types)
+        return BasicTypeNode(type_name, labels, types)
 
     def visitFields(self, ctx:FormulaParser.FieldsContext):
         fields = []
@@ -141,9 +143,13 @@ class ExprVisitor(FormulaVisitor):
         if ctx.RANGE():
             low_str = ctx.DECIMAL(0).getText()
             high_str = ctx.DECIMAL(1).getText()
-            return RangeNode(low_str, high_str)
-        else:
-            return self.visit(ctx.constant())
+            return EnumRangeCnstNode(low_str, high_str)
+        elif ctx.Id():
+            user_defined_constant = ctx.Id().getText()
+            return EnumCnstNode(ConstantNode(user_defined_constant))
+        elif ctx.constant():
+            constant_node = self.visit(ctx.constant())
+            return EnumCnstNode(constant_node)
 
     def visitConstant(self, ctx:FormulaParser.ConstantContext):
         if ctx.DECIMAL():
@@ -282,6 +288,11 @@ class ExprVisitor(FormulaVisitor):
             constraints.append(constraint_node)
         return constraints
 
+    def visitSetComprehension(self, ctx:FormulaParser.SetComprehensionContext):
+        terms = self.visit(ctx.funcTermList())
+        constraints = self.visit(ctx.conjunction())
+        return SetComprehensionNode(terms, constraints)
+
     def visitTermConstraint(self, ctx:FormulaParser.TermConstraintContext):
         has_negation = False
         if ctx.NO():
@@ -289,8 +300,132 @@ class ExprVisitor(FormulaVisitor):
         functerm = self.visit(ctx.funcTerm())
         return TermConstraintNode(has_negation, functerm)
 
-    def visitTermConstraintWithAlias(self, ctx:FormulaParser.TermConstraintWithAliasContext):
+    def visitNamedTermConstraint(self, ctx:FormulaParser.NamedTermConstraintContext):
         alias = ctx.Id().getText()
         functerm = self.visit(ctx.funcTerm())
+        # Named term constraint cannot be negated.
         return TermConstraintNode(False, functerm, alias)
+
+    def visitSetEmptyConstraint(self, ctx:FormulaParser.SetEmptyConstraintContext):
+        # Return a binary constraint node with the count of set comprehension equal to zero.
+        setcompr_node = self.visit(ctx.setComprehension())
+        aggregation_node = AggregationNode('count', setcompr_node)
+        zero = ConstantNode(0)
+        return BinaryConstraintNode(aggregation_node, zero, RelOp.EQ)
+
+    def visitRelOp(self, ctx:FormulaParser.RelOpContext):
+        if ctx.EQ():
+            return RelOp.EQ
+        elif ctx.NE():
+            return RelOp.NEQ
+        elif ctx.LT():
+            return RelOp.LT
+        elif ctx.LE():
+            return RelOp.LE
+        elif ctx.GT():
+            return RelOp.GT
+        elif ctx.GE():
+            return RelOp.GE
+
+    def visitBinaryArithmeticConstraint(self, ctx:FormulaParser.BinaryArithmeticConstraintContext):
+        op = self.visit(ctx.relOp())
+        left = self.visit(ctx.arithmeticTerm(0))
+        right = self.visit(ctx.arithmeticTerm(1))
+        return BinaryConstraintNode(left, right, op)
+
+    def visitDerivedConstantConstraint(self, ctx:FormulaParser.DerivedConstantConstraintContext):
+        # variable must be of boolean type.
+        pass
+
+    def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
+        variable = ctx.Id(0).getText()
+        type_name = ctx.Id(1).getText()
+        return TypeConstraintNode(variable, type_name)
+
+    def visitParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
+        return self.visit(ctx.arithmeticTerm())
+
+    def visitMulDivArithTerm(self, ctx:FormulaParser.MulDivArithTermContext):
+        if ctx.MUL():
+            op = BinOp.MUL
+        elif ctx.DIV():
+            op = BinOp.DIV
+        left = self.visit(ctx.arithmeticTerm(0))
+        right = self.visit(ctx.arithmeticTerm(1))
+        return ArithmeticExprNode(left, right, op)
+
+    def visitModArithTerm(self, ctx:FormulaParser.ModArithTermContext):
+        op = BinOp.MOD
+        return ArithmeticExprNode(ctx.arithmeticTerm(0), ctx.arithmeticTerm(1), op)
+
+    def visitAddSubArithTerm(self, ctx:FormulaParser.AddSubArithTermContext):
+        if ctx.PLUS():
+            op = BinOp.PLUS
+        elif ctx.MINUS():
+            op = BinOp.MINUS
+        left = self.visit(ctx.arithmeticTerm(0))
+        right = self.visit(ctx.arithmeticTerm(1))
+        return ArithmeticExprNode(left, right, op)
+
+    def visitBaseArithTerm(self, ctx:FormulaParser.BaseArithTermContext):
+        if ctx.atom():
+            return self.visit(ctx.atom())
+        elif ctx.aggregation():
+            aggregation = self.visit(ctx.aggregation())
+            return aggregation
+
+    def visitOneArgAggregation(self, ctx:FormulaParser.OneArgAggregationContext):
+        func = ctx.Id().getText()
+        setcompr_node = self.visit(ctx.setComprehension())
+        return AggregationNode(func, setcompr_node)
+
+    def visitTwoArgAggregation(self, ctx:FormulaParser.TwoArgAggregationContext):
+        func = ctx.Id().getText()
+        default = self.visit(ctx.constant())
+        setcompr_node = self.visit(ctx.setComprehension())
+        return AggregationNode(func, setcompr_node, default_value=default)
+
+    def visitThreeArgAggregation(self, ctx:FormulaParser.ThreeArgAggregationContext):
+        func = ctx.Id().getText()
+        tid = ctx.TID().getText()
+        term = self.visit(ctx.funcTerm())
+        setcompr_node = self.visit(ctx.setComprehension())
+        return AggregationNode(func, setcompr_node, tid=tid, default_value=term)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

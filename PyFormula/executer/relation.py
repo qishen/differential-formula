@@ -5,6 +5,7 @@ class BaseType:
     def __str__(self):
         return self.name
 
+
 class UnnType(BaseType):
     def __init__(self, name, subtypes):
         super().__init__(name)

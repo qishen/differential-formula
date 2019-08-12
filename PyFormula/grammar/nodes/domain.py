@@ -15,7 +15,7 @@ class DomainNode:
         self.model_map = {}
 
         for node in nodes:
-            if type(node) is TypeNode or type(node) is UnionTypeNode:
+            if type(node) is BasicTypeNode or type(node) is UnionTypeNode:
                 self.types.append(node)
             elif type(node) is RuleNode:
                 self.rules.append(node)

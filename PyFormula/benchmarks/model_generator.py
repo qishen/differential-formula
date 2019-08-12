@@ -2,9 +2,9 @@ import datetime
 import random
 
 from compiler import Compiler
-from executer import Atom, Variable, Composite
-from executer import Predicate
-from executer import Rule
+from executer.term import Atom, Variable, Composite
+from executer.constraint import Predicate
+from executer.rule import Rule
 from executer.relation import BasicType
 from utils import utils
 

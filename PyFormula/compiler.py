@@ -4,11 +4,13 @@ import networkx as nx
 from antlr4 import *
 from collections import Counter
 
-from grammar.nodes.term import *
-from grammar.nodes.constraint import *
 from grammar.visitor import ExprVisitor
 from grammar.gen.FormulaLexer import FormulaLexer
 from grammar.gen.FormulaParser import FormulaParser
+
+from grammar.nodes.term import *
+from grammar.nodes.constraint import *
+from grammar.nodes.type import *
 
 from executer.modules.domain import Domain
 from executer.modules.model import Model
@@ -104,8 +106,11 @@ class Compiler:
 
             # Types should be sorted after validation so Edge does not occur before Node.
             for type_node in domain_node.types:
-                basic_type = BasicType(type_node.name, type_node.labels, type_node.types)
-                type_map[type_node.name] = basic_type
+                if type(type_node) is BasicTypeNode:
+                    basic_type = BasicType(type_node.name, type_node.labels, type_node.types)
+                    type_map[type_node.name] = basic_type
+                elif type(type_node) is UnionTypeNode:
+                    pass
 
             # Add all rules to a domain
             for rule_node in domain_node.rules:

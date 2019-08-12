@@ -3,6 +3,12 @@ class EnumNode:
         self.items = enum_list
 
 
-class RangeNode:
+class EnumRangeCnstNode:
     def __init__(self, low_str, high_str):
-        pass
+        self.low = low_str
+        self.high = high_str
+
+
+class EnumCnstNode:
+    def __init__(self, constant):
+        self.constant = constant
