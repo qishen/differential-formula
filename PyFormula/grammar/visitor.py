@@ -1,9 +1,10 @@
 from grammar.gen.FormulaParser import FormulaParser
 from grammar.gen.FormulaVisitor import FormulaVisitor
 
-from grammar.nodes.domain import DomainNode, DomainSigConfigNode
+from grammar.nodes.module import ModuleRefNode
+from grammar.nodes.domain import DomainNode, DomainSigConfigNode, InheritanceType
 from grammar.nodes.model import ModelFactListNode, ModelNode, ModelSigConfigNode
-from grammar.nodes.type import BasicTypeNode, UnionTypeNode
+from grammar.nodes.type import BasicTypeNode, UnionTypeNode, TypeRefNode
 from grammar.nodes.enum import EnumNode, EnumRangeCnstNode, EnumCnstNode
 from grammar.nodes.term import CompositeTermNode, VariableTermNode, ConstantNode
 from grammar.nodes.rule import RuleNode
@@ -28,7 +29,17 @@ class ExprVisitor(FormulaVisitor):
         return modelrefs
 
     def visitModRef(self, ctx:FormulaParser.ModRefContext):
-        return ctx.Id(0).getText()
+        path = None
+        rename = None
+        if ctx.STRING():
+            # Module not defined in current program and path refers to the location that has defined the module.
+            path = ctx.STRING().getText().strip('\"')
+        if ctx.RENAMES():
+            rename = ctx.BId(0).getText()
+            module_name = ctx.BId(1).getText()
+        else:
+            module_name = ctx.BId(0).getText()
+        return ModuleRefNode(module_name, rename, path)
 
     def visitDomain(self, ctx:FormulaParser.DomainContext):
         sig_node = self.visit(ctx.domainSigConfig())
@@ -45,15 +56,19 @@ class ExprVisitor(FormulaVisitor):
         return DomainSigConfigNode(domain_name, inherit_type, modrefs)
 
     def visitDomainSig(self, ctx:FormulaParser.DomainSigContext):
-        domain_name = ctx.Id().getText()
-        #refs = self.visit(ctx.modRefs())
-        refs = []
-        inherit_type = ''
-        if ctx.INCLUDES():
-            inherit_type = 'includes'
-        elif ctx.EXTENDS():
-            inherit_type = 'extends'
-        return domain_name, inherit_type, refs
+        domain_name = ctx.BId().getText()
+        mod_ref_nodes = None
+        inherit_type = None
+        if ctx.modRefs():
+            mod_ref_nodes = self.visit(ctx.modRefs())
+            if ctx.INCLUDES():
+                inherit_type = InheritanceType.INCLUDES
+            elif ctx.EXTENDS():
+                inherit_type = InheritanceType.EXTENDS
+            else:
+                inherit_type = InheritanceType.NONE
+        # The last two can be None.
+        return domain_name, inherit_type, mod_ref_nodes
 
     def visitDomSentences(self, ctx:FormulaParser.DomSentencesContext):
         # A list of type node, rule node or conformance node.
@@ -69,6 +84,7 @@ class ExprVisitor(FormulaVisitor):
         return node
 
     def visitDomSentence(self, ctx:FormulaParser.DomSentenceContext):
+        node = None
         if ctx.typeDecl():
             node = self.visit(ctx.typeDecl())
         elif ctx.formulaRule():
@@ -78,7 +94,7 @@ class ExprVisitor(FormulaVisitor):
         return node
 
     def visitRegularTypeDecl(self, ctx:FormulaParser.RegularTypeDeclContext):
-        type_name = ctx.Id().getText()
+        type_name = ctx.BId().getText()
         labels = []
         types = []
         field_tuples = self.visit(ctx.fields())
@@ -88,6 +104,7 @@ class ExprVisitor(FormulaVisitor):
                 labels.append(label)
             else:
                 labels.append(None)
+            # types contains either union node or a list of strings.
             types.append(type_or_union)
         return BasicTypeNode(type_name, labels, types)
 
@@ -99,8 +116,9 @@ class ExprVisitor(FormulaVisitor):
         return fields
 
     def visitField(self, ctx:FormulaParser.FieldContext):
-        if ctx.Id(0):
-            label = ctx.Id(0).getText()
+        label = None
+        if ctx.BId():
+            label = ctx.BId().getText()
         has_any = False
         if ctx.ANY():
             has_any = True
@@ -108,12 +126,17 @@ class ExprVisitor(FormulaVisitor):
             # union is just a list of strings
             union = self.visit(ctx.unnBody())
             return label, has_any, union
-        elif ctx.Id(1):
-            type_name = ctx.Id(1).getText()
-            return label, has_any, type_name
+        elif ctx.qualId():
+            # type_name is a list of strings
+            type_name = self.visit(ctx.qualId())
+            if len(type_name) > 1:
+                type_ref_node = TypeRefNode(type_name[1], ref_name=type_name[0])
+            else:
+                type_ref_node = TypeRefNode(type_name[0])
+            return label, has_any, type_ref_node
 
     def visitUnionTypeDecl(self, ctx:FormulaParser.UnionTypeDeclContext):
-        type_name = ctx.Id().getText()
+        type_name = ctx.BId().getText()
         subtypes = self.visit(ctx.unnBody())
         return UnionTypeNode(type_name, subtypes)
 
@@ -126,8 +149,8 @@ class ExprVisitor(FormulaVisitor):
         return subtypes
 
     def visitUnnElem(self, ctx:FormulaParser.UnnElemContext):
-        if ctx.Id():
-            return ctx.Id().getText()
+        if ctx.BId():
+            return ctx.BId().getText()
         else:
             return self.visit(ctx.enumList())
 
@@ -144,14 +167,21 @@ class ExprVisitor(FormulaVisitor):
             low_str = ctx.DECIMAL(0).getText()
             high_str = ctx.DECIMAL(1).getText()
             return EnumRangeCnstNode(low_str, high_str)
-        elif ctx.Id():
-            user_defined_constant = ctx.Id().getText()
+        elif ctx.BId():
+            user_defined_constant = ctx.BId().getText()
             return EnumCnstNode(ConstantNode(user_defined_constant))
         elif ctx.constant():
             constant_node = self.visit(ctx.constant())
             return EnumCnstNode(constant_node)
 
+    def visitQualId(self, ctx:FormulaParser.QualIdContext):
+        bids = []
+        for bid in ctx.BId():
+            bids.append(bid.getText())
+        return bids
+
     def visitConstant(self, ctx:FormulaParser.ConstantContext):
+        constant = None
         if ctx.DECIMAL():
             constant = int(ctx.DECIMAL().getText())
         elif ctx.REAL():
@@ -189,7 +219,7 @@ class ExprVisitor(FormulaVisitor):
         is_partial = False
         if ctx.PARTIAL():
             is_partial = True
-        model_name = ctx.Id().getText()
+        model_name = ctx.BId().getText()
         model_ref_name = self.visit(ctx.modRef())
         return is_partial, model_name, model_ref_name
 
@@ -229,8 +259,8 @@ class ExprVisitor(FormulaVisitor):
 
     def visitModelFact(self, ctx:FormulaParser.ModelFactContext):
         alias = None
-        if ctx.Id():
-            alias = ctx.Id().getText()
+        if ctx.BId():
+            alias = ctx.BId().getText()
         fact = self.visit(ctx.funcTerm())
         return alias, fact
 
@@ -260,16 +290,23 @@ class ExprVisitor(FormulaVisitor):
         if ctx.atom():
             return self.visit(ctx.atom())
         else:
-            type_name = ctx.Id().getText()
+            # type_name could be a list of string, e.g. in.Edge(x,y).
+            type_name = self.visit(ctx.qualId())
+            type_ref_node = None
+            if len(type_name) > 1:
+                type_ref_node = TypeRefNode(type_name[1], ref_name=type_name[0])
+            else:
+                type_ref_node = TypeRefNode(type_name[0])
             terms = []
             for functerm in ctx.funcTerm():
                 functerm = self.visit(functerm)
                 terms.append(functerm)
-            return CompositeTermNode(type_name, terms)
+            return CompositeTermNode(type_ref_node, terms)
 
     def visitAtom(self, ctx:FormulaParser.AtomContext):
-        if ctx.Id():
-            variable = ctx.Id().getText()
+        if ctx.qualId():
+            # variable could be a list of strings.
+            variable = self.visit(ctx.qualId())
             return VariableTermNode(variable)
         else:
             return self.visit(ctx.constant())
@@ -301,7 +338,7 @@ class ExprVisitor(FormulaVisitor):
         return TermConstraintNode(has_negation, functerm)
 
     def visitNamedTermConstraint(self, ctx:FormulaParser.NamedTermConstraintContext):
-        alias = ctx.Id().getText()
+        alias = self.visit(ctx.qualId())
         functerm = self.visit(ctx.funcTerm())
         # Named term constraint cannot be negated.
         return TermConstraintNode(False, functerm, alias)
@@ -338,14 +375,15 @@ class ExprVisitor(FormulaVisitor):
         pass
 
     def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
-        variable = ctx.Id(0).getText()
-        type_name = ctx.Id(1).getText()
+        variable = self.visit(ctx.qualId(0))
+        type_name = self.visit(ctx.qualId(1))
         return TypeConstraintNode(variable, type_name)
 
     def visitParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
         return self.visit(ctx.arithmeticTerm())
 
     def visitMulDivArithTerm(self, ctx:FormulaParser.MulDivArithTermContext):
+        op = None
         if ctx.MUL():
             op = BinOp.MUL
         elif ctx.DIV():
@@ -359,6 +397,7 @@ class ExprVisitor(FormulaVisitor):
         return ArithmeticExprNode(ctx.arithmeticTerm(0), ctx.arithmeticTerm(1), op)
 
     def visitAddSubArithTerm(self, ctx:FormulaParser.AddSubArithTermContext):
+        op = None
         if ctx.PLUS():
             op = BinOp.PLUS
         elif ctx.MINUS():
@@ -375,18 +414,18 @@ class ExprVisitor(FormulaVisitor):
             return aggregation
 
     def visitOneArgAggregation(self, ctx:FormulaParser.OneArgAggregationContext):
-        func = ctx.Id().getText()
+        func = ctx.BId().getText()
         setcompr_node = self.visit(ctx.setComprehension())
         return AggregationNode(func, setcompr_node)
 
     def visitTwoArgAggregation(self, ctx:FormulaParser.TwoArgAggregationContext):
-        func = ctx.Id().getText()
+        func = ctx.BId().getText()
         default = self.visit(ctx.constant())
         setcompr_node = self.visit(ctx.setComprehension())
         return AggregationNode(func, setcompr_node, default_value=default)
 
     def visitThreeArgAggregation(self, ctx:FormulaParser.ThreeArgAggregationContext):
-        func = ctx.Id().getText()
+        func = ctx.BId().getText()
         tid = ctx.TID().getText()
         term = self.visit(ctx.funcTerm())
         setcompr_node = self.visit(ctx.setComprehension())

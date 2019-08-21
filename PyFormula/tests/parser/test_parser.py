@@ -1,6 +1,6 @@
 import unittest
+from pathlib import Path, PurePath
 
-from grammar.visitor import ExprVisitor
 from compiler import Compiler
 
 
@@ -8,7 +8,11 @@ class ParserTestCase(unittest.TestCase):
     def setUp(self):
         self.compiler = Compiler()
 
-    def test_visitor(self):
+    def tearDown(self) -> None:
+        self.compiler.clear_all()
+
+    @unittest.skip('Temporarily skip')
+    def test_parse_str(self):
         formula_str = '''
             domain Graph
             {
@@ -30,4 +34,10 @@ class ParserTestCase(unittest.TestCase):
         '''
         self.compiler.parse(file_str=formula_str)
         self.compiler.find_domain_by_name('Graph')
+
+    def test_parse_file(self):
+        current_dir = Path(__file__).parent
+        samples_dir = current_dir.parent.parent
+        formula_file = samples_dir.joinpath('samples/graphs.4ml')
+        self.compiler.parse(filename=formula_file)
 

@@ -18,7 +18,7 @@ settingList
     ;
 
 setting
-    : Id EQ constant
+    : qualId EQ constant
     ;
 
 /**************** Module Decls *****************/
@@ -28,7 +28,7 @@ program
     ;    
 
 importModule
-	: IMPORT Id FROM STRING AS Id
+	: IMPORT BId FROM STRING AS BId
 	;
 
 moduleList
@@ -44,8 +44,9 @@ modRefs
 	: modRef (COMMA modRef)*
 	;
 
+// The first is renamed id and the second one is the original domain id.
 modRef
-	: Id (RENAMES Id)? (AT STRING)?
+	: BId (RENAMES BId)? (AT STRING)?
 	;
 
 /**************** Model Decls *****************/
@@ -69,7 +70,7 @@ modelContractConf
 modelContract
     : ENSURES disjunction DOT
     | REQUIRES disjunction DOT
-    | REQUIRES cardSpec DECIMAL Id DOT
+    | REQUIRES cardSpec DECIMAL BId DOT
     ;
 
 cardSpec
@@ -83,7 +84,7 @@ modelSigConfig
     ;
 
 modelIntro
-	: (PARTIAL)? MODEL Id OF modRef
+	: (PARTIAL)? MODEL BId OF modRef
 	;
 
 modelSig
@@ -95,7 +96,7 @@ modelFactList
     ;
 
 modelFact
-	: (Id IS)? funcTerm
+	: (BId IS)? funcTerm
     ;
 
 /**************** Domain Decls *****************/
@@ -108,7 +109,7 @@ domainSigConfig
     ;
 
 domainSig
-	: DOMAIN Id ((EXTENDS | INCLUDES) modRefs)? 
+	: DOMAIN BId ((EXTENDS | INCLUDES) modRefs)?
 	;
 
 domSentences
@@ -128,8 +129,8 @@ domSentence
 /**************** Type Decls *****************/
 
 typeDecl
-	: Id TYPEDEF (funcDecl)? LPAREN fields RPAREN # RegularTypeDecl
-	| Id TYPEDEF unnBody # UnionTypeDecl
+	: BId TYPEDEF (funcDecl)? LPAREN fields RPAREN # RegularTypeDecl
+	| BId TYPEDEF unnBody # UnionTypeDecl
 	;
 
 unnBody
@@ -146,18 +147,18 @@ fields
 	: field ((COMMA | funModifier) field)* ;
 
 field
-	: (Id COLON)? (ANY)? (Id | unnBody) 
+	: (BId COLON)? (ANY)? (qualId | unnBody)
 	;
 
 unnElem 
-	: Id 
+	: BId
 	| LBRACE enumList RBRACE
 	;
 
 enumList : enumCnst (COMMA enumCnst)* ;
 
 enumCnst 
-	: constant | Id | DECIMAL RANGE DECIMAL;
+	: constant | BId | DECIMAL RANGE DECIMAL;
 
 
 /************* Constraints **************/
@@ -190,15 +191,15 @@ aggregation
     ;
 
 oneArgAggregation:
-    Id LPAREN setComprehension RPAREN
+    BId LPAREN setComprehension RPAREN
     ;
 
 twoArgAggregation
-    : Id LPAREN constant COMMA setComprehension RPAREN
+    : BId LPAREN constant COMMA setComprehension RPAREN
     ;
 
 threeArgAggregation
-    : Id LPAREN TID COMMA funcTerm COMMA setComprehension
+    : BId LPAREN TID COMMA funcTerm COMMA setComprehension
     ;
 
 
@@ -223,15 +224,15 @@ TODO: Is it possible to have variable of integer type to compare aggregation res
 */
 constraint
 	// e.g. no hasCycle
-	: (NO)? Id # DerivedConstantConstraint
+	: (NO)? BId # DerivedConstantConstraint
 	// e.g. no Edge(Node(x), Node("hello"))
 	| (NO)? funcTerm # TermConstraint
-	// e.g. no {a | a is Node}
+	// e.g. no {a | a is Node} can be translated to count({a | a is Node}) = 0.
 	| NO setComprehension # SetEmptyConstraint
-	// e.g. n1 is Node, e1 : Edge
-	| Id (IS | COLON) Id # TypeConstraint
+	// e.g. n1 is Node, e1 : Edge, e1 is In2.Edge
+	| qualId (IS | COLON) qualId # TypeConstraint
 	// e.g. e1 is Edge(x,y), l is toList(x,y,{...})
-	| Id (IS | EQ) (aggregation | funcTerm) # NamedTermConstraint
+	| qualId (IS | EQ) (aggregation | funcTerm) # NamedTermConstraint
 	// arithmetic term contains variable, constant or an aggregation expression.
 	// e.g. a + b * c > d, count({...}) * 2 = x
 	| arithmeticTerm relOp arithmeticTerm # BinaryArithmeticConstraint
@@ -243,7 +244,7 @@ multiple rules. Arithmetic terms are not allowed in functerm like Node(a+1) :- N
 it should be written as Node(b) :- Node(a), b = a + 1.
 */
 funcTerm
-    : Id LPAREN funcTerm (COMMA funcTerm)* RPAREN
+    : qualId LPAREN funcTerm (COMMA funcTerm)* RPAREN
     | atom
     ;
 
@@ -266,7 +267,10 @@ arithmeticTerm
 	;
 
 // atom is either a variable or constant value.
-atom : Id | constant ;
+atom : qualId | constant ;
+
+// qualId mean Ids joined by dots like a.b.c.d.e
+qualId : BId (DOT BId)* ;
 
 constant : DECIMAL | REAL | FRAC | STRING ;
 
@@ -327,8 +331,10 @@ fragment SMALL_LETTER: [a-z] ;
 fragment CAPITAL_LETTER: [A-Z] ;
 fragment DIGIT : [0-9] ;
 
-TID : '#' Id ;
-Id : ALPHA ALPHANUMERIC* '\''* ;
+// Type Id
+TID : '#' BId ;
+// Bare Id
+BId : ALPHA ALPHANUMERIC* '\''* ;
 DECIMAL : DIGIT+ ;
 REAL : [-+]? DIGIT+ [.] DIGIT+ ;
 FRAC : [-+]? DIGIT+ [/] [-+]? DIGIT* ;

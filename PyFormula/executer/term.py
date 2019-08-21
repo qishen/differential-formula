@@ -96,11 +96,12 @@ class Term:
 
 
 class Composite(Term):
-    def __init__(self, relation, terms, alias=None):
+    def __init__(self, relation, terms, alias=None, domain_ref=None):
         super().__init__(relation)
         self.relation = relation  # same as self.sort attribute in base class.
         self.args = terms
         self.alias = alias
+        self.domain_ref = domain_ref # in::Graph and out::Graph
         self.term_type = TermType.COMPOSITE
         self.is_ground_term = self.check_ground_term()
 

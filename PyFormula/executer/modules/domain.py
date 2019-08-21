@@ -1,9 +1,12 @@
 import networkx as nx
-from collections import Counter
+import copy
+
+from executer.relation import *
 
 
 class Domain:
-    def __init__(self, domain_name, type_map, rules, conforms, includes=None, extends=None, logger=None):
+    def __init__(self, domain_name, program_path, type_map, rules, conforms, includes=None, extends=None, logger=None):
+        self.program_path = program_path
         self.logger = logger
         self.domain_name = domain_name
         self.includes = includes
@@ -14,6 +17,32 @@ class Domain:
         self.conforms = conforms
 
         self.model_map = {}
+
+        if includes:
+            self.merge_inherited_types(includes)
+        elif extends:
+            # Extends types, rules and conformance.
+            self.merge_inherited_types(extends)
+            self.merge_inherited_rules(extends)
+
+    def merge_inherited_rules(self, inherited_domain_map):
+        pass
+
+    def merge_inherited_types(self, inherited_domain_map):
+        # Can be either original domain name or rename
+        for name in inherited_domain_map:
+            domain = inherited_domain_map[name]
+            # Directly extends or includes other domains
+            if name == domain.domain_name:
+                self.type_map.update(domain.type_map)
+            else:
+                # Inheritance with rename.
+                rename = name
+                for type_name in domain.type_map:
+                    if type(domain.type_map[type_name]) is not BuiltInType:
+                        new_type = copy.copy(domain.type_map[type_name])
+                        new_type.add_reference(rename)
+                        self.type_map[new_type.name] = new_type
 
     def add_model(self, name, model):
         self.model_map[name] = model

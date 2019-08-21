@@ -40,10 +40,13 @@ class BuiltInType(BaseType):
 
 
 class BasicType(BaseType):
-    def __init__(self, name, labels=None, types=None):
+    def __init__(self, name, labels=None, types=None, refs=None):
         super().__init__(name)
         self.labels = labels
         self.types = types
+
+        # Use self.refs to denote that this type is associated with an inherited domain.
+        self.refs = refs
 
     def __hash__(self):
         return hash(self.name)
@@ -62,3 +65,7 @@ class BasicType(BaseType):
         :return:
         """
         pass
+
+    def add_reference(self, ref_name):
+        self.name = ref_name + '.' + self.name
+        self.refs = [ref_name for i in range(len(self.refs))]

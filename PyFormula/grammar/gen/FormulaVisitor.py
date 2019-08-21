@@ -1,4 +1,4 @@
-# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
+# Generated from C:/Users/Victor/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .FormulaParser import FormulaParser
@@ -296,6 +296,11 @@ class FormulaVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by FormulaParser#atom.
     def visitAtom(self, ctx:FormulaParser.AtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#qualId.
+    def visitQualId(self, ctx:FormulaParser.QualIdContext):
         return self.visitChildren(ctx)
 
 

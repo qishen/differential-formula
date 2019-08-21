@@ -1,4 +1,4 @@
-# Generated from C:/Users/Qishen/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
+# Generated from C:/Users/Victor/Desktop/projects/FormulaCore/PyFormula/grammar\Formula.g4 by ANTLR 4.7.2
 from antlr4 import *
 from io import StringIO
 from typing.io import TextIO
@@ -262,7 +262,7 @@ class FormulaLexer(Lexer):
     FROM = 32
     AS = 33
     TID = 34
-    Id = 35
+    BId = 35
     DECIMAL = 36
     REAL = 37
     FRAC = 38
@@ -318,7 +318,7 @@ class FormulaLexer(Lexer):
             "OF", "RETURNS", "AT", "MACHINE", "IS", "NO", "NEW", "FUN", 
             "INJ", "BIJ", "SUR", "ANY", "SUB", "ENSURES", "REQUIRES", "CONFORMS", 
             "SOME", "ATLEAST", "ATMOST", "PARTIAL", "INITIALLY", "NEXT", 
-            "PROPERTY", "BOOT", "IMPORT", "FROM", "AS", "TID", "Id", "DECIMAL", 
+            "PROPERTY", "BOOT", "IMPORT", "FROM", "AS", "TID", "BId", "DECIMAL", 
             "REAL", "FRAC", "STRING", "PIPE", "TYPEDEF", "RULE", "RENAMES", 
             "RANGE", "DOT", "COLON", "COMMA", "SEMICOLON", "EQ", "NE", "LE", 
             "GE", "LT", "GT", "PLUS", "MINUS", "MUL", "DIV", "MOD", "STRONGARROW", 
@@ -331,7 +331,7 @@ class FormulaLexer(Lexer):
                   "REQUIRES", "CONFORMS", "SOME", "ATLEAST", "ATMOST", "PARTIAL", 
                   "INITIALLY", "NEXT", "PROPERTY", "BOOT", "IMPORT", "FROM", 
                   "AS", "ALPHANUMERIC", "ALPHA", "SMALL_LETTER", "CAPITAL_LETTER", 
-                  "DIGIT", "TID", "Id", "DECIMAL", "REAL", "FRAC", "STRING", 
+                  "DIGIT", "TID", "BId", "DECIMAL", "REAL", "FRAC", "STRING", 
                   "PIPE", "TYPEDEF", "RULE", "RENAMES", "RANGE", "DOT", 
                   "COLON", "COMMA", "SEMICOLON", "EQ", "NE", "LE", "GE", 
                   "LT", "GT", "PLUS", "MINUS", "MUL", "DIV", "MOD", "STRONGARROW", 
