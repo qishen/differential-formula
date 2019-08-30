@@ -109,7 +109,7 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
         self.logger.info('----------------------------------------------------------')
         self.compiler.print_all_facts('g1')
 
-    @unittest.skip("Skip temporarily")
+    #@unittest.skip("Skip temporarily")
     def test_second_input(self):
         model_str = '''
             model g2 of LinkGraph

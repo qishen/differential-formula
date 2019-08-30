@@ -11,7 +11,8 @@ class ModelFactListNode:
 
 
 class ModelSigConfigNode:
-    def __init__(self, is_partial, model_name, model_ref_name):
+    def __init__(self, is_partial, model_name, domain_info, inherited_refs):
         self.is_partial = is_partial
         self.model_name = model_name
-        self.domain = model_ref_name
+        self.domain = domain_info
+        self.inherited_refs = inherited_refs

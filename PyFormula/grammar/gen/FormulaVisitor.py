@@ -59,6 +59,66 @@ class FormulaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by FormulaParser#transform.
+    def visitTransform(self, ctx:FormulaParser.TransformContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transformSigConfig.
+    def visitTransformSigConfig(self, ctx:FormulaParser.TransformSigConfigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transformSig.
+    def visitTransformSig(self, ctx:FormulaParser.TransformSigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transSigIn.
+    def visitTransSigIn(self, ctx:FormulaParser.TransSigInContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#voMParamList.
+    def visitVoMParamList(self, ctx:FormulaParser.VoMParamListContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#valOrModelParam.
+    def visitValOrModelParam(self, ctx:FormulaParser.ValOrModelParamContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transSentenceConfig.
+    def visitTransSentenceConfig(self, ctx:FormulaParser.TransSentenceConfigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transSentence.
+    def visitTransSentence(self, ctx:FormulaParser.TransSentenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#tSystem.
+    def visitTSystem(self, ctx:FormulaParser.TSystemContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transSteps.
+    def visitTransSteps(self, ctx:FormulaParser.TransStepsContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#transStepConfig.
+    def visitTransStepConfig(self, ctx:FormulaParser.TransStepConfigContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by FormulaParser#step.
+    def visitStep(self, ctx:FormulaParser.StepContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by FormulaParser#model.
     def visitModel(self, ctx:FormulaParser.ModelContext):
         return self.visitChildren(ctx)

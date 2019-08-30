@@ -122,8 +122,9 @@ class ExprVisitor(FormulaVisitor):
         has_any = False
         if ctx.ANY():
             has_any = True
+
         if ctx.unnBody():
-            # union is just a list of strings
+            # union is just a list of strings or EnumNodes
             union = self.visit(ctx.unnBody())
             return label, has_any, union
         elif ctx.qualId():
@@ -210,18 +211,21 @@ class ExprVisitor(FormulaVisitor):
         return msc
 
     def visitModelSig(self, ctx:FormulaParser.ModelSigContext):
-        is_partial, model_name, model_ref_name = self.visit(ctx.modelIntro())
-        # some model refs to be included or extended
-        # model_refs = self.visit(ctx.modRefs())
-        return ModelSigConfigNode(is_partial, model_name, model_ref_name)
+        is_partial, model_name, model_ref = self.visit(ctx.modelIntro())
+        # It's optional to have some model refs to be included or extended.
+        if ctx.modRefs():
+            inherited_model_ref_list = self.visit(ctx.modRefs())
+        else:
+            inherited_model_ref_list = None
+        return ModelSigConfigNode(is_partial, model_name, model_ref, inherited_model_ref_list)
 
     def visitModelIntro(self, ctx:FormulaParser.ModelIntroContext):
         is_partial = False
         if ctx.PARTIAL():
             is_partial = True
         model_name = ctx.BId().getText()
-        model_ref_name = self.visit(ctx.modRef())
-        return is_partial, model_name, model_ref_name
+        model_ref = self.visit(ctx.modRef())
+        return is_partial, model_name, model_ref
 
     def visitModelBody(self, ctx:FormulaParser.ModelBodyContext):
         fact_sentence_nodes = []

@@ -8,6 +8,7 @@ from grammar.visitor import ExprVisitor
 from grammar.gen.FormulaLexer import FormulaLexer
 from grammar.gen.FormulaParser import FormulaParser
 
+from grammar.nodes.enum import *
 from grammar.nodes.domain import *
 from grammar.nodes.term import *
 from grammar.nodes.constraint import *
@@ -128,7 +129,7 @@ class Compiler:
                         # Domain definition with rename, e.g. domain IsoDAGs extends Left::DAGs, Right::DAGs
                         inherited_domain_map[modref_node.rename] = domain
                     else:
-                        # Domain definitino without rename, then use domain name as the key in map
+                        # Domain definition without rename, then use domain name as the key in map
                         inherited_domain_map[modref_node.module] = domain
 
             # Store all type and rule definitions.
@@ -144,26 +145,54 @@ class Compiler:
             # Types should be sorted after validation so Edge does not occur before Node.
             for type_node in domain_node.types:
                 if type(type_node) is BasicTypeNode:
+                    types = []
+                    refs = []
                     labels = type_node.labels
-                    ref_nodes = type_node.types
-                    types = [ref_node.type for ref_node in ref_nodes]
-                    # Need to consider domain alias like Left::DAGs and Right::DAGs
-                    refs = [ref_node.ref for ref_node in ref_nodes]
+                    subtype_nodes = type_node.types
+                    # subtype node can be either regular type or an union of types.
+                    for subtype_node in subtype_nodes:
+                        if type(subtype_node) is list:
+                            # subtype_node can be a list of string or EnumNode e.g. Node + Edge + {NIL}
+                            for component in subtype_node:
+                                if type(component) is str:
+                                    types.append(component)
+                                    refs.append(None)
+                                elif type(component) is EnumNode:
+                                    # Create a new enum type to represent a list of constants.
+                                    enum_items = []
+                                    for cnst_node in component.items:
+                                        if type(cnst_node) is EnumCnstNode:
+                                            enum_items.append(cnst_node.constant.constant)
+                                        elif type(cnst_node) is EnumRangeCnstNode:
+                                            # TODO:
+                                            pass
+                                    assigned_enum_name = 'enum_' + str(hash(tuple(enum_items)))
+                                    enum_type = EnumType(assigned_enum_name, enum_items)
+                                    type_map[assigned_enum_name] = enum_type
+                                    types.append(assigned_enum_name)
+                                    refs.append(None)
+                        elif type(subtype_node) is TypeRefNode:
+                            # Need to consider domain alias like Left::DAGs and Right::DAGs
+                            types.append(subtype_node.type)
+                            refs.append(subtype_node.ref)
+
                     basic_type = BasicType(type_node.name, labels=labels, types=types, refs=refs)
                     type_map[type_node.name] = basic_type
+
                 elif type(type_node) is UnionTypeNode:
                     # TODO:
                     pass
 
             # Types and rules from inherited domains will be integrated into current domain.
+            empty_rules = []
             if inherit_type == InheritanceType.EXTENDS:
-                domain = Domain(domain_name, filename, type_map, rules, conforms,
+                domain = Domain(domain_name, filename, type_map, empty_rules, conforms,
                                 extends=inherited_domain_map, logger=self.logger)
             elif inherit_type == InheritanceType.INCLUDES:
-                domain = Domain(domain_name, filename, type_map, rules, conforms,
+                domain = Domain(domain_name, filename, type_map, empty_rules, conforms,
                                 includes=inherited_domain_map, logger=self.logger)
             else:
-                domain = Domain(domain_name, filename, type_map, rules, conforms, logger=self.logger)
+                domain = Domain(domain_name, filename, type_map, empty_rules, conforms, logger=self.logger)
 
             # Add all rules to a domain after type map is fully generated.
             for rule_node in domain_node.rules:
@@ -184,6 +213,7 @@ class Compiler:
                 rule = Rule(head_preds, body_conjunctions)
                 rules.append(rule)
 
+            # Add all conformance nodes after type map is fully generated.
             for conformance_node in domain_node.conforms:
                 body_conjunctions = []
                 for conjunction in conformance_node:
@@ -194,8 +224,8 @@ class Compiler:
                     body_conjunctions.append(body_constraints)
                 conforms.append(body_conjunctions)
 
-            domain.rules = rules
-            domain.conforms = conforms
+            domain.add_rules(rules)
+            domain.add_comforms(conforms)
             domain_map[domain_name] = domain
 
         # Model facts should be sorted too, so alias occurs after its definition.
@@ -203,6 +233,7 @@ class Compiler:
             facts = []
             alias_to_fact_map = {}
             model_node = visitor.models[model_name]
+
             # ModelFactListNode
             model_fact_list_node = model_node.fact_list_node
             alias_map = model_fact_list_node.alias_map
@@ -210,8 +241,21 @@ class Compiler:
 
             # ModelSigConfigNode
             model_sig_node = model_node.domain_sig
+
+            is_partial = model_sig_node.is_partial
             model_name = model_sig_node.model_name
-            domain_name = model_sig_node.domain
+            domain_name = model_sig_node.domain.module
+            if domain_name not in domain_map:
+                raise Exception('Domain %s does not exist.' % domain_name)
+
+            # Assume inherited models are already loaded.
+            inherited_refs = model_sig_node.inherited_refs
+            if inherited_refs:
+                for inherited_ref in inherited_refs:
+                    # TODO: deal with inherited models.
+                    pass
+
+            type_map = domain_map[domain_name].type_map
 
             for fact_node in fact_nodes:
                 if fact_node in alias_map:

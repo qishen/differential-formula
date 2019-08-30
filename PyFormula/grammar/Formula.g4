@@ -38,6 +38,8 @@ moduleList
 module 
     : domain
 	| model
+	| transform
+	| tSystem
     ;
 
 modRefs
@@ -48,6 +50,60 @@ modRefs
 modRef
 	: BId (RENAMES BId)? (AT STRING)?
 	;
+
+/**************** Transform Decls *************/
+transform
+    : TRANSFORM BId transformSigConfig LBRACE (transSentenceConfig)* RBRACE
+    ;
+
+transformSigConfig
+    : transformSig (config)?
+    ;
+
+transformSig
+    : transSigIn RETURNS LPAREN modRefs RPAREN
+    ;
+
+transSigIn
+    : LPAREN (voMParamList)? RPAREN
+    ;
+
+voMParamList
+    : valOrModelParam (COMMA valOrModelParam)*
+    ;
+
+valOrModelParam
+    : BId COLON unnBody
+    | modRef
+    ;
+
+transSentenceConfig
+    : (sentenceConfig)? transSentence
+    ;
+
+transSentence
+    : formulaRule
+    | typeDecl
+    | ENSURES disjunction DOT
+    | REQUIRES disjunction DOT
+    ;
+
+/**************** TSystem Decls ***************/
+tSystem
+    : TRANSFORM SYSTEM BId transformSigConfig LBRACE transSteps RBRACE
+    ;
+
+transSteps
+    : (transStepConfig)*
+    ;
+
+transStepConfig
+    : (sentenceConfig)? step
+    ;
+
+step
+    : BId
+    ;
 
 /**************** Model Decls *****************/
 model 
@@ -232,7 +288,7 @@ constraint
 	// e.g. n1 is Node, e1 : Edge, e1 is In2.Edge
 	| qualId (IS | COLON) qualId # TypeConstraint
 	// e.g. e1 is Edge(x,y), l is toList(x,y,{...})
-	| qualId (IS | EQ) (aggregation | funcTerm) # NamedTermConstraint
+	| qualId IS (aggregation | funcTerm) # NamedTermConstraint
 	// arithmetic term contains variable, constant or an aggregation expression.
 	// e.g. a + b * c > d, count({...}) * 2 = x
 	| arithmeticTerm relOp arithmeticTerm # BinaryArithmeticConstraint
@@ -372,5 +428,6 @@ RBRACKET : ']' ;
 LPAREN : '(' ;
 RPAREN : ')' ;
 
-WS
-	: [ \t\r\n]+ -> skip ;
+WS : [ \t\r\n]+ -> skip ;
+BLOCKCOMMENT : '/*' .*? '*/' -> skip ;
+LINECOMMENT : '//' ~[\r\n]* -> skip ;

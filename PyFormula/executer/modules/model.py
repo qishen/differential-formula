@@ -17,18 +17,23 @@ class Model:
             basic_type = self.domain.type_map[type_name]
             if type(basic_type) is BasicType:
                 type_index = TermIndex(basic_type)
-                self.type_index_map[basic_type] = type_index
+                self.type_index_map[basic_type.name] = type_index
 
     def add_changes(self, changes):
         for fact in changes:
             count = changes[fact]
-            index = self.type_index_map[fact.sort]
+            index = self.type_index_map[fact.sort.name]
             index.add_delta_fact(fact, count)
 
         for cluster in self.domain.stratified_rules:
             for rule in cluster:
                 self.execute_rule(rule)
 
+
+        #for rule in self.domain.rules:
+        #    self.execute_rule(rule)
+
+        
     def compile(self):
         """
         Initial compilation will treat facts as changes to empty dataset
@@ -59,7 +64,7 @@ class Model:
         """
         for fact in facts_dict:
             count = facts_dict[fact]
-            self.type_index_map[fact.sort].add_delta_fact(fact, count)
+            self.type_index_map[fact.sort.name].add_delta_fact(fact, count)
 
     def print_bindings_list(self, bindings_counter):
         """

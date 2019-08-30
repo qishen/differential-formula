@@ -96,7 +96,11 @@ class Pattern(BaseConstraint):
         self.optimize_constraints_order()
 
     def __str__(self):
-        return '.'.join([str(pred) for pred in self.body])
+        conjunction_strs = []
+        for conjunction in self.body:
+            conjunction_str = ','.join([str(pred) for pred in conjunction])
+            conjunction_strs.append(conjunction_str)
+        return ';'.join(conjunction_strs)
 
     def optimize_constraints_order(self):
         """
@@ -169,8 +173,8 @@ class Pattern(BaseConstraint):
         '''
         Find all bindings for term constraints in the body excluding all negated constraints but put them in a list.
         '''
-        for constraint in self.term_constraints:
-            index = type_index_map[constraint.term.sort]
+        for constraint in self.term_constraints_list[0]:
+            index = type_index_map[constraint.term.sort.name]
             ''' Can be either original, delta or combined fact set data depending on constraint prefix. '''
             factset = constraint.get_factset_for_pred(index)
             new_bindings_counter = BindingsCounter()
@@ -205,10 +209,10 @@ class Pattern(BaseConstraint):
         ''' 
         Get all feasible bindings from non-negated terms and filter them according to matches on negated terms data
         '''
-        for negated_constraint in self.negated_constraints:
+        for negated_constraint in self.negated_constraints_list[0]:
             delete_bindings_list = []
             negated_term = negated_constraint.term
-            index = type_index_map[negated_term.sort]
+            index = type_index_map[negated_term.sort.name]
 
             for bindings in bindings_counter:
                 count = bindings_counter[bindings]
@@ -256,18 +260,29 @@ class Pattern(BaseConstraint):
         return bindings_counter
 
 
-class SetComprehension:
+class Expression:
+    def __init__(self):
+        pass
+
+
+class SetComprehension(Expression):
     def __init__(self, head_terms, constraints):
         self.head_terms = head_terms
         self.constraints = constraints
 
+    def evaluate(self):
+        pass
 
-class Aggregation:
+
+class Aggregation(Expression):
     def __init__(self, func_name, set_comprehension, tid=None, default_value=None):
         self.func = func_name
         self.set_comprehension = set_comprehension
         self.tid = tid
         self.default_value = default_value
+
+    def evaluate(self):
+        pass
 
 
 class BinaryConstraint(BaseConstraint):

@@ -2,6 +2,7 @@ import networkx as nx
 import copy
 
 from executer.relation import *
+from executer.rule import *
 
 
 class Domain:
@@ -12,10 +13,10 @@ class Domain:
         self.includes = includes
         self.extends = extends
         self.type_map = type_map
-        self.rules = rules
-        self.stratified_rules = self.stratify_rules()
+        self.original_rules = rules
+        self.disjunction_free_rules = []
+        self.stratified_rules = []
         self.conforms = conforms
-
         self.model_map = {}
 
         if includes:
@@ -25,7 +26,22 @@ class Domain:
             self.merge_inherited_types(extends)
             self.merge_inherited_rules(extends)
 
+        self.compile()
+
+    def compile(self):
+        # Stratify disjunction free rules in which body part is only a list of constraints.
+        self.disjunction_free_rules = self.convert_to_disjunction_free_rules()
+        self.stratified_rules = self.stratify_rules()
+
+    def add_rules(self, rules):
+        self.original_rules += rules
+        self.compile()
+
+    def add_comforms(self, rules):
+        pass
+
     def merge_inherited_rules(self, inherited_domain_map):
+        # TODO:
         pass
 
     def merge_inherited_types(self, inherited_domain_map):
@@ -47,13 +63,26 @@ class Domain:
     def add_model(self, name, model):
         self.model_map[name] = model
 
+    def convert_to_disjunction_free_rules(self):
+        new_rules = []
+        for rule in self.original_rules:
+            head = rule.head
+            for disjunction in rule.body:
+                new_rule = Rule(head, [disjunction])
+                new_rules.append(new_rule)
+        return new_rules
+
     def stratify_rules(self):
+        """
+        Only apply to a set of disjunction free rules that only
+        has one disjunction of conjunctions.
+        :return:
+        """
         idb = {}
         edb = {}
-        edb_only = {}
 
         # All predicates in head belong to IDB, the rest of preds belong to EDB
-        for rule in self.rules:
+        for rule in self.disjunction_free_rules:
             for c in rule.head:
                 if c.term.sort not in idb:
                     idb[c.term.sort] = [rule]
@@ -61,8 +90,8 @@ class Domain:
                     if rule not in idb[c.term.sort]:
                         idb[c.term.sort].append(rule)
 
-        for rule in self.rules:
-            for c in rule.body:
+        for rule in self.disjunction_free_rules:
+            for c in rule.body[0]:
                 body_sort = c.term.sort
                 if body_sort not in idb:
                     if body_sort not in edb:
@@ -72,10 +101,10 @@ class Domain:
                             edb[body_sort].append(rule)
 
         dg = nx.DiGraph()
-        for rule in self.rules:
+        for rule in self.disjunction_free_rules:
             for hc in rule.head:
                 head_sort = hc.term.sort
-                for bc in rule.body:
+                for bc in rule.body[0]:
                     body_sort = bc.term.sort
                     if body_sort in idb:
                         if bc.negated:
