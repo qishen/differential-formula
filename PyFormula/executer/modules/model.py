@@ -29,11 +29,6 @@ class Model:
             for rule in cluster:
                 self.execute_rule(rule)
 
-
-        #for rule in self.domain.rules:
-        #    self.execute_rule(rule)
-
-        
     def compile(self):
         """
         Initial compilation will treat facts as changes to empty dataset

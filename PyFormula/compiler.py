@@ -272,7 +272,7 @@ class Compiler:
 
             # Replace all model reference with model facts.
             for fact in facts:
-                self.replace_variables(fact, alias_to_fact_map)
+                fact.replace_variables_in_place(alias_to_fact_map)
 
             domain = domain_map[domain_name]
             model = Model(model_name, domain, facts)
@@ -280,22 +280,6 @@ class Compiler:
             model_map[model_name] = model
 
         return domain_map, model_map
-
-    def replace_variables(self, term, alias_to_fact_map):
-        """
-        Replace variables in the term based on the alias to fact mapping.
-        :param term:
-        :param alias_to_fact_map:
-        :return:
-        """
-        if type(term) is Composite:
-            for i, subterm in enumerate(term.args):
-                if type(subterm) is Variable:
-                    var_name = subterm.var
-                    if var_name in alias_to_fact_map:
-                        term.args[i] = alias_to_fact_map[var_name]
-                elif type(subterm) is Composite:
-                    self.replace_variables(subterm, alias_to_fact_map)
 
     def load_constraint_node(self, constraint_node, type_map):
         if type(constraint_node) is TermConstraintNode:

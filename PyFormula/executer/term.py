@@ -122,6 +122,20 @@ class Composite(Term):
             terms.append(self.args[i].propagate_bindings(bindings))
         return Composite(self.relation, terms)
 
+    def replace_variables_in_place(self, alias_to_fact_map):
+        def _replace_variables_in_place_helper(term, alias_to_fact_map):
+            for i, subterm in enumerate(term.args):
+                if type(subterm) is Variable:
+                    var_name = subterm.var
+                    if var_name in alias_to_fact_map:
+                        term.args[i] = alias_to_fact_map[var_name]
+                elif type(subterm) is Composite:
+                    _replace_variables_in_place_helper(subterm, alias_to_fact_map)
+
+        # Need to update ground term status after variable replacement.
+        _replace_variables_in_place_helper(self, alias_to_fact_map)
+        self.is_ground_term = self.check_ground_term()
+
     def check_ground_term(self):
         for arg in self.args:
             if not arg.check_ground_term():

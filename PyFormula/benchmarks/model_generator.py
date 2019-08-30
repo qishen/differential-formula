@@ -71,7 +71,7 @@ class GraphGenerator:
         f.write(program)
         f.close()
 
-        return program
+        return generated_filename, program
 
     def execute_in_pyFormula(self, node_num, edge_num):
         self.node_names.clear()
@@ -258,8 +258,16 @@ class HyperGraphGenerator(GraphGenerator):
 
 
 if __name__ == '__main__':
+    compiler = Compiler()
     generator = GraphGenerator()
-    generator.execute_in_pyFormula(200, 400)
+    #generator.execute_in_pyFormula(200, 400)
+    file_path, program_str = generator.instantiate_graph_formula_template(200, 400, 'GraphNonrecur')
+    compiler.parse(program_str)
+
+    start = datetime.datetime.now()
+    compiler.execute_model('g1')
+    end = datetime.datetime.now()
+    print(end - start)
 
     '''node_num = 50
     for i in range(8):

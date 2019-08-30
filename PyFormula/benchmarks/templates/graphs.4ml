@@ -14,10 +14,10 @@ domain GraphNonrecur includes BaseGraph
     seven_hop ::= (src: Node, dst: Node).
 
     hop(x,z) :- Edge(x,y), Edge(y,z).
-    tri_hop(a,d) :- Edge(a,b), Edge(b,c), Edge(c,d).
+    //tri_hop(a,d) :- Edge(a,b), Edge(b,c), Edge(c,d).
     //quad_hop(e,i) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i).
     //five_hop(e,j) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j).
-    //six_hop(e,k) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j), Edge(j,k).
+    six_hop(e,k) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j), Edge(j,k).
     //seven_hop(e,l) :- Edge(e,f), Edge(f,g), Edge(g,h), Edge(h,i), Edge(i,j), Edge(j,k), Edge(k,l).
 }
 
