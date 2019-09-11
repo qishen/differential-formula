@@ -8,6 +8,20 @@ class BinOp(Enum):
     PLUS = 4
     MINUS = 5
 
+    def __str__(self):
+        if self.value == 1:
+            return '*'
+        elif self.value == 2:
+            return '/'
+        elif self.value == 3:
+            return 'mod'
+        elif self.value == 4:
+            return '+'
+        elif self.value == 5:
+            return '-'
+        else:
+            return 'Not supported.'
+
 
 class RelOp(Enum):
     EQ = 1
@@ -16,6 +30,22 @@ class RelOp(Enum):
     LE = 4
     GT = 5
     GE = 6
+
+    def __str__(self):
+        if self.value == 1:
+            return '='
+        elif self.value == 2:
+            return '!='
+        elif self.value == 3:
+            return '<'
+        elif self.value == 4:
+            return '<='
+        elif self.value == 5:
+            return '>'
+        elif self.value == 6:
+            return '>='
+        else:
+            return 'Not supported.'
 
 
 class ArithmeticExprNode:

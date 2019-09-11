@@ -255,7 +255,7 @@ twoArgAggregation
     ;
 
 threeArgAggregation
-    : BId LPAREN TID COMMA funcTerm COMMA setComprehension
+    : BId LPAREN TID COMMA funcTerm COMMA setComprehension RPAREN
     ;
 
 

@@ -21,3 +21,9 @@ class TypeConstraintNode(BaseConstraintNode):
     def __init__(self, variable, type):
         self.variable = variable
         self.type = type
+
+
+class DerivedConstantConstraintNode(BaseConstraintNode):
+    def __init__(self, negated, variable):
+        self.negated = negated
+        self.variable = variable

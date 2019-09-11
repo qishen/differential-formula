@@ -8,7 +8,8 @@ from grammar.nodes.type import BasicTypeNode, UnionTypeNode, TypeRefNode
 from grammar.nodes.enum import EnumNode, EnumRangeCnstNode, EnumCnstNode
 from grammar.nodes.term import CompositeTermNode, VariableTermNode, ConstantNode
 from grammar.nodes.rule import RuleNode
-from grammar.nodes.constraint import TermConstraintNode, BinaryConstraintNode, TypeConstraintNode
+from grammar.nodes.constraint import TermConstraintNode, BinaryConstraintNode, TypeConstraintNode, \
+    DerivedConstantConstraintNode
 from grammar.nodes.aggregation import SetComprehensionNode, AggregationNode
 from grammar.nodes.expression import BinOp, RelOp, ArithmeticExprNode
 
@@ -119,6 +120,7 @@ class ExprVisitor(FormulaVisitor):
         label = None
         if ctx.BId():
             label = ctx.BId().getText()
+
         has_any = False
         if ctx.ANY():
             has_any = True
@@ -376,12 +378,21 @@ class ExprVisitor(FormulaVisitor):
 
     def visitDerivedConstantConstraint(self, ctx:FormulaParser.DerivedConstantConstraintContext):
         # variable must be of boolean type.
-        pass
+        negated = False
+        if ctx.NO():
+            negated = True
+
+        bool_var = ctx.BId().getText()
+        return DerivedConstantConstraintNode(negated, bool_var)
 
     def visitTypeConstraint(self, ctx:FormulaParser.TypeConstraintContext):
         variable = self.visit(ctx.qualId(0))
         type_name = self.visit(ctx.qualId(1))
-        return TypeConstraintNode(variable, type_name)
+        if len(type_name) > 1:
+            type_ref_node = TypeRefNode(type_name[1], ref_name=type_name[0])
+        else:
+            type_ref_node = TypeRefNode(type_name[0])
+        return TypeConstraintNode(variable, type_ref_node)
 
     def visitParenWrappedArithTerm(self, ctx:FormulaParser.ParenWrappedArithTermContext):
         return self.visit(ctx.arithmeticTerm())
