@@ -1,0 +1,43 @@
+domain D
+{
+
+ g ::= new (any Data, any Data).
+
+ f ::= new (Integer, Integer).
+ 
+ Enum ::= { 1..2 }.
+ 
+f(x, z) :- f(x, y), x = y + 1, z = x + y, z > 0.
+
+//// f(x, z) :- f(x, x), x = y + 1, z = x + y, z > 0.
+
+f(x, z) :- f(x, x), y : Enum, x = y + 1, z = x + y, z > 0.
+
+f(x, z) :- f(x, x), y : Enum, x - 1 = y, z = x + y, z > 0.
+
+f(x, z) :- f(y, y), y : Enum, x = y + 1, z = x + y, z > 0.
+
+f(x, z) :- f(x, x), y = x, z = f(y, y), z != f(x, x).
+
+f(x, z) :- a is f(x, x), b is f(y, y), a = b, x != y. 
+
+f(x, y) :- a is f(x, x), b is f(y, y), a = b. 
+
+q :- a is g(y, y), b is g(x, g(x, x)), a = b.
+
+/// Not recursive
+g(x, x) :- a is g(x, g(x, x)).
+
+g(x, g(g(x, x), g(x, x))) :- a is g(x, c), c = g(x, x).
+
+//// a[1][0] = a[0]
+
+/// Because head cannot unify with body
+/// g(x, x) = g(x, g(x, x))
+/// =>
+/// x = g(x, x)
+
+//// Forall f, x, y. x = y => f(x) = f(y).
+//// Forall f, x, y. f(x) = f(y) => x = y. [For data constructors]
+
+}

@@ -28,6 +28,7 @@ domain WeightedGraph
 
 	// Test nested aggregation in a rule.
 	test1 :- path(a, b, _), num = count({p | p is path(a,b,_), count({x | x is path(Node("n1"), Node("n2"), _)}) = 1}).
+    test2 :- Nodes(a, NIL), Nodes(a, Nodes(b, NIL)).
 
 	// Calculate the number of paths between each pair of nodes.
 	pathCount(a, b, num) :- path(a, b, _), num = count({p | p is path(a,b,_)}).
@@ -36,8 +37,8 @@ domain WeightedGraph
 	shortestPath(a, b, shortest) :- path(a, b, _), shortest = minAll(0, {c | path(a,b,c)}), shortest: Integer.
 
 	// Compute all possible path length between each pair of nodes.
-	allPathLength(a, b, lists) :- path(a, b, _), lists = toList(#Ints, NIL, {c,111 | path(a,b,c)}), lists : Ints.
-
+	allPathLength(a, b, lists) :- path(a, b, _), lists = toList(#Ints, Ints(0, NIL), {c | path(a, b, c)}), lists : Ints.
+    test3 :- path(a, b, _), lists = toList(#Ints, Ints(1, Ints(2, NIL)), {c | path(a, b, c)}), lists : Ints.
 
 }
 
