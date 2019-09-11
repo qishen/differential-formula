@@ -116,6 +116,11 @@ class Composite(Term):
         return self.__hash__() == other.__hash__()
 
     def propagate_bindings(self, bindings):
+        """
+        Return a new composite term after propagating bindings.
+        :param bindings:
+        :return:
+        """
         length = len(self.args)
         terms = []
         for i in range(length):
@@ -123,6 +128,11 @@ class Composite(Term):
         return Composite(self.relation, terms)
 
     def replace_variables_in_place(self, alias_to_fact_map):
+        """
+        Replace variables with models and it has to check the groundness of current term again.
+        :param alias_to_fact_map:
+        :return:
+        """
         def _replace_variables_in_place_helper(term, alias_to_fact_map):
             for i, subterm in enumerate(term.args):
                 if type(subterm) is Variable:
@@ -144,21 +154,24 @@ class Composite(Term):
 
 
 class Atom(Term):
-    def __init__(self, value):
-        # Determine the sort of basic atom value.
-        if type(value) is str:
-            sort = BuiltInType('String')
-        elif type(value) is int:
-            sort = BuiltInType('Integer')
-        else:
-            sort = BuiltInType('Float')
+    def __init__(self, value, sort=None):
+        # Atom could be either BuiltInType or EnumType.
+        if sort is None:
+            # Need to determine the sort of basic atom value if an EnumType is not specified.
+            if type(value) is str:
+                sort = BuiltInType('String')
+            elif type(value) is int:
+                sort = BuiltInType('Integer')
+            else:
+                sort = BuiltInType('Float')
 
         super().__init__(sort)
         self.val = value
         self.term_type = TermType.ATOM
 
     def __str__(self):
-        if type(self.val) is str:
+        # Atom could be Enum type and don't need to wrap it with double quotes.
+        if type(self.val) is str and type(self.sort) is BuiltInType:
             return '"' + self.val + '"'
         else:
             return str(self.val)

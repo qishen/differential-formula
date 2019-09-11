@@ -1,6 +1,7 @@
 import unittest
 
 from executer.relation import *
+from utils.data_structures import *
 
 
 class RelationTestCase(unittest.TestCase):

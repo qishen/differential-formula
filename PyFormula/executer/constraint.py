@@ -2,7 +2,8 @@ from enum import Enum
 from typing import *
 
 from executer.binding import Bindings, BindingsCounter
-from executer.term import Term
+from executer.term import *
+from executer.relation import *
 
 
 class PredType(Enum):
@@ -11,8 +12,62 @@ class PredType(Enum):
     COMBINED = 3
 
 
+''' Expressions used in rule constraints '''
+
+
+class Expression:
+    def __init__(self):
+        pass
+
+
 class BaseConstraint:
     def __init__(self):
+        pass
+
+
+class ArithmeticExpr(Expression):
+    def __init__(self, left, right, op):
+        self.left = left
+        self.right = right
+        self.op = op
+
+    def __str__(self):
+        return '(' + str(self.left) + str(self.op) + str(self.right) + ')'
+
+    def evaluate(self):
+        pass
+
+
+class SetComprehension(Expression):
+    def __init__(self, head_terms, body: List[List[BaseConstraint]]):
+        self.head = head_terms
+        self.body = body
+
+    def __str__(self):
+        return '{' + ','.join([str(term) for term in self.head]) + '|' + \
+                    ';'.join([','.join([str(c) for c in constraints]) for constraints in self.body]) + '}'
+
+    def evaluate(self):
+        pass
+
+
+class Aggregation(Expression):
+    def __init__(self, func_name, set_comprehension, tid=None, default_value=None):
+        self.func = func_name
+        self.set_comprehension = set_comprehension
+        self.tid = tid
+        self.default_value = default_value
+
+    def __str__(self):
+        params = []
+        if self.tid is not None:
+            params.append(str(self.tid))
+        if self.default_value is not None:
+            params.append(str(self.default_value))
+        params.append(str(self.set_comprehension))
+        return self.func + '(' + '.'.join(params) + ')'
+
+    def evaluate(self):
         pass
 
 
@@ -21,15 +76,26 @@ class Predicate(BaseConstraint):
         self.term = term
         self.pred_type = pred_type
         self.negated = negated
+        if type(self.term) is Composite and self.term.alias:
+            self.alias = Variable('.'.join(self.term.alias), self.term.sort)
+        else:
+            self.alias = None
 
     def __str__(self):
         prefix = ''
+
         if self.negated:
             prefix += 'no '
+
+        # alias is a list of strings
+        if self.alias is not None:
+            prefix += str(self.alias) + ' is '
+
         if self.pred_type == PredType.DELTA:
             prefix += '[delta]'
         elif self.pred_type == PredType.COMBINED:
             prefix += '[combined]'
+
         return prefix + str(self.term)
 
     def get_relation(self):
@@ -75,6 +141,9 @@ class Predicate(BaseConstraint):
         return factset
 
 
+''' Constraint including nested constraints used in FORMULA '''
+
+
 class Pattern(BaseConstraint):
     def __init__(self, body: List[List[BaseConstraint]]):
         self.body = body
@@ -85,10 +154,13 @@ class Pattern(BaseConstraint):
             negated_constraints = []
             term_constraints = []
             for constraint in conjunction:
-                if constraint.negated:
-                    negated_constraints.append(constraint)
-                else:
-                    term_constraints.append(constraint)
+                if type(constraint) is Predicate:
+                    if constraint.negated:
+                        negated_constraints.append(constraint)
+                    else:
+                        term_constraints.append(constraint)
+                elif type(constraint) is BinaryConstraint:
+                    pass
             self.negated_constraints_list.append(negated_constraints)
             self.term_constraints_list.append(term_constraints)
 
@@ -260,29 +332,16 @@ class Pattern(BaseConstraint):
         return bindings_counter
 
 
-class Expression:
-    def __init__(self):
-        pass
+class DerivedConstantConstraint(BaseConstraint):
+    def __init__(self, negated, variable):
+        self.negated = negated
+        self.variable = variable
 
-
-class SetComprehension(Expression):
-    def __init__(self, head_terms, constraints):
-        self.head_terms = head_terms
-        self.constraints = constraints
-
-    def evaluate(self):
-        pass
-
-
-class Aggregation(Expression):
-    def __init__(self, func_name, set_comprehension, tid=None, default_value=None):
-        self.func = func_name
-        self.set_comprehension = set_comprehension
-        self.tid = tid
-        self.default_value = default_value
-
-    def evaluate(self):
-        pass
+    def __str__(self):
+        if self.negated:
+            return 'no ' + str(self.variable)
+        else:
+            return str(self.variable)
 
 
 class BinaryConstraint(BaseConstraint):
@@ -291,10 +350,17 @@ class BinaryConstraint(BaseConstraint):
         self.right = right
         self.op = op
 
+    def __str__(self):
+        return str(self.left) + str(self.op) + str(self.right)
+
     def evaluate(self, var_map):
         pass
 
 
 class TypeConstraint(BaseConstraint):
-    def __init__(self):
-        pass
+    def __init__(self, variable, type):
+        self.variable = variable
+        self.type = type
+
+    def __str__(self):
+        return str(self.variable) + ':' + str(self.type)

@@ -20,6 +20,7 @@ class Domain:
         self.model_map = {}
 
         if includes:
+            # Only includes types.
             self.merge_inherited_types(includes)
         elif extends:
             # Extends types, rules and conformance.
@@ -27,6 +28,10 @@ class Domain:
             self.merge_inherited_rules(extends)
 
         self.compile()
+
+    def validate(self):
+        # Validate rules and change variable to value of EnumType as parser does not know the semantics of each symbol.
+        pass
 
     def compile(self):
         # Stratify disjunction free rules in which body part is only a list of constraints.
@@ -75,7 +80,7 @@ class Domain:
     def stratify_rules(self):
         """
         Only apply to a set of disjunction free rules that only
-        has one disjunction of conjunctions.
+        has one disjunction of conjunctions like [[c1, c2 ... cn]]
         :return:
         """
         idb = {}
@@ -92,25 +97,33 @@ class Domain:
 
         for rule in self.disjunction_free_rules:
             for c in rule.body[0]:
-                body_sort = c.term.sort
-                if body_sort not in idb:
-                    if body_sort not in edb:
-                        edb[body_sort] = [rule]
-                    else:
-                        if rule not in edb[body_sort]:
-                            edb[body_sort].append(rule)
+                if type(c) is Predicate:
+                    body_sort = c.term.sort
+                    if body_sort not in idb:
+                        if body_sort not in edb:
+                            edb[body_sort] = [rule]
+                        else:
+                            if rule not in edb[body_sort]:
+                                edb[body_sort].append(rule)
+                else:
+                    #TODO: other constraints.
+                    pass
 
         dg = nx.DiGraph()
         for rule in self.disjunction_free_rules:
             for hc in rule.head:
                 head_sort = hc.term.sort
                 for bc in rule.body[0]:
-                    body_sort = bc.term.sort
-                    if body_sort in idb:
-                        if bc.negated:
-                            dg.add_edge(body_sort, head_sort, negated=True)
-                        else:
-                            dg.add_edge(body_sort, head_sort, negated=False)
+                    if type(bc) is Predicate:
+                        body_sort = bc.term.sort
+                        if body_sort in idb:
+                            if bc.negated:
+                                dg.add_edge(body_sort, head_sort, negated=True)
+                            else:
+                                dg.add_edge(body_sort, head_sort, negated=False)
+                    else:
+                        #TODO: Other type of constraints
+                        pass
 
         cg = nx.condensation(dg)
         mapping = cg.graph['mapping']

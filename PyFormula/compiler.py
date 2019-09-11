@@ -24,6 +24,9 @@ from executer.constraint import *
 from executer.rule import *
 
 
+import ddengine
+ddengine.WordCounter.search()
+
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
     def __init__(self, logger_disabled=False):
@@ -144,6 +147,7 @@ class Compiler:
 
             # Types should be sorted after validation so Edge does not occur before Node.
             for type_node in domain_node.types:
+                type_name = type_node.name
                 if type(type_node) is BasicTypeNode:
                     types = []
                     refs = []
@@ -153,37 +157,28 @@ class Compiler:
                     for subtype_node in subtype_nodes:
                         if type(subtype_node) is list:
                             # subtype_node can be a list of string or EnumNode e.g. Node + Edge + {NIL}
-                            for component in subtype_node:
-                                if type(component) is str:
-                                    types.append(component)
-                                    refs.append(None)
-                                elif type(component) is EnumNode:
-                                    # Create a new enum type to represent a list of constants.
-                                    enum_items = []
-                                    for cnst_node in component.items:
-                                        if type(cnst_node) is EnumCnstNode:
-                                            enum_items.append(cnst_node.constant.constant)
-                                        elif type(cnst_node) is EnumRangeCnstNode:
-                                            # TODO:
-                                            pass
-                                    assigned_enum_name = 'enum_' + str(hash(tuple(enum_items)))
-                                    enum_type = EnumType(assigned_enum_name, enum_items)
-                                    type_map[assigned_enum_name] = enum_type
-                                    types.append(assigned_enum_name)
-                                    refs.append(None)
+                            assigned_union_type_name, unn_type = self.load_union_node(None, subtype_node, type_map)
+                            type_map[assigned_union_type_name] = unn_type
+                            # Add union type name to subtype list
+                            types.append(assigned_union_type_name)
+                            refs.append(None)
                         elif type(subtype_node) is TypeRefNode:
                             # Need to consider domain alias like Left::DAGs and Right::DAGs
                             types.append(subtype_node.type)
                             refs.append(subtype_node.ref)
-
-                    basic_type = BasicType(type_node.name, labels=labels, types=types, refs=refs)
-                    type_map[type_node.name] = basic_type
+                    basic_type = BasicType(type_name, labels=labels, types=types, refs=refs)
+                    type_map[type_name] = basic_type
 
                 elif type(type_node) is UnionTypeNode:
-                    # TODO:
-                    pass
+                    unn_name = type_node.name
+                    subtypes = type_node.subtypes
+                    _, unn_type = self.load_union_node(unn_name, subtypes, type_map)
+                    type_map[unn_name] = unn_type
 
-            # Types and rules from inherited domains will be integrated into current domain.
+            ''' 
+            Types and rules from inherited domains will be integrated into current domain.
+            A domain can extends or includes other domains but not do both of them.
+            '''
             empty_rules = []
             if inherit_type == InheritanceType.EXTENDS:
                 domain = Domain(domain_name, filename, type_map, empty_rules, conforms,
@@ -194,11 +189,14 @@ class Compiler:
             else:
                 domain = Domain(domain_name, filename, type_map, empty_rules, conforms, logger=self.logger)
 
-            # Add all rules to a domain after type map is fully generated.
+            ''' 
+            Only add all rules to a domain after type map is fully generated and when a new rule is added into
+            existing rules, the transformed rules and stratification will be updated accordingly.
+            '''
             for rule_node in domain_node.rules:
                 head_preds = []
                 for term_node in rule_node.head:
-                    term = self.load_term_node(term_node, type_map)
+                    term = self.load_term_node(term_node, type_map, BuiltInType('Boolean'))
                     pred = Predicate(term)
                     head_preds.append(pred)
 
@@ -270,7 +268,12 @@ class Compiler:
                         alias_to_fact_map[alias] = fact
                     facts.append(fact)
 
-            # Replace all model reference with model facts.
+            ''' 
+            Since parser has no idea of the semantics of FORMULA languge, it will treat model
+            reference like variables and here compiler replaces all model reference with model 
+            facts given an alias to model map. After in-place variable replacement, check_ground_term() 
+            function will be invoked again to check the groundness of every term.
+            '''
             for fact in facts:
                 fact.replace_variables_in_place(alias_to_fact_map)
 
@@ -281,12 +284,43 @@ class Compiler:
 
         return domain_map, model_map
 
+    def load_union_node(self, name, subtypes, type_map):
+        # union is a list of strings that represent types.
+        union = []
+        for component in subtypes:
+            if type(component) is str:
+                type_str = component
+                union.append(type_str)
+            elif type(component) is EnumNode:
+                # Create a new enum type to represent a list of constants.
+                enum_items = []
+                for cnst_node in component.items:
+                    if type(cnst_node) is EnumCnstNode:
+                        enum_items.append(cnst_node.constant.constant)
+                    elif type(cnst_node) is EnumRangeCnstNode:
+                        low = int(cnst_node.low)
+                        high = int(cnst_node.high)
+                        range_type = RangeType(low, high)
+                        enum_items.append(range_type)
+                assigned_enum_name = 'enum_' + '+'.join([str(enum) for enum in enum_items])
+                enum_type = EnumType(assigned_enum_name, enum_items)
+                type_map[assigned_enum_name] = enum_type
+                union.append(assigned_enum_name)
+        # Create a new union type
+        if name is None:
+            name = 'union_of_' + '#'.join(union)
+        unn_type = UnnType(name, union, None)
+        type_map[name] = unn_type
+        # Add union type name to subtype list
+        return name, unn_type
+
     def load_constraint_node(self, constraint_node, type_map):
         if type(constraint_node) is TermConstraintNode:
             has_negation = constraint_node.has_negation
             term_node = constraint_node.term
             term = self.load_term_node(term_node, type_map)
             alias = constraint_node.alias
+            term.alias = alias
             constraint = Predicate(term, negated=has_negation)
             return constraint
         elif type(constraint_node) is BinaryConstraintNode:
@@ -295,6 +329,17 @@ class Compiler:
             right = self.load_expression_node(constraint_node.right, type_map)
             constraint = BinaryConstraint(left, right, op)
             return constraint
+        elif type(constraint_node) is TypeConstraintNode:
+            type_ref_node = constraint_node.type
+            variable_strs = constraint_node.variable
+            type_name = type_ref_node.type
+            variable = Variable('.'.join(variable_strs), type_map[type_name])
+            return TypeConstraint(variable, type_map[type_name])
+        elif type(constraint_node) is DerivedConstantConstraintNode:
+            negated = constraint_node.negated
+            bool_var_str = constraint_node.variable
+            bool_var = Variable(bool_var_str, BuiltInType('Boolean'))
+            return DerivedConstantConstraint(negated, bool_var)
         else:
             # TODO: Add other constraints
             raise Exception('Not implemented yet.')
@@ -304,16 +349,57 @@ class Compiler:
             func = expr_node.func
             set_compr_node = expr_node.set_comprehension
             tid = expr_node.tid
-            default_value = expr_node.default_value
+            default_value = None
+            # Default value could be an constant but recognized by parser as variable node without knowing the semantics
+            if type(expr_node.default_value) is VariableTermNode:
+                """ 
+                Parser recognized it as variable but has to be converted into enum value otherwise wrong 
+                argument provided.
+                """
+                var_str = '.'.join(expr_node.default_value.variable)
+                # Need to decide the type of enum constant by checking tid
+                type_str = tid.strip('#')
+                if type_str in type_map:
+                    var_type = type_map[type_str]
+                else:
+                    raise Exception('Wrong type id %s is provided.' % tid)
+
+                if type(var_type) is EnumType or type(var_type) is RangeType:
+                    if var_type.has_constant(var_str):
+                        # Even the parser recognizes it as a variable, still turn it into an atom.
+                        default_value = Atom(var_str, var_type)
+                    else:
+                        raise Exception('Wrong default value %s is provided.' % var_str)
+                elif type(var_type) is UnnType:
+                    # Recursively find the right type for constant.
+                    has_match, matched_type = var_type.has_constant(var_str, type_map)
+                    if has_match:
+                        default_value = Atom(var_str, matched_type)
+                    else:
+                        raise Exception('Wrong default value %s is provided.' % var_str)
+                else:
+                    raise Exception('Default value does not conform to the defined type')
+            elif type(expr_node.default_value) is CompositeTermNode:
+                default_term = self.load_term_node(expr_node.default_value, type_map)
+                if not default_term.is_ground_term:
+                    raise Exception('Default value must be a constant or ground term.')
+                default_value = default_term
+            elif type(expr_node.default_value) is ConstantNode:
+                default_value = expr_node.default_value.constant
             # Turn SetComprehension node into expression.
             head_terms = [self.load_term_node(term, type_map) for term in set_compr_node.head_terms]
-            constraints = [self.load_constraint_node(constraint, type_map) for constraint in set_compr_node.constraints]
-            set_compr = SetComprehension(head_terms, constraints)
+            body = [[self.load_constraint_node(constraint, type_map) for constraint in set_compr_node.constraints]]
+            set_compr = SetComprehension(head_terms, body)
             return Aggregation(func, set_compr, tid, default_value)
         elif type(expr_node) is VariableTermNode:
             return self.load_term_node(expr_node, type_map)
         elif type(expr_node) is ConstantNode:
             return expr_node.constant
+        elif type(expr_node) is ArithmeticExprNode:
+            left = self.load_expression_node(expr_node.left, type_map)
+            right = self.load_expression_node(expr_node.right, type_map)
+            op = expr_node.op
+            return ArithmeticExpr(left, right, op)
         else:
             raise Exception('Not implemented yet.')
 
@@ -341,7 +427,19 @@ class Compiler:
             term = Composite(sort, terms)
             return term
         elif type(term_node) is VariableTermNode:
-            return Variable('.'.join(term_node.variable), var_type)
+            # The variable AST node contains a list of strings separated by dots.
+            # Need to distinguish between variable and constant like NIL.
+            var_str = '.'.join(term_node.variable)
+            if type(var_type) is EnumType or type(var_type) is RangeType:
+                if var_type.has_constant(var_str):
+                    # Even the parser recognizes it as a variable, still turn it into an atom.
+                    return Atom(var_str, var_type)
+            elif type(var_type) is UnnType:
+                # Recursively find the right type for constant.
+                has_match, matched_type = var_type.has_constant(var_str, type_map)
+                if has_match:
+                    return Atom(var_str, matched_type)
+            return Variable(var_str, var_type)
         elif type(term_node) is ConstantNode:
-            # TODO: Add type to atom node as well.
+            # TODO: Add type to atom node as well if it is Enum type
             return Atom(term_node.constant)

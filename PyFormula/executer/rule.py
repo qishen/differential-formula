@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import *
 
-from executer.constraint import Pattern, BaseConstraint, PredType
+from executer.constraint import *
 
 
 class Rule(Pattern):
@@ -19,9 +19,18 @@ class Rule(Pattern):
     def check_recursion(self):
         for conjunction in self.body:
             for body_constraint in conjunction:
-                for head_constraint in self.head:
-                    if body_constraint.term.sort.name == head_constraint.term.sort.name:
-                        return True
+                if type(body_constraint) is Predicate:
+                    for head_constraint in self.head:
+                        # head term could be a boolean variable.
+                        if type(head_constraint) is Predicate and head_constraint.term.sort:
+                            if body_constraint.term.sort.name == head_constraint.term.sort.name:
+                                return True
+                        else:
+                            #TODO:
+                            pass
+                elif type(body_constraint) is BinaryConstraint:
+                    # TODO:
+                    pass
         return False
 
     def derive_delta_rules(self):
