@@ -3,6 +3,7 @@ import datetime
 import networkx as nx
 from antlr4 import *
 from collections import Counter
+from ddengine import *
 
 from grammar.visitor import ExprVisitor
 from grammar.gen.FormulaLexer import FormulaLexer
@@ -23,9 +24,6 @@ from executer.relation import *
 from executer.constraint import *
 from executer.rule import *
 
-
-import ddengine
-ddengine.WordCounter.search()
 
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}

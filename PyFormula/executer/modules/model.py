@@ -5,6 +5,8 @@ from executer.index import *
 from executer.relation import *
 from executer.term import *
 
+from ddengine import *
+
 
 class Model:
     def __init__(self, model_name, domain: Domain, facts=[]):
@@ -131,6 +133,9 @@ class Model:
 
         self.add_changes(changes)
         self.merge_delta_data()
+
+    def compile_ddengine(self):
+        self.initial_facts
 
     def merge_delta_data(self):
         """

@@ -41,3 +41,59 @@ g(x, g(g(x, x), g(x, x))) :- a is g(x, c), c = g(x, x).
 //// Forall f, x, y. f(x) = f(y) => x = y. [For data constructors]
 
 }
+
+
+domain X
+{
+   Node ::= new (Integer).
+   Edge ::= new (src: any Node, dst: any Node).
+
+   List1 ::= (Node, List1 + { NIL }).
+   List2 ::= (Node, List2 + { NIL }).
+   List3 ::= (Node, List3 + { NIL }).
+
+   G ::= new ({ #List1, #List2, #List3 }).
+
+   q :- G(y), toList(y, NIL, {x | x is Node }) != NIL.
+
+   conforms Edge(x, y).
+
+   conforms Edge(y, z).
+}
+
+partial model M of X
+{
+   requires count({ x | x is Edge(%a, z)}) > 10.
+
+   Edge(a, b).
+   Edge(b, c).
+}
+
+domain Y
+{
+   F ::= new (Integer).
+
+   U ::= { blue, red }.
+
+   q :- F(1).
+}
+
+
+transform T (a:: X) returns (b:: X)
+{
+   b.Edge(x, x) :- a.Edge(x, x).
+}
+
+
+domain Z includes X, Y
+{
+   q :- X.q; Y.q.
+   q :- X.q, Y.q.
+}
+
+domain W includes a:: X, b:: X, c:: X
+{
+   F ::= (b.Node + c.Node).
+
+   F(x) :- a.Edge(x, x).
+}
