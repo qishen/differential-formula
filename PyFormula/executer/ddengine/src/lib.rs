@@ -27,6 +27,7 @@ use pyo3::derive_utils::IntoPyResult;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use pyo3::class::basic::CompareOp;
+use std::io::Error;
 
 
 trait Term {
@@ -41,24 +42,6 @@ enum TermObject {
     Variable(Variable),
     Composite(Composite),
 }
-
-/*
-impl ToPyObject for TermObject {
-    fn to_object(&self, py: Python) -> PyObject {
-        match self {
-            TermObject::Composite(c) => {
-                return c.try_into().unwrap()
-            },
-            TermObject::Variable(v) => {
-                return v.try_into()
-            },
-            TermObject::Atom(a) => {
-                return a.try_into()
-            },
-            _ => { return PyObject; }
-        }
-    }
-}*/
 
 impl PartialEq for TermObject {
     fn eq(&self, other: &Self) -> bool {
@@ -84,6 +67,7 @@ impl PartialEq for TermObject {
             TermObject::Composite(c) => {
                 match other {
                     TermObject::Composite(c1) => {
+
                         if c == c1 { return true; }
                         else { return false; }
                     },
@@ -103,6 +87,90 @@ struct Composite {
     sort: Rc<PyObject>,
     args: Vec<Box<TermObject>>,
     alias: Option<String>,
+}
+
+impl Composite {
+    // term can be either variable or composite that has variables, ground term can be either atom or composite.
+    fn bind_helper(term: &TermObject, ground_term: &TermObject, bindings: &mut HashMap<Variable, TermObject>) -> bool {
+        match term {
+            TermObject::Composite(c) => {
+                match ground_term {
+                    TermObject::Composite(g) => {
+                        if c.type_name != g.type_name {
+                            return false;
+                        }
+                        // Check each argument in composite term and immediately return false when mismatch is found.
+                        for i in 0..c.args.len() {
+                            let arg_term = c.args.get(i).unwrap().as_ref().clone();
+                            let arg_ground_term = g.args.get(i).unwrap().as_ref().clone();
+                            let equals = Composite::bind_helper(&arg_term, &arg_ground_term, bindings);
+                            if equals == false { return false; }
+                        }
+                    },
+                    _ => return false
+                }
+            },
+            TermObject::Atom(a) => {
+                // Both terms have to be the same atom term.
+                match ground_term {
+                    TermObject::Atom(arg_ground_term_atom) => {
+                        if a != arg_ground_term_atom { return false; }
+                    },
+                    _ => return false
+                }
+                return true;
+            },
+            TermObject::Variable(v) => {
+                // Directly add ground term into bindings indexed by current variable.
+                bindings.insert(v.clone(), ground_term.clone());
+                return true;
+            }
+        }
+        return true;
+    }
+
+    fn _get_bindings(&self, ground_term: TermObject) -> Result<HashMap<Variable, TermObject>, PyErr> {
+        let mut map: HashMap<Variable, TermObject> = HashMap::new();
+        let equals = Composite::bind_helper(&TermObject::Composite(self.clone()), &ground_term, &mut map);
+        if equals {
+            Ok(map)
+        } else {
+            Ok(HashMap::new())
+        }
+    }
+
+    fn _propagate_bindings(&self, bindings: &HashMap<Variable, TermObject>) -> Result<TermObject, PyErr> {
+        let mut new_args: Vec<Box<TermObject>> = Vec::new();
+        for i in 0..self.args.len() {
+            let arg = self.args.get(i).unwrap().as_ref();
+            match arg {
+                TermObject::Composite(c) => {
+                    let new_c_obj = c._propagate_bindings(bindings).unwrap();
+                    new_args.insert(i, Box::new(new_c_obj));
+                },
+                TermObject::Variable(v) => {
+                    if bindings.contains_key(v) {
+                        let value = bindings.get(v).unwrap().clone();
+                        new_args.insert(i, Box::new(value));
+                    } else {
+                        new_args.insert(i, Box::new(TermObject::Variable(v.clone())))
+                    }
+                },
+                TermObject::Atom(a) => {
+                    new_args.insert(i, Box::new(TermObject::Atom(a.clone())))
+                }
+            }
+        }
+
+        let new_composite = Composite {
+            type_name: self.type_name.clone(),
+            sort: self.sort.clone(),
+            args: new_args,
+            alias: self.alias.clone()
+        };
+
+        Ok(TermObject::Composite(new_composite))
+    }
 }
 
 impl Hash for Composite {
@@ -202,6 +270,55 @@ impl Composite {
             Ok(true)
         } else {
             Ok(false)
+        }
+    }
+
+    fn get_bindings(&self, ground_term: &PyAny) -> PyResult<HashMap<Variable, PyObject>> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        if let Ok(composite) = ground_term.cast_as::<Composite>() {
+            let _map: HashMap<Variable, TermObject> = self._get_bindings(TermObject::Composite(composite.clone())).unwrap();
+            let mut bindings: HashMap<Variable, PyObject> = HashMap::new();
+            for (key, value) in _map {
+                match value {
+                    TermObject::Variable(v) => bindings.insert(key.clone(), v.into_py(py)),
+                    TermObject::Atom(a) => bindings.insert(key.clone(), a.into_py(py)),
+                    TermObject::Composite(c) => bindings.insert(key.clone(), c.into_py(py))
+                };
+            }
+            Ok(bindings)
+        } else {
+            Err(exceptions::AssertionError::py_err("Can't compare to a term that is not a composite ground term"))
+        }
+    }
+
+    fn propagate_bindings(&self, bindings: &PyDict) -> PyResult<PyObject> {
+        // Have to turn Python object bindings into hash map in Rust
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let mut _bindings: HashMap<Variable, TermObject> = HashMap::new();
+        for (key, value) in bindings {
+            if let Ok(_key) = key.cast_as::<Variable>() {
+                if let Ok(_value) = value.cast_as::<Atom>() {
+                    _bindings.insert(_key.clone(), TermObject::Atom(_value.clone()));
+                } else if let Ok(_value) = value.cast_as::<Composite>() {
+                    _bindings.insert(_key.clone(), TermObject::Composite(_value.clone()));
+                } else {
+                    return Err(exceptions::AssertionError::py_err("The value must be either atom or composite"))
+                }
+            } else {
+                return Err(exceptions::AssertionError::py_err("The key must be a variable"))
+            }
+        }
+
+        let termObj = self._propagate_bindings(&_bindings).unwrap();
+        match termObj {
+            TermObject::Composite(c) => {
+                return Ok(c.into_py(py));
+            },
+            _ => {
+                return Err(exceptions::AssertionError::py_err("It must be a composite term"));
+            }
         }
     }
 }
@@ -340,7 +457,6 @@ impl PartialEq for Atom {
     }
 }
 
-
 #[pymethods]
 impl Atom {
     #[new]
@@ -367,7 +483,15 @@ impl Atom {
     }
 
     fn check_ground_term(&self) -> PyResult<bool> {
-        Ok(false)
+        Ok(true)
+    }
+
+    fn get_bindings(&self, ground_term: &PyAny) -> PyResult<HashMap<Variable, PyObject>> {
+        Err(exceptions::NotImplementedError::py_err("An Atom term does not support bindings checking with other terms"))
+    }
+
+    fn propagate_bindings(&self, bindings: &PyAny) -> PyResult<PyObject> {
+        Err(exceptions::NotImplementedError::py_err("Cannot propagate bindings to an atom term"))
     }
 }
 
@@ -441,6 +565,27 @@ impl PartialEq for Variable {
 
 impl Eq for Variable {}
 
+impl Variable {
+    fn _get_bindings(&self, ground_term: TermObject) -> Result<HashMap<Variable, TermObject>, PyErr> {
+       let mut map: HashMap<Variable, TermObject> = HashMap::new();
+        match ground_term {
+            TermObject::Variable(variable) => {
+                return Err(exceptions::AssertionError::py_err("Can't find bindings for a variable"));
+            },
+            TermObject::Atom(atom) => {
+                 map.insert(self.clone(), TermObject::Atom(atom));
+            },
+            TermObject::Composite(composite) => {
+                if composite.get_variables().unwrap().len() != 0 {
+                    return Err(exceptions::AssertionError::py_err("Can't find bindings for composite having variables inside it"))
+                }
+                map.insert(self.clone(), TermObject::Composite(composite));
+            }
+        }
+        Ok(map)
+    }
+}
+
 #[pymethods]
 impl Variable {
     #[new]
@@ -470,23 +615,45 @@ impl Variable {
     }
 
     fn check_ground_term(&self) -> PyResult<bool> {
-        Ok(true)
+        Ok(false)
     }
 
-    fn get_bindings(&self, ground_term: &PyAny) -> PyResult<HashMap<Variable, TermObject>> {
-        let mut map: HashMap<Variable, TermObject> = HashMap::new();
+    fn get_bindings(&self, ground_term: &PyAny) -> PyResult<HashMap<Variable, PyObject>> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let mut map: HashMap<Variable, PyObject> = HashMap::new();
         if let Ok(composite) = ground_term.cast_as::<Composite>() {
-            if composite.get_variables().unwrap().len() == 0 {
-                map.insert(self.clone(), TermObject::Composite(composite.clone()));
-            } else {
-                return Err(exceptions::AssertionError::py_err("Ground term cannot contain variables"));
+            // Create a new map with values changed to corresponding PyObject.
+            let mut _map: HashMap<Variable, TermObject> = self._get_bindings(TermObject::Composite(composite.clone())).unwrap();
+            for (key, value) in _map {
+                match value {
+                    TermObject::Variable(v) => map.insert(key.clone(), v.into_py(py)),
+                    TermObject::Atom(a) => map.insert(key.clone(), a.into_py(py)),
+                    TermObject::Composite(c) => map.insert(key.clone(), c.into_py(py))
+                };
             }
         } else if let Ok(atom) = ground_term.cast_as::<Atom>() {
-            map.insert(self.clone(), TermObject::Atom(atom.clone()));
+            map.insert(self.clone(), atom.clone().into_py(py));
         } else {
             return Err(exceptions::AssertionError::py_err("Ground term cannot be a variable"));
         }
         Ok(map)
+    }
+
+    fn propagate_bindings(&self, bindings: &PyAny) -> PyResult<PyObject> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        if let Ok(dict) = bindings.cast_as::<PyDict>() {
+            let var: PyObject = self.clone().into_py(py);
+            if dict.contains(&var).unwrap() {
+                let value = dict.get_item(&var).unwrap();
+                return Ok(value.into_py(py));
+            } else {
+                return Ok(self.clone().into_py(py));
+            }
+        } else {
+            Err(exceptions::AssertionError::py_err("Can't fully propagate all variables"))
+        }
     }
 }
 
@@ -527,8 +694,6 @@ impl PyObjectProtocol for Variable {
         }
     }
 }
-
-
 
 
 

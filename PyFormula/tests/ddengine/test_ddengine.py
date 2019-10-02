@@ -75,3 +75,26 @@ class TermTestCase(unittest.TestCase):
         self.assertEqual(vn1, vn1y)
         self.assertEqual(vs1, vs1y)
 
+    def test_term_bindings(self):
+        vn1 = Variable('a', self.node)
+        ve1 = Composite(self.edge, [Variable('a', self.node), Composite(self.node, [Variable('b', self.string)])])
+        g1 = Composite(self.node, [Atom('HELLO', self.string)])
+        g2 = Composite(self.edge, [Composite(self.node, [Atom('nihao', self.string)]), Composite(self.node, [Atom('privet', self.string)])])
+        print(vn1)
+        print(ve1)
+        print(g1)
+        print(g2)
+        bindings = vn1.get_bindings(g1)
+
+        for key in bindings:
+            print("%s : %s" % (key, bindings[key]))
+
+        bindings2 = ve1.get_bindings(g2)
+        for key in bindings2:
+            print("%s : %s" % (key, bindings2[key]))
+
+        pn1 = vn1.propagate_bindings(bindings)
+        print(pn1)
+
+        pn2 = ve1.propagate_bindings(bindings2)
+        print(pn2)
