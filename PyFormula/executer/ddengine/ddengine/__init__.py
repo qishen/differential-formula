@@ -1,6 +1,6 @@
-from .ddengine import DDExecuter, Atom, Variable, Composite
+from .ddengine import DDExecuter, Atom, Variable, Composite, BasicType, BuiltInType
 
-__all__ = ["DDExecuter", "Atom", "Variable", "Composite"]
+__all__ = ["DDExecuter", "Atom", "Variable", "Composite", "BasicType", "BuiltInType"]
 
 
 def search_py(path, needle):

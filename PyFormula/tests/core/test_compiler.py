@@ -2,9 +2,10 @@ import unittest
 
 from compiler import Compiler
 from executer.constraint import PredType, Predicate
-from executer.relation import BasicType
+from executer.relation import *
 from executer.rule import Rule
-from executer.term import Atom, Variable, Composite
+from ddengine import Atom, Variable, Composite
+#from executer.term import Atom, Variable, Composite
 
 
 class RuleTransformationTestCase(unittest.TestCase):
@@ -140,7 +141,7 @@ class NonRecursiveLinkTestCase(BaseLinkTestCase):
         self.logger.info('\n--- Test on incremental evaluation ---')
         domain = self.compiler.find_domain_by_name('LinkGraph')
         link = domain.type_map['link']
-        c1 = Composite(link, [Atom('b'), Atom('k')])
+        c1 = Composite(link, [Atom('b', BuiltInType('String')), Atom('k', BuiltInType('String'))])
         changes = {c1: 1}
 
         self.logger.info('Make some changes to existing facts: ')

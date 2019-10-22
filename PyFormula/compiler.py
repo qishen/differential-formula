@@ -1,33 +1,26 @@
 import logging
-import datetime
-import networkx as nx
-from antlr4 import *
-from collections import Counter
-from ddengine import *
 
-from grammar.visitor import ExprVisitor
+from antlr4 import *
+
+from executer.modules.model import *
+from executer.rule import *
 from grammar.gen.FormulaLexer import FormulaLexer
 from grammar.gen.FormulaParser import FormulaParser
-
-from grammar.nodes.enum import *
-from grammar.nodes.domain import *
-from grammar.nodes.term import *
-from grammar.nodes.constraint import *
-from grammar.nodes.type import *
 from grammar.nodes.aggregation import *
+from grammar.nodes.constraint import *
+from grammar.nodes.domain import *
+from grammar.nodes.enum import *
 from grammar.nodes.expression import *
+from grammar.nodes.term import *
+from grammar.nodes.type import *
+from grammar.visitor import ExprVisitor
 
-from executer.modules.domain import Domain
-from executer.modules.model import Model
-from executer.term import *
-from executer.relation import *
-from executer.constraint import *
-from executer.rule import *
+from ddengine import DDExecuter, Atom, Variable, Composite
 
 
 class Compiler:
     # e.g. fact_map = {link: [[a,b], [b,c]]}
-    def __init__(self, logger_disabled=False):
+    def __init__(self, logger_disabled=False, ddengine=True):
         self.programs = {}
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -35,6 +28,8 @@ class Compiler:
         self.logger.setLevel(logging.DEBUG)
         if logger_disabled:
             self.logger.disabled = True
+
+        self.ddengine_enabled = ddengine
 
     def clear_all(self):
         self.programs.clear()
@@ -47,7 +42,11 @@ class Compiler:
     def execute_model(self, model_name):
         model = self.find_model_by_name(model_name)
         if model:
-            model.compile()
+            if self.ddengine_enabled:
+                executer = DifferentialDataflowExecuter(model)
+            else:
+                executer = IncrementalExecuter(model)
+            executer.compile()
         else:
             self.logger.info('Cannot find the model with name %s' % model_name)
 
@@ -60,7 +59,11 @@ class Compiler:
     def make_changes_and_execute(self, model_name, changes):
         model = self.find_model_by_name(model_name)
         if model:
-            model.add_changes(changes)
+            if self.ddengine_enabled:
+                executer = DifferentialDataflowExecuter(model)
+            else:
+                executer = IncrementalExecuter(model)
+            executer.add_changes(changes)
         else:
             self.logger.info('Cannot find the model with name %s' % model_name)
 
@@ -318,7 +321,8 @@ class Compiler:
             term_node = constraint_node.term
             term = self.load_term_node(term_node, type_map)
             alias = constraint_node.alias
-            term.alias = alias
+            if alias is not None:
+                term.alias = alias
             constraint = Predicate(term, negated=has_negation)
             return constraint
         elif type(constraint_node) is BinaryConstraintNode:

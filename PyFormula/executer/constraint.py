@@ -2,8 +2,9 @@ from enum import Enum
 from typing import *
 
 from executer.binding import Bindings, BindingsCounter
-from executer.term import *
+#from executer.term import *
 from executer.relation import *
+from ddengine import *
 
 
 class PredType(Enum):
@@ -72,7 +73,7 @@ class Aggregation(Expression):
 
 
 class Predicate(BaseConstraint):
-    def __init__(self, term: Term, pred_type: PredType=PredType.ORIGINAL, negated: bool=False):
+    def __init__(self, term, pred_type: PredType=PredType.ORIGINAL, negated: bool=False):
         self.term = term
         self.pred_type = pred_type
         self.negated = negated
@@ -235,6 +236,12 @@ class Pattern(BaseConstraint):
                 del bindings_counter[delete_bindings]
 
         return bindings_counter
+
+    def find_match_ddengine(self, ddengine: DDExecuter):
+        term_list = []
+        for constraint in self.term_constraints_list[0]:
+            term_list.append(constraint.term)
+            ddengine.add_rule(term_list)
 
     def find_match(self, type_index_map):
         """

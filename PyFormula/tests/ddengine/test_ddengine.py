@@ -2,8 +2,8 @@ import unittest
 from pprint import pprint
 import sys
 
-from ddengine import Atom, Variable, Composite, DDExecuter
-from executer.relation import *
+from ddengine import BuiltInType, BasicType, Atom, Variable, Composite, DDExecuter
+#from executer.relation import BuiltInType
 
 
 class TermTestCase(unittest.TestCase):
@@ -14,6 +14,11 @@ class TermTestCase(unittest.TestCase):
         self.integer = BuiltInType('Integer')
         self.string = BuiltInType('String')
         self.v = Variable('hi.hello.nihao', self.node)
+
+    def test_relation(self):
+        self.assertEqual(self.node.name, 'node')
+        self.assertEqual(self.node.types, ['string'])
+        self.assertEqual(self.node.labels, ['id'])
 
     def test_atom(self):
         a = Atom(1, self.integer)
@@ -63,15 +68,17 @@ class TermTestCase(unittest.TestCase):
 
     def test_term_features(self):
         vn1 = Variable('a', self.node)
+        [vn1copy] = vn1.get_variables()
+        self.assertEqual(vn1, vn1copy)
         vn2 = Variable('b', self.node)
         vs1 = Variable('s', self.string)
         n1 = Composite(self.node, [vs1])
         e1 = Composite(self.edge, [vn1, vn2])
         e2 = Composite(self.edge, [n1, vn1])
-        [vn1x, vn2x] = e1.get_variables()
+        #[vn1x, vn2x] = e1.get_variables()
         [vs1y, vn1y] = e2.get_variables()
-        self.assertEqual(vn1, vn1x)
-        self.assertEqual(vn2, vn2x)
+        #self.assertEqual(vn1, vn1x)
+        #self.assertEqual(vn2, vn2x)
         self.assertEqual(vn1, vn1y)
         self.assertEqual(vs1, vs1y)
 
@@ -98,3 +105,6 @@ class TermTestCase(unittest.TestCase):
 
         pn2 = ve1.propagate_bindings(bindings2)
         print(pn2)
+
+    def test_ddengine(self):
+        pass
