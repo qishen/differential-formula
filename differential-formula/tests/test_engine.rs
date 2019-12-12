@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
+/*
 #[test]
 fn test_ddengine() {
     let e11: Term = composite!{ 
@@ -223,3 +224,5 @@ fn test_ddengine() {
     }
         
 }
+
+*/

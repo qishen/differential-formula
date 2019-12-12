@@ -1,8 +1,7 @@
+extern crate num;
 extern crate rand;
 extern crate timely;
 extern crate differential_dataflow;
-extern crate abomonation_derive;
-extern crate abomonation;
 
 use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
@@ -17,6 +16,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
+use num::*;
 
 use crate::term::*;
 use crate::rule::*;
@@ -174,7 +174,7 @@ impl ExprBehavior for BaseExpr {
         setcompres
     }
 
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<i32> {
+    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt> {
         match self {
             BaseExpr::Term(term) => {
                 match term {
@@ -182,7 +182,7 @@ impl ExprBehavior for BaseExpr {
                         // The expression is a term of integer type.
                         match atom {
                             Atom::Int(num) => {
-                                return Some(*num as i32);
+                                return Some(num.clone());
                             },
                             _ => { return None; },
                         }
@@ -194,7 +194,7 @@ impl ExprBehavior for BaseExpr {
                         let atom: Atom = val_term.try_into().unwrap();
                         match atom {
                             Atom::Int(num) => { 
-                                return Some(num as i32); 
+                                return Some(num); 
                             },
                             _ => { return None; },
                         }
@@ -254,7 +254,7 @@ impl ExprBehavior for ArithExpr {
         list
     }
 
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<i32> {
+    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt> {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
         let result = match self.op {
@@ -274,7 +274,7 @@ pub trait ExprBehavior {
     fn variables(&self) -> HashSet<Term>;
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<i32>; 
+    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt>; 
 }
 
 #[enum_dispatch]

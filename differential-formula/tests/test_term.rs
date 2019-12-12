@@ -17,7 +17,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-
+/*
 fn generate_small_graph_terms() -> (Term, Term, Term, Term, Term, Term, Term){
     let hello: Term = Atom::Str("hello".to_string()).into();
     let world: Term = Atom::Str("world".to_string()).into();
@@ -100,3 +100,4 @@ fn test_term_methods() {
     assert_eq!(e2x.is_groundterm(), true);
     assert_eq!(e3x.is_groundterm(), true);
 }
+*/

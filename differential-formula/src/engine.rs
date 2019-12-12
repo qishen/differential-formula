@@ -1,8 +1,6 @@
 extern crate rand;
 extern crate timely;
 extern crate differential_dataflow;
-extern crate abomonation_derive;
-extern crate abomonation;
 
 use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
@@ -36,6 +34,17 @@ use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::rule::*;
+
+use num::*;
+
+// Have to use this workaround to implement Abomonation trait because Rust forbids
+// you to implement trait for a foreign type that is not from local crate.
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub struct WrappedBigInt {
+    content: BigInt,
+}
+
+impl Abomonation for WrappedBigInt {}
 
 
 pub struct DDEngine {
@@ -442,7 +451,7 @@ impl DDEngine {
                                     };
 
                                     map_from_two_lists(&mut binding, prev_vars_copy.clone(), values);
-                                    let atom_term: Term = Atom::Int(num as isize).into();
+                                    let atom_term: Term = Atom::Int(num.content).into();
                                     binding.insert(var_term.clone(), atom_term);
                                     binding
                                 });
@@ -454,7 +463,7 @@ impl DDEngine {
                     // Evaluate arithmetic expression to derive new term and add it to existing binding.
                     prev_collection = prev_collection.map(move |mut binding| {
                         let num = right_base_expr.evaluate(&binding).unwrap();
-                        let atom_term: Term = Atom::Int(num as isize).into();
+                        let atom_term: Term = Atom::Int(num).into();
                         binding.insert(var_term.clone(), atom_term);
                         binding
                     });
@@ -479,7 +488,7 @@ impl DDEngine {
     pub fn dataflow_from_set_comprehension<G>(
         models: &Collection<G, Term>, 
         setcompre: &SetComprehension,
-    ) -> Collection<G, i32>
+    ) -> Collection<G, WrappedBigInt>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -506,23 +515,25 @@ impl DDEngine {
         }
 
         let aggregation_stream = match setcompre.op {
+
             SetCompreOp::Count => {
                 let count_stream = set_stream
                     .map(|x| (true, x))
                     .reduce(|_key, input, output| {
                         // Return the number of terms in the set.
-                        output.push((input.len() as i32, 1));
+                        let big_count = BigInt::from_i64(input.len() as i64).unwrap();
+                        output.push((big_count, 1));
                     })
-                    .map(|x| x.1)
-                    .inspect(|x| { println!("Aggregation result is {:?}", x); });
+                    .map(|x| WrappedBigInt { content: x.1 });
                 
                 count_stream
             },
+
             SetCompreOp::Sum => {
                 let sum_stream = set_stream
                     .map(|x| (true, x))
                     .reduce(|_key, input, output| {
-                        let mut sum = 0;
+                        let mut sum = BigInt::from_i64(0).unwrap();
                         for (term, count) in input.iter() {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
@@ -530,17 +541,18 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((sum as i32, 1));
+                        output.push((sum, 1));
                     })
-                    .map(|x| x.1);
+                    .map(|x| WrappedBigInt { content: x.1 });
                 
                 sum_stream
             },
+
             SetCompreOp::MaxAll => {
                 let max_stream = set_stream
                     .map(|x| (true, x))
                     .reduce(|_key, input, output| {
-                        let mut max = std::isize::MIN;
+                        let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
                         for (term, count) in input.iter() {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
@@ -548,17 +560,18 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((max as i32, 1));
+                        output.push((max, 1));
                     })
-                    .map(|x| x.1);
+                    .map(|x| WrappedBigInt { content: x.1 });
 
                 max_stream
             },
+
             SetCompreOp::MinAll => {
                 let min_stream = set_stream
                     .map(|x| (true, x))
                     .reduce(|_key, input, output| {
-                        let mut min = std::isize::MAX;
+                        let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                         for (term, count) in input.iter() {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
@@ -566,15 +579,16 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((min as i32, 1));
+                        output.push((min, 1));
                     })
-                    .map(|x| x.1);
+                    .map(|x| WrappedBigInt { content: x.1 });
                 
                 min_stream
             },
         };
 
-        aggregation_stream        
+        aggregation_stream
+            .inspect(|x| { println!("Aggregation result is {:?}", x); })
     }
 
     pub fn dataflow_from_single_rule<G>(models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>

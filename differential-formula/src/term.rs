@@ -1,15 +1,17 @@
+use crate::type_system::*;
+
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
 use abomonation::Abomonation;
 
-use crate::type_system::*;
+use num::*;
 
 
 #[enum_dispatch(Term)]
@@ -196,9 +198,10 @@ impl TermBehavior for Variable {
 #[enum_dispatch]
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Atom {
-    Int(isize),
+    Int(BigInt),
     Str(String),
     Bool(bool),
+    Float(BigRational),
 }
 
 impl Abomonation for Atom {}
@@ -209,6 +212,7 @@ impl Display for Atom {
             Atom::Int(i) => format!("{:?}", i),
             Atom::Bool(b) => format!("{:?}", b),
             Atom::Str(s) => format!("{:?}", s),
+            Atom::Float(f) => format!("{:?}", f),
         };
         write!(f, "{}", atomStr)
     }
