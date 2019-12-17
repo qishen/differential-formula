@@ -19,6 +19,7 @@ pub enum Type {
     CompositeType,
     RangeType,
     UnionType,
+    Undefined
 }
 
 
@@ -27,6 +28,14 @@ pub trait TypeBehavior {
     fn name(&self) -> String;
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Undefined {}
+
+impl TypeBehavior for Undefined {
+    fn name(&self) -> String {
+        "undefined".to_string()
+    }
+}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct RangeType {
@@ -43,6 +52,7 @@ impl TypeBehavior for RangeType {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum BaseType {
+    Boolean,
     String,
     Integer,
     PosInteger,
@@ -80,4 +90,41 @@ impl TypeBehavior for UnionType {
     fn name(&self) -> String {
         self.name.clone()
     }
+}
+
+
+
+#[enum_dispatch]
+#[derive(Debug, Clone)]
+pub enum Program {
+    Domain,
+    Model,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Domain {
+    pub name: String,
+    pub type_map: HashMap<String, Arc<Type>>,
+}
+
+impl Domain {
+    pub fn get_type(&self, name: &String) -> Arc<Type> {
+        self.type_map.get(name).unwrap().clone()
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Model {
+    pub model_name: String,
+    pub domain_name: String,
+    pub models: Vec<Term>,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Env {
+    pub domain_map: HashMap<String, Domain>,
+    pub model_map: HashMap<String, Model>,
 }
