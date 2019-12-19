@@ -34,8 +34,11 @@ use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::rule::*;
+use crate::type_system::*;
+use crate::parser::parse_str;
 
 use num::*;
+
 
 // Have to use this workaround to implement Abomonation trait because Rust forbids
 // you to implement trait for a foreign type that is not from local crate.
@@ -48,22 +51,20 @@ impl Abomonation for WrappedBigInt {}
 
 
 pub struct DDEngine {
-    pub facts: Vec<Arc<Term>>,
-    pub rules: Vec<Rule>,
+    pub env: Option<Env>,
     pub worker: timely::worker::Worker<timely::communication::allocator::Thread>,
     pub input: InputSession<i32, i32, isize>,
 }
 
 impl DDEngine {
-    pub fn new(facts: Vec<Arc<Term>>, rules: Vec<Rule>) -> Self {
+    pub fn new() -> Self {
         // create a naked single-threaded worker.
         let allocator = timely::communication::allocator::Thread::new();
         let mut worker = timely::worker::Worker::new(allocator);
         let mut input = InputSession::<i32, i32, isize>::new();
 
         let engine = DDEngine {
-            facts,
-            rules,
+            env: None,
             worker,
             input, 
         };
@@ -71,15 +72,37 @@ impl DDEngine {
         engine
     }
 
-    pub fn stratified_rules(&self) -> Vec<Vec<Rule>> {
-        // TODO: Remove fake implementation for only quick testing. 
-        let mut stratums = vec![];
-        for rule in self.rules.iter() {
-            let mut stratum = vec![];
-            stratum.push(rule.clone());
-            stratums.push(stratum);
-        }
-        stratums
+    pub fn install(&mut self, env: Env) {
+        self.env = Some(env);
+    }
+
+    pub fn parse_string(content: &str) -> Env {
+        let content_eof = format!("{} {}", content, " EOF");
+        let env = parse_str(&content_eof[..]);
+        env
+    }
+
+    
+    pub fn parse_file() {
+
+    }
+
+    pub fn get_domain(&self, name: String) -> Option<Domain> {
+        let domain = match &self.env {
+            None => None,
+            Some(env) => env.get_domain_by_name(name),
+        };
+
+        domain
+    }
+
+    pub fn get_model(&self, name: String) -> Option<Model> {
+        let model = match &self.env {
+            None => None,
+            Some(env) => env.get_model_by_name(name),
+        };
+
+        model
     }
 
     pub fn create_test_dataflow(&mut self) -> InputSession<i32, (Term, Term), isize> {
@@ -632,14 +655,13 @@ impl DDEngine {
     }
 
 
-    pub fn create_dataflow(&mut self) -> (
+    pub fn create_dataflow(&mut self, domain: &Domain) -> (
         InputSession<i32, Term, isize>, 
         timely::dataflow::ProbeHandle<i32>,
     )
     {
         let mut input = InputSession::<i32, Term, isize>::new();
-        let rules = self.rules.clone(); // Rules are from same stratum.
-        let stratified_rules = self.stratified_rules();
+        let stratified_rules = domain.stratified_rules();
 
         let probe = self.worker.dataflow(|scope| {
             // models are updated after execution of rules from each stratum.
@@ -650,6 +672,7 @@ impl DDEngine {
                 // Rules to be executed are from the same stratum and independent from each other.
                 for rule in stratum.iter() {
                     println!("Stratum {}: {}", i, rule);
+
                     let models_after_rule_execution = DDEngine::dataflow_from_single_rule(
                         &new_models, 
                         rule

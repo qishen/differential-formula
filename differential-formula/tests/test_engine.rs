@@ -15,191 +15,97 @@ use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
+fn generate_graph_program(rules: &str, model: &str) -> String {
+    let program = format!("
+    domain Graph {{
+        Node ::= new(name: Integer).
+        Edge ::= new(src: Node, dst: Node).
+        Path ::= new(src: Node, dst: Node).
+        Line ::= new(a: Node, b: Node, c: Node, d: Node).
+        Nocycle ::= new(node: Node).
+        TwoEdge ::= new(first: Edge, second: Edge).
+
+        {}
+    }}
+
+    {}
+    ", rules, model);
+    
+    program
+}
+
+#[test]
+fn test_ddengine() {
+
+    let rules1 = "
+        Path(a, b) :- Edge(a, b).
+        Path(a, c) :- Path(a, b), Path(b, c).
+    ";
+
+    let rules2 = "
+        Edge(a, c) :- Edge(a, b), Edge(b, c).
+    ";
+
+    let rules3 = "
+        Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
+    ";
+
+    let rules4 = "
+        Nocycle(u) :- Path(u, v), no Path(u, u).
+    ";
+
+    let rules5 = "
+        Line(a, b, c, d) :- Edge(a, b), Edge(c, d).
+    ";
+
+    let rules6 = "
+        TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
+    ";
+
+    let rules7 = "
+        TwoEdge(x, x, square) :- x is Edge(c, d), aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr*aggr, aggr * 2 = 20.
+    ";
+
+    let model1 = "
+    model m of Graph {
+        n0 is Node(0).
+        n1 is Node(1).
+        n2 is Node(2).
+        n3 is Node(3).
+        n4 is Node(4).
+
+        Edge(n0, n0).
+        Edge(n0, n1).
+        Edge(n1, n2).
+        Edge(n2, n3).
+        Edge(n3, n4).
+    }";
+
+    let program1 = generate_graph_program(rules1, model1);
+    println!("{}", program1);
+
+    let mut engine = DDEngine::new();
+
+    // Parse string and install program in the engine.
+    let env = DDEngine::parse_string(&program1[..]);
+    //println!("{:?}", env);
+    engine.install(env);
+
+    let domain = engine.get_domain("Graph".to_string()).unwrap();
+    let model = engine.get_model("m".to_string()).unwrap();
+
+    let (mut input, probe) = engine.create_dataflow(&domain);
+
+}
+
 /*
 #[test]
 fn test_ddengine() {
-    let e11: Term = composite!{ 
-        Edge(
-            composite!{ Node(Atom::Int(0).into()) }, 
-            composite!{ Node(Atom::Int(0).into()) }
-        ) 
-    };
-
-    let e1: Term = composite!{ 
-        Edge(
-            composite!{ Node(Atom::Int(0).into()) }, 
-            composite!{ Node(Atom::Int(1).into()) }
-        ) 
-    };
-
-    let e2: Term = composite!{ 
-        Edge(
-            composite!{ Node(Atom::Int(1).into()) }, 
-            composite!{ Node(Atom::Int(2).into()) }
-        ) 
-    };
-
-    let e3: Term = composite!{ 
-        Edge(
-            composite!{ Node(Atom::Int(2).into()) }, 
-            composite!{ Node(Atom::Int(3).into()) }
-        ) 
-    };
-
-
-    let e4: Term = composite!{ 
-        Edge(
-            composite!{ Node(Atom::Int(3).into()) }, 
-            composite!{ Node(Atom::Int(4).into()) }
-        ) 
-    };
-
-    let node_a: Term = composite! { Node(variable!(a.)) };
-    let node_b: Term = composite! { Node(variable!(b.)) };
-
-    let edge_aa: Term = composite! { Edge(variable!(a.), variable!(b.)) };
-    let edge_ab: Term = composite! { Edge(variable!(a.), variable!(b.)) };
-    let edge_bc: Term = composite! { Edge(variable!(b.), variable!(c.)) };
-    let edge_ac: Term = composite! { Edge(variable!(a.), variable!(c.)) };
-    let edge_cd: Term = composite! { Edge(variable!(c.), variable!(d.)) };
-    let edge_ad: Term = composite! { Edge(variable!(a.), variable!(d.)) };
-
-    let path_ab: Term = composite! { Path(variable!(a.), variable!(b.)) };
-    let path_ac: Term = composite! { Path(variable!(a.), variable!(c.)) };
-    let path_uv: Term = composite! { Path(variable!(u.), variable!(v.)) };
-    let path_uu: Term = composite! { Path(variable!(u.), variable!(u.)) };
-
-    let nocycle_u: Term = composite! { NoCycle(variable!(u.)) };
-    let line_abcd: Term = composite! { 
-        Line(variable!(a.), variable!(b.), 
-             variable!(c.), variable!(d.)
-        ) 
-    };
-    let twoedge_xy: Term = composite! { TwoEdge(variable!(x.), variable!(y.)) };
-    let twoedge_xx: Term = composite! { TwoEdge(variable!(x.), variable!(x.)) };
-    let twoedge_xx_square: Term = composite! { TwoEdge(variable!(x.), variable!(x.), variable!(square.)) };
     
-    // path(a, b) :- edge(a, b).
-    let rule1 = Rule {
-        head: vec![path_ab],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-        ],
-    };
-
-    // path(a, c) :- edge(a, b), edge(b, c).
-    let rule2 = Rule {
-        head: vec![path_ac],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-            Predicate { negated: false, term: edge_bc.clone(), alias: None }.into(),
-        ],
-    };
-
-    // edge(a, c) :- edge(a, b), edge(b, c).
-    let rule2x = Rule {
-        head: vec![edge_ac],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-            Predicate { negated: false, term: edge_bc.clone(), alias: None }.into(),
-        ]
-    };
-
-    // edge(a, d) :- edge(a, b), edge(b, c), edge(c, d).
-    let rule3 = Rule {
-        head: vec![edge_ad],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-            Predicate { negated: false, term: edge_bc.clone(), alias: None }.into(),
-            Predicate { negated: false, term: edge_cd.clone(), alias: None }.into(),
-        ],
-    };
-
-    // nocycle(u) :- path(u, v), no path(u, u).
-    let rule4 = Rule {
-        head: vec![nocycle_u],
-        body: vec![
-            Predicate { negated: false, term: path_uv, alias: None }.into(),
-            Predicate { negated: true, term: path_uu, alias: None }.into(),
-        ],
-    };
-
-    // Production rule: line(a, b, c, d) :- edge(a, b), edge(c, d).
-    let rule5 = Rule {
-        head: vec![line_abcd],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-            Predicate { negated: false, term: edge_cd.clone(), alias: None }.into(),
-        ],
-    };
-
-
-    // TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
-    let rule6 = Rule {
-        head: vec![twoedge_xy],
-        body: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: Some(variable!(x.)) }.into(),
-            Predicate { negated: false, term: edge_bc.clone(), alias: Some(variable!(y.)) }.into(),
-        ],
-    };
-
-
-    let s = SetComprehension {
-        vars: vec![variable!(b.), edge_aa],
-        condition: vec![
-            Predicate { negated: false, term: edge_ab.clone(), alias: None }.into(),
-        ],
-        op: SetCompreOp::Count,
-        default: None, 
-    };
-
-    let count_expr = Binary {
-        op: BinOp::Eq,
-        left: Expr::BaseExpr(BaseExpr::Term(variable!(aggr.))),
-        right: Expr::BaseExpr(BaseExpr::SetComprehension(s)),
-    };
-
-    let bin_expr = Binary {
-        op: BinOp::Eq,
-        left: ArithExpr { 
-            op: ArithmeticOp::Mul, 
-            left: Arc::new(BaseExpr::Term(variable!(aggr.).into()).into()),
-            right: Arc::new(BaseExpr::Term(Atom::Int(2).into()).into()),
-        }.into(),
-        right: BaseExpr::Term(Atom::Int(20).into()).into(),
-    };
-
-    let square_expr = Binary {
-        op: BinOp::Eq,
-        left: BaseExpr::Term(variable!(square.).into()).into(),
-        right: ArithExpr {
-            op: ArithmeticOp::Mul,
-            left: Arc::new(BaseExpr::Term(variable!(aggr.).into()).into()),
-            right: Arc::new(BaseExpr::Term(variable!(aggr.).into()).into()),
-        }.into(),
-    };
-
-    // TwoEdge(x, x, square) :- x is Edge(c, d), aggr = count({Edge(a, a), b | Edge(a, b)}), 
-    //                  square = aggr*aggr, aggr * 2 = 20.
-    let rule7 = Rule {
-        head: vec![twoedge_xx_square.clone()],
-        body: vec![
-            Predicate { negated: false, term: edge_cd.clone(), alias: variable!(x.).into() }.into(),
-            count_expr.into(),
-            square_expr.into(),
-            bin_expr.into(),
-        ],
-    };
-
-    println!("{:?}", rule7.derived_variables());
-
     // Each rule forms a stratum.
     //let mut engine = DDEngine::new(vec![], vec![rule2x, rule1, rule4]);
     //let mut engine = DDEngine::new(vec![], vec![rule2x, rule5]);
     //let mut engine = DDEngine::new(vec![], vec![rule6]);
-    let mut engine = DDEngine::new(vec![], vec![rule7]);
-
-    let (mut input, probe) = engine.create_dataflow();
 
     input.insert(e1);
     input.insert(e11);

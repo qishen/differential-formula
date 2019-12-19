@@ -120,6 +120,10 @@ impl Domain {
     pub fn add_rule(&mut self, rule: Rule) {
         self.rules.push(rule);
     }
+
+    pub fn stratified_rules(&self) -> Vec<Vec<Rule>> {
+        vec![self.rules.clone()]
+    }
 }
 
 
@@ -131,8 +135,25 @@ pub struct Model {
 }
 
 
+
 #[derive(Debug, Clone)]
 pub struct Env {
     pub domain_map: HashMap<String, Domain>,
     pub model_map: HashMap<String, Model>,
+}
+
+impl Env {
+    pub fn get_model_by_name(&self, name: String) -> Option<Model> {
+        match self.model_map.get(&name) {
+            None => None,
+            Some(model) => Some(model.clone())
+        }
+    }
+
+    pub fn get_domain_by_name(&self, name: String) -> Option<Domain> {
+        match self.domain_map.get(&name) {
+            None => None,
+            Some(model) => Some(model.clone())
+        }
+    }
 }

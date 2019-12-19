@@ -236,7 +236,9 @@ named!(atom_typedef,
 
 
 named!(domain_rules<&str, Vec<RuleAst>>,
-    many0!(terminated!(rule, tag!(".")))
+    many0!(
+        delimited!(multispace0, terminated!(rule, tag!(".")), multispace0)
+    )
 );
 
 
@@ -401,6 +403,11 @@ named!(model<&str, ProgramAst>,
     )
 );
 
+
+// Export this function to parse FORMULA file in string format.
+pub fn parse_str(content: &str) -> Env {
+    program(content).unwrap().1
+}
 
 // Return a domain map and a model map at the end of parsing.
 named!(program<&str, Env>,
@@ -1126,9 +1133,8 @@ mod tests {
         let program3_str = &format!("{} {}EOF", graph_domain, graph_model2)[..];
         assert_eq!(program(program3_str).unwrap().0, "EOF");
 
-        let output = program(program3_str);
-        
-        println!("{:?}", output);
+        //let output = program(program4_str);
+        //println!("{:?}", output);
     }
 
 }
