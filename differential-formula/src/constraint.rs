@@ -23,7 +23,7 @@ use crate::rule::*;
 use crate::expression::*;
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Predicate {
     pub negated: bool,
     pub term: Term,
@@ -82,7 +82,7 @@ impl Display for BinOp {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Binary {
     pub op: BinOp,
     pub left: Expr,
@@ -123,7 +123,7 @@ impl Binary {
 }
 
 #[enum_dispatch]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Constraint {
     Predicate,
     Binary,

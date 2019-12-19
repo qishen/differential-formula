@@ -235,6 +235,11 @@ named!(atom_typedef,
 );
 
 
+named!(domain_rules<&str, Vec<RuleAst>>,
+    many0!(terminated!(rule, tag!(".")))
+);
+
+
 named!(domain_types<&str, HashMap<String, Type>>,
     map!(many0!(
             delimited!(multispace0, alt!(composite_typedef | union_typedef), multispace0)
@@ -339,6 +344,7 @@ enum ProgramAst {
 struct DomainAst {
     name: String,
     type_map: HashMap<String, Type>,
+    rules: Vec<RuleAst>,
 }
 
 #[derive(Clone, Debug)]
@@ -353,15 +359,15 @@ named!(domain<&str, ProgramAst>,
     do_parse!(
         tag!("domain") >>
         domain_name: delimited!(space0, id, space0) >>
-        typedefs: delimited!(
-            tag!("{"),
-            delimited!(multispace0, domain_types, multispace0), 
-            tag!("}")
-        ) >>
+        tag!("{") >>
+        typedefs: delimited!(multispace0, domain_types, multispace0) >> 
+        rules: delimited!(multispace0, domain_rules, multispace0) >>
+        tag!("}") >>
         (ProgramAst::Domain(
             DomainAst {
                 name: domain_name,
                 type_map: typedefs,
+                rules,
             }
         ))
     )
@@ -400,7 +406,7 @@ named!(model<&str, ProgramAst>,
 named!(program<&str, Env>,
     map!(
         many0!(
-            delimited!(multispace0, alt!(domain | model), multispace0)
+            preceded!(multispace0, alt!(domain | model))
         ),
         |list| {
         // filter them into domain, model and transformation categories.
@@ -427,10 +433,16 @@ named!(program<&str, Env>,
                 arc_type_map.insert(id, Arc::new(t));
             }
 
-            let domain = Domain {
+            let mut domain = Domain {
                 name: domain_name.clone(),
                 type_map: arc_type_map,
+                rules: vec![],
             };
+
+            // Add rules into domain.
+            for rule_ast in domain_ast.rules {
+                domain.add_rule(rule_ast.to_rule(&domain));
+            }
 
             domain_map.insert(domain_name, domain);
         }
@@ -487,7 +499,9 @@ named!(program<&str, Env>,
 
 
 #[enum_dispatch(ExprAst)]
-trait ExprAstBehavior {}
+trait ExprAstBehavior {
+    fn to_expr(&self, domain: &Domain) -> Expr;
+}
 
 #[enum_dispatch]
 #[derive(Clone, Debug)]
@@ -498,7 +512,9 @@ enum ExprAst {
 
 
 #[enum_dispatch(BaseExprAst)]
-trait BaseExprAstBehavior {}
+trait BaseExprAstBehavior {
+    fn to_base_expr(&self, domain: &Domain) -> BaseExpr;
+}
 
 #[enum_dispatch]
 #[derive(Clone, Debug)]
@@ -507,7 +523,12 @@ enum BaseExprAst {
     TermAst,
 }
 
-impl ExprAstBehavior for BaseExprAst {}
+impl ExprAstBehavior for BaseExprAst {
+    fn to_expr(&self, domain: &Domain) -> Expr {
+        let base_expr = self.to_base_expr(domain);
+        base_expr.into()
+    }
+}
 
 #[derive(Clone, Debug)]
 struct SetComprehensionAst {
@@ -517,8 +538,32 @@ struct SetComprehensionAst {
     default: Option<BigInt>,
 }
 
-impl BaseExprAstBehavior for SetComprehensionAst {}
-impl BaseExprAstBehavior for TermAst {}
+impl BaseExprAstBehavior for SetComprehensionAst {
+    fn to_base_expr(&self, domain: &Domain) -> BaseExpr {
+        let mut vars = vec![];
+        let mut condition = vec![];
+        for term_ast in self.vars.clone() {
+            vars.push(term_ast.to_term(domain));
+        }
+
+        for constraint_ast in self.condition.clone() {
+            condition.push(constraint_ast.to_constraint(domain));
+        }
+        
+        SetComprehension {
+            vars,
+            condition,
+            op: self.op.clone(),
+            default: self.default.clone(),
+        }.into()
+    }
+}
+impl BaseExprAstBehavior for TermAst {
+    fn to_base_expr(&self, domain: &Domain) -> BaseExpr {
+        let term = self.to_term(domain);
+        term.into()
+    }
+}
 
 #[derive(Clone, Debug)]
 struct ArithExprAst {
@@ -527,11 +572,23 @@ struct ArithExprAst {
     right: Box<ExprAst>,
 }
 
-impl ExprAstBehavior for ArithExprAst {}
+impl ExprAstBehavior for ArithExprAst {
+    fn to_expr(&self, domain: &Domain) -> Expr {
+        let left = self.left.to_expr(domain);
+        let right = self.right.to_expr(domain);
+        ArithExpr {
+            op: self.op.clone(),
+            left: Arc::new(left),
+            right: Arc::new(right),
+        }.into()
+    }
+}
 
 
 #[enum_dispatch(ConstraintAst)]
-trait ConstraintAstBehavior {}
+trait ConstraintAstBehavior {
+    fn to_constraint(&self, domain: &Domain) -> Constraint;
+}
 
 #[enum_dispatch]
 #[derive(Clone, Debug)]
@@ -548,7 +605,23 @@ struct PredicateAst {
     alias: Option<String>,
 }
 
-impl ConstraintAstBehavior for PredicateAst {}
+impl ConstraintAstBehavior for PredicateAst {
+    fn to_constraint(&self, domain: &Domain) -> Constraint {
+        let alias = match self.alias.clone() {
+            None => None,
+            Some(a) => {
+                let term: Term = Variable::new(a, vec![]).into();
+                Some(term)
+            }
+        };
+
+        Predicate {
+            negated: self.negated,
+            term: self.term.to_term(domain),
+            alias,
+        }.into()
+    }
+}
 
 #[derive(Clone, Debug)]
 struct BinaryAst {
@@ -557,7 +630,15 @@ struct BinaryAst {
     right: ExprAst,
 }
 
-impl ConstraintAstBehavior for BinaryAst {}
+impl ConstraintAstBehavior for BinaryAst {
+    fn to_constraint(&self, domain: &Domain) -> Constraint {
+        Binary {
+            op: self.op.clone(),
+            left: self.left.to_expr(domain),
+            right: self.right.to_expr(domain),
+        }.into()
+    }
+}
 
 
 
@@ -787,12 +868,33 @@ struct RuleAst {
     body: Vec<ConstraintAst>,
 }
 
+impl RuleAst {
+    fn to_rule(&self, domain: &Domain) -> Rule {
+        let mut head = vec![];
+        for term_ast in self.head.clone() {
+            head.push(term_ast.to_term(domain));
+        }
+
+        let mut body = vec![];
+        for constraint_ast in self.body.clone() {
+            body.push(constraint_ast.to_constraint(domain));
+        }
+
+        Rule {
+            head,
+            body,
+        }
+    }
+}
+
 
 named!(rule<&str, RuleAst>,
     do_parse!(
         head: separated_list!(tag!(","), alt!(composite | variable_ast)) >>
         delimited!(space0, tag!(":-"), space0) >>
-        body: separated_list!(tag!(","), constraint) >>
+        body: separated_list!(tag!(","), 
+            delimited!(space0, constraint, space0)
+        ) >>
         (parse_rule(head, body))
     )
 );
@@ -853,6 +955,7 @@ named!(varname<&str, &str>,
 );
 
 fn is_alphanumeric_char(c: char) -> bool {
+
     is_alphanumeric(c as u8)
 }
 
@@ -944,7 +1047,6 @@ mod tests {
         assert_eq!(typename("yyy").unwrap().0, "");
         assert_eq!(typename("b3aab2c").unwrap().0, "");
         assert_eq!(tagged_typename("id : Hello").unwrap().0, "");
-        // println!("{:?}", output);
     }
 
     #[test]
@@ -955,7 +1057,7 @@ mod tests {
         assert_eq!(atom("\"helloworld\"").unwrap().0, "");
         assert_eq!(atom("123E-02").unwrap().0, "");
         assert_eq!(atom("-11223344").unwrap().0, "");
-        //assert_eq!(variable("hello_world ").unwrap().0, " ");
+        assert_eq!(variable("hello_world ").unwrap().0, " ");
         assert_eq!(variable_ast("hi ").unwrap().0, " ");
         assert_eq!(composite("Edge(node1 , Node(\"hello\"))").unwrap().0, "");
         assert_eq!(composite("Node(\"hi\")").unwrap().0, "");
@@ -983,17 +1085,20 @@ mod tests {
         assert_eq!(binary(binary1_str).unwrap().0, " .");
         
         let rule_str = "Edge(a, b) :- Edge(b, c), Edge(c, a).";
-        let output = rule(rule_str);
-        println!("{:?}", output);
+        assert_eq!(rule(rule_str).unwrap().0, ".");
+
+        //println!("{:?}", output);
     }
 
     #[test]
     fn test_program() {
         let graph_domain =  
-            "domain graph { 
+            "domain Graph { 
                 Node ::= new(id: String). 
                 Edge ::= new(src:Node, dst: Node). 
                 Item ::= Node + Edge.
+
+                Edge(a, c) :- Edge(a, b), Edge(b, c).
             }";
 
         let graph_model1 = 
@@ -1007,6 +1112,23 @@ mod tests {
                 n1 is Node(\"helloworld\") .
                 e1 is Edge(n1, n1).
             }";
+
+        assert_eq!(domain(graph_domain).unwrap().0, "");
+        assert_eq!(model(graph_model1).unwrap().0, "");
+        assert_eq!(model(graph_model2).unwrap().0, "");
+        
+        let program1_str = &format!("{}EOF", graph_domain)[..];
+        assert_eq!(program(program1_str).unwrap().0, "EOF");
+        
+        let program2_str = &format!("{} {}EOF", graph_domain, graph_model1)[..];
+        assert_eq!(program(program2_str).unwrap().0, "EOF");
+
+        let program3_str = &format!("{} {}EOF", graph_domain, graph_model2)[..];
+        assert_eq!(program(program3_str).unwrap().0, "EOF");
+
+        let output = program(program3_str);
+        
+        println!("{:?}", output);
     }
 
 }

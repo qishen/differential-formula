@@ -20,7 +20,7 @@ use crate::term::*;
 use crate::expression::*;
 use crate::constraint::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Rule {
     pub head: Vec<Term>,
     pub body: Vec<Constraint>

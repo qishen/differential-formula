@@ -10,6 +10,7 @@ use enum_dispatch::enum_dispatch;
 use abomonation::Abomonation;
 
 use crate::term::*;
+use crate::rule::*;
 
 
 #[enum_dispatch]
@@ -106,11 +107,18 @@ pub enum Program {
 pub struct Domain {
     pub name: String,
     pub type_map: HashMap<String, Arc<Type>>,
+    pub rules: Vec<Rule>,
 }
 
 impl Domain {
     pub fn get_type(&self, name: &String) -> Arc<Type> {
         self.type_map.get(name).unwrap().clone()
+    }
+}
+
+impl Domain {
+    pub fn add_rule(&mut self, rule: Rule) {
+        self.rules.push(rule);
     }
 }
 

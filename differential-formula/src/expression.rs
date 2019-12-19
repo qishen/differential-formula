@@ -22,12 +22,12 @@ use crate::term::*;
 use crate::rule::*;
 use crate::constraint::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SetComprehension {
     pub vars: Vec<Term>,
     pub condition: Vec<Constraint>,
     pub op: SetCompreOp,
-    pub default: Option<i32>,
+    pub default: Option<BigInt>,
 }
 
 // Turn SetComprehension into a headless rule.
@@ -121,7 +121,7 @@ impl BaseExprBehavior for SetComprehension {}
 impl BaseExprBehavior for Term {}
 
 #[enum_dispatch]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BaseExpr {
     SetComprehension,
     Term,
@@ -218,7 +218,7 @@ impl Display for BaseExpr {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ArithExpr {
     pub op: ArithmeticOp,
     pub left: Arc<Expr>,
@@ -278,7 +278,7 @@ pub trait ExprBehavior {
 }
 
 #[enum_dispatch]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expr {
     BaseExpr,
     ArithExpr,
