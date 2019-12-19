@@ -41,7 +41,7 @@ impl From<SetComprehension> for Rule {
 }
 
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum SetCompreOp {
     Sum,
     Count,
@@ -94,7 +94,7 @@ impl SetComprehension {
 }
 
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ArithmeticOp {
     Add,
     Min,

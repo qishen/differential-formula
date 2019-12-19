@@ -56,6 +56,14 @@ impl Composite {
         let mut b = another.variables();
         Term::terms_intersection(a, b)
     }
+
+    pub fn validate(&self) -> bool {
+        true
+    }
+
+    pub fn get_subterm(&self, fragments: Vec<String>) -> Option<Term> {
+        None
+    }
 }
 
 impl TermBehavior for Composite {

@@ -1,13 +1,17 @@
 extern crate num;
+
+use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
+use crate::rule::*;
 
+use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::collections::*;
-use nom::IResult;
-use nom::character::streaming::*;
+use nom::character::*;
+use nom::character::complete::*;
 use nom::number::complete::*;
 use num::*;
 use enum_dispatch::enum_dispatch;
@@ -147,7 +151,7 @@ impl TypeDefAstBehavior for EnumTypeDefAst {
 
 
 named!(id<&str, String>,
-    map!(tuple!(alpha1, alphanumeric0), |(x, y)| { x.to_string() + y })
+    map!(recognize!(tuple!(alpha1, alphanumeric0)), |x| { x.to_string() })
 );
 
 // The first letter has to be alpha and the rest be alphanumeric.
@@ -373,7 +377,11 @@ named!(model<&str, ProgramAst>,
         models: delimited!(
             tag!("{"),
             many0!(
-                delimited!(multispace0, composite, multispace0)
+                delimited!(
+                    multispace0, 
+                    terminated!(composite, delimited!(multispace0, tag!("."), multispace0)), 
+                    multispace0
+                )
             ),
             tag!("}")
         ) >>
@@ -432,10 +440,32 @@ named!(program<&str, Env>,
             // Get the domain that current model requires.
             let domain = domain_map.get(&model_ast.domain_name).unwrap();
             let model_name = model_ast.model_name;
+            let mut alias_map = HashMap::new();
+            let mut raw_model_store = vec![];
             let mut model_store = vec![];
+
             for term_ast in model_ast.models {
                 // Convert AST into term according to its type.
                 let term = term_ast.to_term(domain);
+                raw_model_store.push(term.clone());
+                match term.clone() {
+                    Term::Composite(c) => {
+                        match c.alias {
+                            None => {},
+                            Some(alias) => {
+                                let vterm: Term = Variable::new(alias, vec![]).into();
+                                alias_map.insert(vterm, term);
+                            }
+                        }
+                    },
+                    _ => {},
+                }
+
+            }
+
+            // Some alias in the term are treated as variables and need to replace them with the right term.
+            for raw_term in raw_model_store {
+                let term = raw_term.propagate_bindings(&alias_map);
                 model_store.push(term);
             }
 
@@ -456,8 +486,328 @@ named!(program<&str, Env>,
 );
 
 
+#[enum_dispatch(ExprAst)]
+trait ExprAstBehavior {}
+
+#[enum_dispatch]
+#[derive(Clone, Debug)]
+enum ExprAst {
+    BaseExprAst,
+    ArithExprAst,
+}
+
+
+#[enum_dispatch(BaseExprAst)]
+trait BaseExprAstBehavior {}
+
+#[enum_dispatch]
+#[derive(Clone, Debug)]
+enum BaseExprAst {
+    SetComprehensionAst,
+    TermAst,
+}
+
+impl ExprAstBehavior for BaseExprAst {}
+
+#[derive(Clone, Debug)]
+struct SetComprehensionAst {
+    vars: Vec<TermAst>,
+    condition: Vec<ConstraintAst>,
+    op: SetCompreOp,
+    default: Option<BigInt>,
+}
+
+impl BaseExprAstBehavior for SetComprehensionAst {}
+impl BaseExprAstBehavior for TermAst {}
+
+#[derive(Clone, Debug)]
+struct ArithExprAst {
+    op: ArithmeticOp,
+    left: Box<ExprAst>,
+    right: Box<ExprAst>,
+}
+
+impl ExprAstBehavior for ArithExprAst {}
+
+
+#[enum_dispatch(ConstraintAst)]
+trait ConstraintAstBehavior {}
+
+#[enum_dispatch]
+#[derive(Clone, Debug)]
+enum ConstraintAst {
+    PredicateAst,
+    BinaryAst,
+}
+
+
+#[derive(Clone, Debug)]
+struct PredicateAst {
+    negated: bool,
+    term: TermAst,
+    alias: Option<String>,
+}
+
+impl ConstraintAstBehavior for PredicateAst {}
+
+#[derive(Clone, Debug)]
+struct BinaryAst {
+    op: BinOp,
+    left: ExprAst,
+    right: ExprAst,
+}
+
+impl ConstraintAstBehavior for BinaryAst {}
+
+
+
+named!(bin_op<&str, BinOp>,
+    map!(alt!(tag!("=") | tag!("!=") | tag!(">") | tag!(">=") | tag!("<") | tag!("<=")), |x| {
+        match x {
+            "="  => BinOp::Eq,
+            "!=" => BinOp::Ne,
+            ">"  => BinOp::Gt,
+            ">=" => BinOp::Ge,
+            "<"  => BinOp::Lt,
+            _    => BinOp::Le,
+        }
+    })
+);
+
+named!(arith_op<&str, ArithmeticOp>,
+    map!(alt!(tag!("+") | tag!("-") | tag!("*") | tag!("/")), |x| {
+        match x {
+            "+" => ArithmeticOp::Add,
+            "-" => ArithmeticOp::Min,
+            "*" => ArithmeticOp::Mul,
+            _   => ArithmeticOp::Div,
+        }
+    })
+);
+
+named!(setcompre_op<&str, SetCompreOp>,
+    map!(alt!(tag!("count") | tag!("sum") | tag!("minAll") | tag!("maxAll")), |x| {
+        match x {
+            "count" => SetCompreOp::Count,
+            "sum" => SetCompreOp::Sum,
+            "minAll" => SetCompreOp::MinAll,
+            _ => SetCompreOp::MaxAll,
+        }
+    })
+);
+
+
+named!(base_expr<&str, ExprAst>,
+    alt!(
+        map!(setcompre, |x| { 
+            let base_expr: BaseExprAst = x.into(); 
+            base_expr.into()
+        }) |
+        // Can only be either atom of numeric value or variable that represent numeric value.
+        map!(alt!(variable_ast | atom_ast), |x| { 
+            let base_expr: BaseExprAst = x.into();
+            base_expr.into()
+        }) | 
+        parens_arith_expr
+    )
+);
+
+
+named!(parens_arith_expr<&str, ExprAst>,
+    do_parse!(
+        delimited!(space0, tag!("("), space0) >>
+        expr: arith_expr_low >>
+        preceded!(space0, tag!(")")) >>
+        (expr.into())
+    )
+);
+
+named!(mul_div_op<&str, ArithmeticOp>,
+    map!(alt!(tag!("*") | tag!("/")), |x| {
+        match x {
+            "*" => ArithmeticOp::Mul,
+            _   => ArithmeticOp::Div,
+        }
+    })
+);
+
+named!(plus_minus_op<&str, ArithmeticOp>,
+    map!(alt!(tag!("+") | tag!("-")), |x| {
+        match x {
+            "+" => ArithmeticOp::Add,
+            _   => ArithmeticOp::Min,
+        }
+    })
+);
+
+// Mul and Div have higher priority in arithmetic expression.
+named!(arith_expr_high<&str, ExprAst>,
+    do_parse!(
+        base: preceded!(space0, base_expr) >>
+        remain: many0!(tuple!(
+            preceded!(space0, mul_div_op), 
+            preceded!(space0, base_expr)
+        )) >>
+        (parse_arith_expr(base, remain))
+    )
+);
+
+// Add and Minus have lower priority in arithmetic expression.
+named!(arith_expr_low<&str, ExprAst>,
+    do_parse!(
+        base: preceded!(space0, arith_expr_high) >>
+        remain: many0!(tuple!(
+            preceded!(space0, plus_minus_op), 
+            preceded!(space0, arith_expr_high)
+        )) >>
+        (parse_arith_expr(base, remain))
+    )
+);
+
+
+fn parse_arith_expr(base: ExprAst, remain: Vec<(ArithmeticOp, ExprAst)>) -> ExprAst {
+    let mut left = base;
+    for (op, right) in remain {
+        let new_left = ArithExprAst {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        }.into();
+        left = new_left;
+    }
+    left
+}
+
+
+named!(expr<&str, ExprAst>,
+    // Must put base_expr matching after arith_expr matching, otherwise since arith_expr contains 
+    // base_expr, parser will stop after finding the first match of base expression.
+    alt!(arith_expr_low | base_expr)
+);
+
+
+named!(setcompre<&str, SetComprehensionAst>, 
+    do_parse!(
+        op: setcompre_op >>
+        tag!("(") >>
+        default: opt!(terminated!(
+            delimited!(space0, atom, space0), 
+            terminated!(tag!(","), space0))) >>
+        tag!("{") >>
+        vars: separated_list!(tag!(","), 
+            delimited!(space0, alt!(composite | variable_ast), space0)
+        ) >>
+        delimited!(space0, tag!("|"), space0) >>
+        condition: separated_list!(tag!(","), 
+            delimited!(space0, constraint, space0)
+        ) >>
+        tag!("}") >>
+        tag!(")") >>
+        (parse_setcompre(vars, condition, op, default))
+    )
+);
+
+fn parse_setcompre(vars: Vec<TermAst>, condition: Vec<ConstraintAst>, op: SetCompreOp, default: Option<Term>) -> SetComprehensionAst {
+    let default_value = match default {
+        None => None,
+        Some(term) => {
+            // The term has to be an integer as default value.
+            let atom: Atom = term.try_into().unwrap();
+            let num = match atom {
+                Atom::Int(num) => Some(num),
+                _ => None,
+            };
+
+            num
+        }
+    };
+
+    SetComprehensionAst {
+        vars,
+        condition,
+        op,
+        default: default_value,
+    }
+}
+
+/* 
+Something is tricky here that we have to match predicate first because letter 'E'
+can be matched as a float number, so any composite term with type name starting with
+'E' could be matched in binary.
+*/
+named!(constraint<&str, ConstraintAst>,
+    alt!(
+        map!(predicate, |x| { x.into() }) |
+        map!(binary, |x| { x.into() }) 
+    )
+);
+
+named!(binary<&str, BinaryAst>,
+    do_parse!(
+        left: expr >>
+        op: delimited!(space0, bin_op, space0) >>
+        right: expr >>
+        (parse_binary(op, left, right))
+    )
+);
+
+fn parse_binary(op: BinOp, left: ExprAst, right: ExprAst) -> BinaryAst {
+    BinaryAst {
+        op,
+        left,
+        right,
+    }
+}
+
+named!(predicate<&str, PredicateAst>,
+    do_parse!(
+        neg: opt!(delimited!(space0, tag!("no"), space0)) >>
+        alias: opt!(terminated!(id, delimited!(space0, tag!("is"), space0))) >>
+        term: composite >>
+        (parse_predicate(neg, alias, term))
+    )
+);
+
+fn parse_predicate(neg: Option<&str>, alias: Option<String>, term: TermAst) -> PredicateAst {
+    let negated = match neg {
+        None => false,
+        _ => true,
+    };
+
+    PredicateAst {
+        negated,
+        term,
+        alias,
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RuleAst {
+    head: Vec<TermAst>,
+    body: Vec<ConstraintAst>,
+}
+
+
+named!(rule<&str, RuleAst>,
+    do_parse!(
+        head: separated_list!(tag!(","), alt!(composite | variable_ast)) >>
+        delimited!(space0, tag!(":-"), space0) >>
+        body: separated_list!(tag!(","), constraint) >>
+        (parse_rule(head, body))
+    )
+);
+
+fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
+    RuleAst {
+        head,
+        body,
+    }
+}
+
+
 named!(composite<&str, TermAst>, 
     do_parse!(
+        alias: opt!(terminated!(id, delimited!(multispace0, tag!("is"), multispace0))) >>
         t: id >>
         args: delimited!(
             char!('('), 
@@ -475,37 +825,41 @@ named!(composite<&str, TermAst>,
             ), 
             char!(')')
         ) >>
-        (parse_term(t, args))
+        (parse_term(alias, t, args))
     )
 );
 
-fn parse_term(sort: String, args: Vec<TermAst>) -> TermAst {
+fn parse_term(alias: Option<String>, sort: String, args: Vec<TermAst>) -> TermAst {
     CompositeTermAst {
         name: sort.to_string(),
         arguments: args.into_iter().map(|x| Box::new(x)).collect(),
-        alias: None,
+        alias,
     }.into()
 }
 
 
 // Underscore and quote sign at the end is allowed in variable name.
-named!(varname<&str, String>, 
-    alt!(
-        map!(tag!("_"), |x| { x.to_string() }) |
-        map!(
-            tuple!(
-                alpha1,
-                many0!(alt!(alphanumeric1 | tag!("_"))),
-                many0!(tag!("'"))
-            ),
-            |(a, b, c)| {
-                let mut final_str = a.to_string();
-                for s in b { final_str.push_str(s); }
-                for s in c { final_str.push_str(s); }
-                final_str
-            }
-        )
-    )
+named!(varname<&str, &str>, 
+    complete!(alt!(
+        tag!("_") |
+        recognize!(tuple!(
+            alpha1,
+            //take_while!(is_alphanumeric_char),
+            //many0!(alphanumeric1),
+            many0!(alt!(alphanumeric1 | tag!("_"))),
+            many0!(tag!("'"))
+        ))
+    ))
+);
+
+fn is_alphanumeric_char(c: char) -> bool {
+    is_alphanumeric(c as u8)
+}
+
+named!(variable_ast<&str, TermAst>, 
+    map!(variable, |x| {
+        x.into()
+    })
 );
 
 named!(variable<&str, Term>,
@@ -516,23 +870,27 @@ named!(variable<&str, Term>,
     )
 );
 
-fn parse_variable(var: String, fragments: Vec<String>) -> Term {
-    Variable::new(var, fragments).into()
+fn parse_variable(var: &str, fragments: Vec<String>) -> Term {
+    Variable::new(var.to_string(), fragments).into()
 }
 
+named!(atom_ast<&str, TermAst>,
+    map!(atom, |x| {
+        x.into()
+    })
+);
+
 named!(atom<&str, Term>,
-    alt!(atom_string | atom_bool | atom_integer | atom_float)
+    alt!(atom_float | atom_integer | atom_bool | atom_string)
 );
 
 named!(atom_integer<&str, Term>,
-    map!(
-        tuple!(opt!(alt!(char!('+') | char!('-'))), digit1),
+    map!(tuple!(opt!(alt!(char!('+') | char!('-'))), digit1),
         |(sign, num_str)| {
             let num = match sign {
                 Some(sign_char) => { sign_char.to_string() + &num_str.to_string() },
                 None => { num_str.to_string() }
             };
-
             Atom::Int(BigInt::from_str(&num[..]).unwrap()).into() 
         }
     )
@@ -545,10 +903,18 @@ named!(atom_string<&str, Term>,
     )
 );
 
+// Match float but need to exclude integer.
 named!(atom_float<&str, Term>,
     map!(
-        float, 
-        |float_num| { Atom::Float(BigRational::from_f32(float_num).unwrap()).into() }
+        recognize!(float), 
+        |float_str| { 
+            if let Ok(i) = BigInt::from_str(float_str) {
+                return Atom::Int(i).into();
+            } else {
+                let num = f32::from_str(float_str).unwrap();
+                return Atom::Float(BigRational::from_f32(num).unwrap()).into(); 
+            }
+        }
     )
 );
 
@@ -568,52 +934,79 @@ named!(atom_bool<&str, Term>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_components() {
+        assert_eq!(id("xxx").unwrap().0, "");
+        assert_eq!(varname("xx ").unwrap().0, " ");
+        assert_eq!(varname("xx22' ").unwrap().0, " ");
+        assert_eq!(varname("yy22'' ").unwrap().0, " ");
+        assert_eq!(varname("_").unwrap().0, "");
+        assert_eq!(typename("yyy").unwrap().0, "");
+        assert_eq!(typename("b3aab2c").unwrap().0, "");
+        assert_eq!(tagged_typename("id : Hello").unwrap().0, "");
+        // println!("{:?}", output);
+    }
 
     #[test]
     fn test_term() {
-        assert_eq!(composite("Node(\"hi\")ttt").unwrap().0, "ttt");
+        assert_eq!(atom("1.23").unwrap().0, "");
+        assert_eq!(atom("true").unwrap().0, "");
+        assert_eq!(atom("-122").unwrap().0, "");
         assert_eq!(atom("\"helloworld\"").unwrap().0, "");
-        //assert_eq!(atom("123E-02").unwrap().0, "");
-        assert_eq!(atom("-11223344 ").unwrap().0, " ");
-        //assert_eq!(typename("3aab2c,").unwrap().0, ",");
-        assert_eq!(variable("hello_world''',").unwrap().0, ",");
+        assert_eq!(atom("123E-02").unwrap().0, "");
+        assert_eq!(atom("-11223344").unwrap().0, "");
+        //assert_eq!(variable("hello_world ").unwrap().0, " ");
+        assert_eq!(variable_ast("hi ").unwrap().0, " ");
+        assert_eq!(composite("Edge(node1 , Node(\"hello\"))").unwrap().0, "");
+        assert_eq!(composite("Node(\"hi\")").unwrap().0, "");
+    }
+
+    #[test]
+    fn test_typedef() {
         assert_eq!(composite_typedef("Edge ::= new(src: Node, dst : Node ).").unwrap().0, "");
         union_typedef("X  ::= A + B + C+  D  .");
-        composite("Edge(node1 , Node(\"hello\"))");
+    }
 
-        let output = domain(
+    #[test]
+    fn test_expr() {
+        assert_eq!(base_expr("x ").unwrap().0, " ");
+        assert_eq!(base_expr("count({a , udge(a, b) | X(m, 11.11),odge(a, a), Edge(b, Node(\"hello\")) })").unwrap().0, "");
+        assert_eq!(base_expr("minAll( 1 , {c, d | c is Node(a), d is Node(b)})").unwrap().0, "");
+        assert_eq!(expr("a+b*c ,").unwrap().0, " ,");
+        assert_eq!(expr("(a+b)*c ,").unwrap().0, " ,");
+
+        let setcompre_str = "maxAll(10, {x | x is X(a, b, c)})";
+        let expr1_str = &format!(" ( a + {}  ) /  b .", setcompre_str)[..];
+        assert_eq!(expr(expr1_str).unwrap().0, " .");
+
+        let binary1_str = &format!("(b + {}) / x = d + e .", setcompre_str)[..];
+        assert_eq!(binary(binary1_str).unwrap().0, " .");
+        
+        let rule_str = "Edge(a, b) :- Edge(b, c), Edge(c, a).";
+        let output = rule(rule_str);
+        println!("{:?}", output);
+    }
+
+    #[test]
+    fn test_program() {
+        let graph_domain =  
             "domain graph { 
                 Node ::= new(id: String). 
                 Edge ::= new(src:Node, dst: Node). 
                 Item ::= Node + Edge.
-            }"
-        );
+            }";
 
-        let output1 = model(
+        let graph_model1 = 
             "model m of Graph {
-                Node(\"helloworld\")
-                Edge(Node(\"hello\"), Node(\"world\"))
-            }"
-        );
+                Node(\"helloworld\") .
+                Edge(Node(\"hello\"), Node(\"world\")).
+            }";
 
-        let output2 = program(
-            "
-            domain Graph { 
-                Node ::= new(id: String). 
-                Edge ::= new(src:Node, dst: Node). 
-                Item ::= Node + Edge.
-            }
-            
-            model m of Graph {
-                Node(\"helloworld\")
-                Edge(Node(\"hello\"), Node(\"world\"))
-            }
-
-            pp
-            "
-        );
-
-        println!("{:?}", output2);
+        let graph_model2 = 
+            "model m of Graph {
+                n1 is Node(\"helloworld\") .
+                e1 is Edge(n1, n1).
+            }";
     }
 
 }

@@ -57,7 +57,7 @@ impl Predicate {
 }
 
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum BinOp {
     Eq,
     Ne,
