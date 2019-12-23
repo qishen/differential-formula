@@ -20,6 +20,8 @@ pub trait TermBehavior {
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>>;
     fn is_groundterm(&self) -> bool;
     fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term;
+    fn is_dc_variable(&self) -> bool; // Don't care variable '_'.
+    fn root_var(&self) -> Term;
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -37,8 +39,14 @@ impl Display for Composite {
         for arg in self.arguments.iter() {
             args.push(format!("{}", arg));
         }
-        let args_str = args.join(",");
-        write!(f, "{}({})", self.sort.name(), args_str)
+
+        let args_str = args.join(", ");
+        let alias_str = match &self.alias {
+            None => "".to_string(),
+            Some(name) => format!("{} is ", name)
+        };
+
+        write!(f, "{}{}({})", alias_str, self.sort.name(), args_str)
     }
 }
 
@@ -61,8 +69,37 @@ impl Composite {
         true
     }
 
-    pub fn get_subterm(&self, fragments: Vec<String>) -> Option<Term> {
+    pub fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
+        let sort: CompositeType = self.sort.as_ref().clone().try_into().unwrap();
+        for (i, (label_opt, t)) in sort.arguments.iter().enumerate() {
+            match label_opt {
+                Some(l) => {
+                    if label == l {
+                        let term = self.arguments.get(i).unwrap().as_ref().clone();
+                        return Some(term);
+                    }
+                },
+                None => {},
+            }
+        }
+
         None
+    }
+
+    pub fn get_subterm_by_labels(&self, fragments: &Vec<String>) -> Option<Term> {
+        let mut composite = self.clone();
+        for fragment in fragments {
+            let term_opt = composite.get_subterm_by_label(fragment);
+            match term_opt {
+                None => { return None; },
+                Some(t) => { 
+                    let c: Composite = t.try_into().unwrap();
+                    composite = c; 
+                }
+            }
+        }
+
+        Some(composite.into())
     }
 }
 
@@ -148,6 +185,12 @@ impl TermBehavior for Composite {
         }
         composite.into()
     }
+
+    fn is_dc_variable(&self) -> bool { false }
+
+    fn root_var(&self) -> Term {
+        self.clone().into()
+    }
 }
 
 
@@ -159,7 +202,11 @@ pub struct Variable {
 
 impl Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.var)
+        let mut rest = self.fragments.join(".");
+        if self.fragments.len() > 0 {
+            rest = ".".to_string() + &rest[..]; 
+        }
+        write!(f, "{}{}", self.var, rest)
     }
 }
 
@@ -177,14 +224,21 @@ impl Variable {
 
 impl TermBehavior for Variable {
     fn variables(&self) -> HashSet<Term> {
-       let mut set = HashSet::new();
-       set.insert(self.clone().into());
-       set
+        let mut set = HashSet::new();
+        if !self.is_dc_variable() {
+            set.insert(self.clone().into());
+        }
+
+        set
     }
 
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
         let mut map = HashMap::new();
-        map.insert(self.clone().into(), term.clone());
+        // Skip the variable if it is an underscore.
+        if !self.is_dc_variable() {
+            map.insert(self.clone().into(), term.clone());
+        }
+
         Some(map)
     }
 
@@ -193,12 +247,26 @@ impl TermBehavior for Variable {
     }
 
     fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term {
+        let root = self.root_var();
         let vterm: Term = self.clone().into();
         if map.contains_key(&vterm) {
-            return map.get(&vterm).unwrap().clone();
+            map.get(&vterm).unwrap().clone()
+        } else if map.contains_key(&root) {
+            // Dig into the root term to find the subterm by labels. 
+            let c: Composite = map.get(&root).unwrap().clone().try_into().unwrap();
+            c.get_subterm_by_labels(&self.fragments).unwrap()
         } else {
-            return vterm;
+            vterm
         }
+    }
+
+    fn is_dc_variable(&self) -> bool {
+        if self.var == "_" { true }
+        else { false }
+    }
+
+    fn root_var(&self) -> Term {
+        Variable::new(self.var.clone(), vec![]).into()
     }
 }
 
@@ -217,10 +285,10 @@ impl Abomonation for Atom {}
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let atomStr = match self {
-            Atom::Int(i) => format!("{:?}", i),
+            Atom::Int(i) => format!("{}", i),
             Atom::Bool(b) => format!("{:?}", b),
             Atom::Str(s) => format!("{:?}", s),
-            Atom::Float(f) => format!("{:?}", f),
+            Atom::Float(f) => format!("{}", f),
         };
         write!(f, "{}", atomStr)
     }
@@ -241,6 +309,12 @@ impl TermBehavior for Atom {
     }
 
     fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term {
+        self.clone().into()
+    }
+
+    fn is_dc_variable(&self) -> bool { false }
+
+    fn root_var(&self) -> Term {
         self.clone().into()
     }
 }

@@ -144,6 +144,7 @@ pub struct Env {
 
 impl Env {
     pub fn get_model_by_name(&self, name: String) -> Option<Model> {
+        // Make a clone of the model in Env and return it.
         match self.model_map.get(&name) {
             None => None,
             Some(model) => Some(model.clone())
@@ -151,6 +152,7 @@ impl Env {
     }
 
     pub fn get_domain_by_name(&self, name: String) -> Option<Domain> {
+        // Make a clone of the domain in Env and return it.
         match self.domain_map.get(&name) {
             None => None,
             Some(model) => Some(model.clone())

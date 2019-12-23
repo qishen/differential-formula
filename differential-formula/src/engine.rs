@@ -49,24 +49,81 @@ pub struct WrappedBigInt {
 
 impl Abomonation for WrappedBigInt {}
 
+pub struct Session {
+    worker: timely::worker::Worker<timely::communication::allocator::Thread>,
+    input: InputSession<i32, Term, isize>,
+    probe: timely::dataflow::ProbeHandle<i32>,
+    domain: Domain,
+    step_count: i32,
+}
+
+impl Session {
+    fn new(input: InputSession<i32, Term, isize>, 
+            probe: timely::dataflow::ProbeHandle<i32>, 
+            domain: Domain,
+            worker: timely::worker::Worker<timely::communication::allocator::Thread>
+        ) -> Self {
+
+        Session {
+            worker,
+            input,
+            probe,
+            domain,
+            step_count: 1,
+        }
+    }
+
+    fn parse_term(term_str: String) {
+
+    }
+
+    fn _advance(&mut self) {
+        self.input.advance_to(self.step_count);
+        self.input.flush();
+        while self.probe.less_than(&self.input.time()) {
+            self.worker.step();
+        }
+        self.step_count += 1;
+    }
+
+    pub fn add_term(&mut self, term: Term) {
+        self.input.insert(term);
+        self._advance();
+    }
+
+    pub fn add_terms(&mut self, terms: Vec<Term>) {
+        for term in terms {
+            self.input.insert(term);
+        }
+        self._advance();
+    }
+
+    pub fn remove_term(&mut self, term: Term) {
+        self.input.remove(term);
+        self._advance();
+    }
+
+    pub fn remove_terms(&mut self, terms: Vec<Term>) {
+        for term in terms {
+            self.input.remove(term);
+        }
+        self._advance();
+    }
+
+    pub fn load_model(&mut self, model: Model) {
+        self.add_terms(model.models);
+    }
+}
+
 
 pub struct DDEngine {
     pub env: Option<Env>,
-    pub worker: timely::worker::Worker<timely::communication::allocator::Thread>,
-    pub input: InputSession<i32, i32, isize>,
 }
 
 impl DDEngine {
     pub fn new() -> Self {
-        // create a naked single-threaded worker.
-        let allocator = timely::communication::allocator::Thread::new();
-        let mut worker = timely::worker::Worker::new(allocator);
-        let mut input = InputSession::<i32, i32, isize>::new();
-
         let engine = DDEngine {
             env: None,
-            worker,
-            input, 
         };
 
         engine
@@ -82,7 +139,7 @@ impl DDEngine {
         env
     }
 
-    
+
     pub fn parse_file() {
 
     }
@@ -105,7 +162,18 @@ impl DDEngine {
         model
     }
 
-    pub fn create_test_dataflow(&mut self) -> InputSession<i32, (Term, Term), isize> {
+    pub fn create_session(&mut self, domain_name: String) -> Session {
+        // Create a single thread worker.
+        let allocator = timely::communication::allocator::Thread::new();
+        let mut worker = timely::worker::Worker::new(allocator);
+
+        let domain = self.get_domain(domain_name).unwrap();
+        let (mut input, probe) = self.create_dataflow(&domain, &mut worker);
+
+        Session::new(input, probe, domain, worker)
+    }
+
+    /*pub fn create_test_dataflow(&mut self) -> InputSession<i32, (Term, Term), isize> {
         let mut input = InputSession::<i32, (Term, Term), isize>::new();
         self.worker.dataflow(|scope| {
             let models = input.to_collection(scope);
@@ -123,7 +191,7 @@ impl DDEngine {
         });
 
         input
-    }
+    }*/
 
 
     pub fn dataflow_filtered_by_type<G>(
@@ -164,6 +232,7 @@ impl DDEngine {
         DDEngine::dataflow_filtered_by_type(terms, pred_term_copy) 
             .map(move |term| {
                 // Get a hash map mapping variable to term based on matching term. 
+                // TODO: Handle situations when no binding is found and return None.
                 let mut binding = pred_term.get_bindings(&term).unwrap();
 
                 // Predicate may have alias, if so add itself to existing binding.
@@ -414,6 +483,26 @@ impl DDEngine {
                 });
                 //.inspect(|x| { print!("Join result is {:?}\n", x); });
 
+
+            // Filter out binding with conflict on variables with fragments like x.y.z
+            prev_collection = prev_collection.filter(|mut binding| {
+                for var in binding.keys() {
+                    let variable: Variable = var.clone().try_into().unwrap();
+                    let root_var = var.root_var();
+                    // Check if variable has fragments and root variable exists in binding.
+                    if var != &root_var && binding.contains_key(&root_var) {
+                        // TODO: too much clones here.
+                        let root_value = binding.get(&root_var).unwrap().clone();
+                        let composite: Composite = root_value.try_into().unwrap();
+                        let sub_value = composite.get_subterm_by_labels(&variable.fragments).unwrap();
+                        if &sub_value == binding.get(var).unwrap() { return true; } 
+                        else { return false; }
+                    }
+                }
+
+                true
+            });
+
             // Refill variable after its value was moved and update existing binded variable list.
             right_diff_vars_copy = right_diff_vars.clone();
             prev_vars.extend(right_diff_vars_copy);
@@ -655,7 +744,7 @@ impl DDEngine {
     }
 
 
-    pub fn create_dataflow(&mut self, domain: &Domain) -> (
+    pub fn create_dataflow(&mut self, domain: &Domain, worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>) -> (
         InputSession<i32, Term, isize>, 
         timely::dataflow::ProbeHandle<i32>,
     )
@@ -663,7 +752,7 @@ impl DDEngine {
         let mut input = InputSession::<i32, Term, isize>::new();
         let stratified_rules = domain.stratified_rules();
 
-        let probe = self.worker.dataflow(|scope| {
+        let probe = worker.dataflow(|scope| {
             // models are updated after execution of rules from each stratum.
             let models = input.to_collection(scope).distinct();
             let mut new_models = models.map(|x| x);

@@ -900,7 +900,7 @@ named!(rule<&str, RuleAst>,
         head: separated_list!(tag!(","), alt!(composite | variable_ast)) >>
         delimited!(space0, tag!(":-"), space0) >>
         body: separated_list!(tag!(","), 
-            delimited!(space0, constraint, space0)
+            delimited!(multispace0, constraint, multispace0)
         ) >>
         (parse_rule(head, body))
     )
@@ -962,7 +962,6 @@ named!(varname<&str, &str>,
 );
 
 fn is_alphanumeric_char(c: char) -> bool {
-
     is_alphanumeric(c as u8)
 }
 
@@ -975,13 +974,18 @@ named!(variable_ast<&str, TermAst>,
 named!(variable<&str, Term>,
     do_parse!(
         var: varname >>
-        fragments: separated_list!(tag!("."), id) >>
+        fragments: opt!(preceded!(tag!("."), separated_list!(tag!("."), id))) >>
         (parse_variable(var, fragments))
     )
 );
 
-fn parse_variable(var: &str, fragments: Vec<String>) -> Term {
-    Variable::new(var.to_string(), fragments).into()
+fn parse_variable(var: &str, fragments: Option<Vec<String>>) -> Term {
+    let frags = match fragments {
+        None => vec![],
+        Some(list) => list,
+    };
+
+    Variable::new(var.to_string(), frags).into()
 }
 
 named!(atom_ast<&str, TermAst>,
@@ -1058,6 +1062,8 @@ mod tests {
 
     #[test]
     fn test_term() {
+        // Don't put number at the end of a rule otherwise '.' will be missing.
+        assert_eq!(atom("20.").unwrap().0, "");
         assert_eq!(atom("1.23").unwrap().0, "");
         assert_eq!(atom("true").unwrap().0, "");
         assert_eq!(atom("-122").unwrap().0, "");
@@ -1066,6 +1072,7 @@ mod tests {
         assert_eq!(atom("-11223344").unwrap().0, "");
         assert_eq!(variable("hello_world ").unwrap().0, " ");
         assert_eq!(variable_ast("hi ").unwrap().0, " ");
+        assert_eq!(variable("a.b.c ").unwrap().0, " ");
         assert_eq!(composite("Edge(node1 , Node(\"hello\"))").unwrap().0, "");
         assert_eq!(composite("Node(\"hi\")").unwrap().0, "");
     }
@@ -1088,13 +1095,13 @@ mod tests {
         let expr1_str = &format!(" ( a + {}  ) /  b .", setcompre_str)[..];
         assert_eq!(expr(expr1_str).unwrap().0, " .");
 
+        // 'E' or 'e' is recognized as variable instead of float.
         let binary1_str = &format!("(b + {}) / x = d + e .", setcompre_str)[..];
         assert_eq!(binary(binary1_str).unwrap().0, " .");
+        assert_eq!(binary("aggr * 2 = 20 .").unwrap().0, " .");
         
         let rule_str = "Edge(a, b) :- Edge(b, c), Edge(c, a).";
         assert_eq!(rule(rule_str).unwrap().0, ".");
-
-        //println!("{:?}", output);
     }
 
     #[test]
@@ -1132,8 +1139,36 @@ mod tests {
 
         let program3_str = &format!("{} {}EOF", graph_domain, graph_model2)[..];
         assert_eq!(program(program3_str).unwrap().0, "EOF");
+        
+        let program4_str = "domain Graph {
+            Node ::= new(name: Integer).
+            Edge ::= new(src: Node, dst: Node).
+            Path ::= new(src: Node, dst: Node).
+            Line ::= new(a: Node, b: Node, c: Node, d: Node).
+            Nocycle ::= new(node: Node).
+            TwoEdge ::= new(first: Edge, second: Edge).
+    
+            TwoEdge(x, x, square) :- x is Edge(c, d), 
+            aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr * aggr, agg.hi * 2 = 20 .
+        }
+    
+        model m of Graph {
+            n0 is Node(0).
+            n1 is Node(1).
+            n2 is Node(2).
+            n3 is Node(3).
+            n4 is Node(4).
+    
+            Edge(n0, n0).
+            Edge(n0, n1).
+            Edge(n1, n2).
+            Edge(n2, n3).
+            Edge(n3, n4).
+        }
 
-        //let output = program(program4_str);
+        EOF";
+
+        let output = program(program4_str);
         //println!("{:?}", output);
     }
 

@@ -62,8 +62,22 @@ fn test_ddengine() {
         TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
     ";
 
+    let rules6x = "
+        TwoEdge(x, y) :- x is Edge(_, _), y is Edge(_, _).
+    ";
+
     let rules7 = "
-        TwoEdge(x, x, square) :- x is Edge(c, d), aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr*aggr, aggr * 2 = 20.
+        TwoEdge(x, x, square) :- x is Edge(c, d), 
+                                 aggr = count({Edge(a, a), b | Edge(a, b)}), 
+                                 square = aggr * aggr, aggr * 2 > 16 .
+    ";
+
+    let rules8 = "
+        Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).
+    ";
+
+    let rules8x = "
+        Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).
     ";
 
     let model1 = "
@@ -81,54 +95,19 @@ fn test_ddengine() {
         Edge(n3, n4).
     }";
 
-    let program1 = generate_graph_program(rules1, model1);
+    let program1 = generate_graph_program(rules7, model1);
     println!("{}", program1);
 
     let mut engine = DDEngine::new();
 
     // Parse string and install program in the engine.
     let env = DDEngine::parse_string(&program1[..]);
-    //println!("{:?}", env);
+    println!("{:?}", env);
     engine.install(env);
 
     let domain = engine.get_domain("Graph".to_string()).unwrap();
     let model = engine.get_model("m".to_string()).unwrap();
 
-    let (mut input, probe) = engine.create_dataflow(&domain);
-
+    let mut session = engine.create_session("Graph".to_string());
+    session.load_model(model);
 }
-
-/*
-#[test]
-fn test_ddengine() {
-    
-    // Each rule forms a stratum.
-    //let mut engine = DDEngine::new(vec![], vec![rule2x, rule1, rule4]);
-    //let mut engine = DDEngine::new(vec![], vec![rule2x, rule5]);
-    //let mut engine = DDEngine::new(vec![], vec![rule6]);
-
-    input.insert(e1);
-    input.insert(e11);
-    input.insert(e2);
-    input.insert(e3.clone());
-    input.insert(e4.clone());
-    input.insert(e4);
-
-    input.advance_to(1);
-    input.flush();
-    while probe.less_than(&input.time()) {
-        engine.worker.step();
-    }
-    
-
-    input.remove(e3);
-
-    input.advance_to(2);
-    input.flush();
-    while probe.less_than(&input.time()) {
-        engine.worker.step();
-    }
-        
-}
-
-*/

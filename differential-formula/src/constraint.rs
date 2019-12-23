@@ -33,9 +33,19 @@ pub struct Predicate {
 impl Display for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut term_str = format!("{}", self.term);
+        let alias_str = match &self.alias {
+            Some(a) => {
+                format!("{} is ", a)
+            },
+            None => "".to_string()
+        };
+
+        term_str = alias_str + &term_str;
+
         if self.negated {
             term_str = "no ".to_string() + &term_str;
         }
+
         write!(f, "{}", term_str)
     }
 }
