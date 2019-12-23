@@ -147,8 +147,19 @@ impl TypeDefAstBehavior for EnumTypeDefAst {
     }
 }
 
+// Start with '//' and end with '\n'
+named!(comment<&str, &str>, 
+    recognize!(
+        delimited!(tag!("//"), many0!(none_of("\n")), tag!("\n"))
+    )
+);
 
-
+// It can be either comment or white space, extend multispace with comment.
+named!(blank<&str, &str>, 
+    recognize!(
+        many0!(alt!(comment | multispace1))
+    )
+);
 
 named!(id<&str, String>,
     map!(recognize!(tuple!(alpha1, alphanumeric0)), |x| { x.to_string() })
@@ -182,7 +193,7 @@ named!(composite_typedef<&str, (String, TypeDefAst)>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
-        opt!(tag!("new")) >>
+        opt!(delimited!(space0, tag!("new"), space0)) >>
         args: delimited!(
             tag!("("), 
             separated_list!(tag!(","), delimited!(space0, tagged_typename, space0)),    
@@ -237,14 +248,22 @@ named!(atom_typedef,
 
 named!(domain_rules<&str, Vec<RuleAst>>,
     many0!(
-        delimited!(multispace0, terminated!(rule, tag!(".")), multispace0)
+        delimited!(
+            blank,
+            terminated!(rule, tag!(".")), 
+            blank
+        )
     )
 );
 
 
 named!(domain_types<&str, HashMap<String, Type>>,
     map!(many0!(
-            delimited!(multispace0, alt!(composite_typedef | union_typedef), multispace0)
+            delimited!(
+                blank,
+                alt!(composite_typedef | union_typedef), 
+                blank
+            )
         ), |typedefs| {
         let mut ast_map = HashMap::new();
         let mut type_map = HashMap::new();
@@ -360,7 +379,7 @@ struct ModelAst {
 named!(domain<&str, ProgramAst>, 
     do_parse!(
         tag!("domain") >>
-        domain_name: delimited!(space0, id, space0) >>
+        domain_name: delimited!(multispace0, id, multispace0) >>
         tag!("{") >>
         typedefs: delimited!(multispace0, domain_types, multispace0) >> 
         rules: delimited!(multispace0, domain_rules, multispace0) >>
@@ -386,9 +405,9 @@ named!(model<&str, ProgramAst>,
             tag!("{"),
             many0!(
                 delimited!(
-                    multispace0, 
+                    blank,
                     terminated!(composite, delimited!(multispace0, tag!("."), multispace0)), 
-                    multispace0
+                    blank
                 )
             ),
             tag!("}")
@@ -406,7 +425,9 @@ named!(model<&str, ProgramAst>,
 
 // Export this function to parse FORMULA file in string format.
 pub fn parse_str(content: &str) -> Env {
-    program(content).unwrap().1
+    let result = program(content).unwrap();
+    println!("{:?}", result.0);
+    result.1
 }
 
 // Return a domain map and a model map at the end of parsing.
@@ -1012,8 +1033,11 @@ named!(atom_integer<&str, Term>,
 
 named!(atom_string<&str, Term>,
     map!(
-        delimited!(char!('"'), alphanumeric0, char!('"')), 
-        |atom_str| { Atom::Str(atom_str.to_string()).into() }
+        delimited!(char!('"'), many0!(none_of("\"")), char!('"')), 
+        |char_vec| { 
+            let s: String = char_vec.into_iter().collect();
+            Atom::Str(s).into() 
+        }
     )
 );
 
@@ -1058,6 +1082,7 @@ mod tests {
         assert_eq!(typename("yyy").unwrap().0, "");
         assert_eq!(typename("b3aab2c").unwrap().0, "");
         assert_eq!(tagged_typename("id : Hello").unwrap().0, "");
+        assert_eq!(comment("// Don't care \n").unwrap().0, "");
     }
 
     #[test]

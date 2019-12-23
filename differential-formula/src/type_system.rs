@@ -122,6 +122,7 @@ impl Domain {
     }
 
     pub fn stratified_rules(&self) -> Vec<Vec<Rule>> {
+        // TODO:
         vec![self.rules.clone()]
     }
 }

@@ -22,6 +22,8 @@ pub trait TermBehavior {
     fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term;
     fn is_dc_variable(&self) -> bool; // Don't care variable '_'.
     fn root_var(&self) -> Term;
+    fn get_subterm_by_label(&self, label: &String) -> Option<Term>;
+    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term>;
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -69,38 +71,6 @@ impl Composite {
         true
     }
 
-    pub fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
-        let sort: CompositeType = self.sort.as_ref().clone().try_into().unwrap();
-        for (i, (label_opt, t)) in sort.arguments.iter().enumerate() {
-            match label_opt {
-                Some(l) => {
-                    if label == l {
-                        let term = self.arguments.get(i).unwrap().as_ref().clone();
-                        return Some(term);
-                    }
-                },
-                None => {},
-            }
-        }
-
-        None
-    }
-
-    pub fn get_subterm_by_labels(&self, fragments: &Vec<String>) -> Option<Term> {
-        let mut composite = self.clone();
-        for fragment in fragments {
-            let term_opt = composite.get_subterm_by_label(fragment);
-            match term_opt {
-                None => { return None; },
-                Some(t) => { 
-                    let c: Composite = t.try_into().unwrap();
-                    composite = c; 
-                }
-            }
-        }
-
-        Some(composite.into())
-    }
 }
 
 impl TermBehavior for Composite {
@@ -191,6 +161,38 @@ impl TermBehavior for Composite {
     fn root_var(&self) -> Term {
         self.clone().into()
     }
+
+    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
+        let sort: CompositeType = self.sort.as_ref().clone().try_into().unwrap();
+        for (i, (label_opt, t)) in sort.arguments.iter().enumerate() {
+            match label_opt {
+                Some(l) => {
+                    if label == l {
+                        let term = self.arguments.get(i).unwrap().as_ref().clone();
+                        return Some(term);
+                    }
+                },
+                None => {},
+            }
+        }
+
+        None
+    }
+
+    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
+        let mut term: Term = self.clone().into();
+        for fragment in labels {
+            let term_opt = term.get_subterm_by_label(fragment);
+            match term_opt {
+                None => { return None; },
+                Some(t) => { 
+                    term = t; 
+                }
+            }
+        }
+
+        Some(term)
+    }
 }
 
 
@@ -250,16 +252,18 @@ impl TermBehavior for Variable {
         let root = self.root_var();
         let vterm: Term = self.clone().into();
         if map.contains_key(&vterm) {
+            // Fina an exact match in hash map and return its value.
             map.get(&vterm).unwrap().clone()
         } else if map.contains_key(&root) {
             // Dig into the root term to find the subterm by labels. 
-            let c: Composite = map.get(&root).unwrap().clone().try_into().unwrap();
-            c.get_subterm_by_labels(&self.fragments).unwrap()
+            map.get(&root).unwrap().get_subterm_by_labels(&self.fragments).unwrap()
         } else {
+            // No match and just return variable itself.
             vterm
         }
     }
 
+    // Don't care variable "_"
     fn is_dc_variable(&self) -> bool {
         if self.var == "_" { true }
         else { false }
@@ -267,6 +271,15 @@ impl TermBehavior for Variable {
 
     fn root_var(&self) -> Term {
         Variable::new(self.var.clone(), vec![]).into()
+    }
+
+
+    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
+        None
+    }
+
+    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
+        None
     }
 }
 
@@ -316,6 +329,14 @@ impl TermBehavior for Atom {
 
     fn root_var(&self) -> Term {
         self.clone().into()
+    }
+
+    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
+        None
+    }
+
+    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
+        None
     }
 }
 

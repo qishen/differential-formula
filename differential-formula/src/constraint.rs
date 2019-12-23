@@ -45,7 +45,6 @@ impl Display for Predicate {
         if self.negated {
             term_str = "no ".to_string() + &term_str;
         }
-
         write!(f, "{}", term_str)
     }
 }
