@@ -10,6 +10,8 @@ use differential_formula::composite;
 use differential_formula::variable;
 use differential_formula::atom;
 
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
@@ -102,12 +104,33 @@ fn test_ddengine() {
 
     // Parse string and install program in the engine.
     let env = DDEngine::parse_string(&program1[..]);
-    println!("{:?}", env);
+    //println!("{:?}", env);
     engine.install(env);
 
     let domain = engine.get_domain("Graph".to_string()).unwrap();
     let model = engine.get_model("m".to_string()).unwrap();
 
     let mut session = engine.create_session("Graph".to_string());
+    session.load_model(model);
+}
+
+#[test]
+fn test_ddengine_2() {
+    //let content = std::env::current_dir();
+    let path = Path::new("./tests/samples/SocialNetwork.4ml");
+    let content = fs::read_to_string(path).unwrap();
+    
+
+    let mut engine = DDEngine::new();
+
+    // Parse string and install program in the engine.
+    let env = DDEngine::parse_string(&content[..]);
+    println!("{:?}", env);
+    engine.install(env);
+
+    let domain = engine.get_domain("SocialNetwork".to_string()).unwrap();
+    let model = engine.get_model("example".to_string()).unwrap();
+
+    let mut session = engine.create_session("SocialNetwork".to_string());
     session.load_model(model);
 }
