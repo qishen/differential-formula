@@ -3,39 +3,22 @@ extern crate timely;
 extern crate differential_dataflow;
 extern crate serde;
 
-use core::hash::Hash;
-use core::borrow::Borrow;
-
-use im::OrdMap;
-use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
-use std::any::Any;
-use std::rc::Rc;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
-use enum_dispatch::enum_dispatch;
-use abomonation::Abomonation;
-use serde::*;
 use num::*;
+use im::OrdMap;
 
 use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
-use timely::dataflow::operators::capture::Extract;
-use timely::dataflow::operators::feedback::*;
-use timely::Configuration;
 
 use differential_dataflow::{Collection, ExchangeData};
 use differential_dataflow::input::{Input, InputSession};
-use differential_dataflow::difference::Monoid;
 use differential_dataflow::operators::join::{Join, JoinCore};
 use differential_dataflow::operators::*;
-use differential_dataflow::collection::AsCollection;
 
 use crate::constraint::*;
 use crate::term::*;
@@ -130,9 +113,9 @@ impl DDEngine {
         self.env = Some(env);
     }
 
-    pub fn parse_string(content: &str) -> Env {
+    pub fn parse_string(content: String) -> Env {
         let content_eof = format!("{} {}", content, " EOF");
-        let env = parse_str(&content_eof[..]);
+        let env = parse_str(content_eof);
         env
     }
 

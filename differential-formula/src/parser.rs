@@ -258,34 +258,44 @@ named!(domain_rules<&str, Vec<RuleAst>>,
 
 
 named!(domain_types<&str, HashMap<String, Type>>,
-    map!(many0!(
+    do_parse!(
+        typedefs: many0!(
             delimited!(
                 blank,
                 alt!(composite_typedef | union_typedef), 
                 blank
             )
-        ), |typedefs| {
-        let mut ast_map = HashMap::new();
-        let mut type_map = HashMap::new();
-        type_map.insert("String".to_string(), BaseType::String.into());
-        type_map.insert("Integer".to_string(), BaseType::Integer.into());
-        type_map.insert("Boolean".to_string(), BaseType::Boolean.into());
-        
-        // Put all typedef AST into a hash map.
-        for (t, typedef) in typedefs {
-            ast_map.insert(t, typedef);
-        }
-        
-        // Recursively create all types found in AST.
-        for k in ast_map.keys() {
-            let t = create_type(k.clone(), &ast_map, &mut type_map);
-        }
-
-        type_map
-    })
+        ) >>
+        (parse_domain_types(typedefs))
+    )
 );
 
-fn create_type(t: String, ast_map: &HashMap<String, TypeDefAst>, type_map: &mut HashMap<String, Type>) -> Option<Type> {
+fn parse_domain_types(typedefs: Vec<(String, TypeDefAst)>) -> HashMap<String, Type>{
+    let mut ast_map = HashMap::new();
+    let mut type_map = HashMap::new();
+    type_map.insert("String".to_string(), BaseType::String.into());
+    type_map.insert("Integer".to_string(), BaseType::Integer.into());
+    type_map.insert("Boolean".to_string(), BaseType::Boolean.into());
+    
+    // Put all typedef AST into a hash map.
+    for (t, typedef) in typedefs {
+        ast_map.insert(t, typedef);
+    }
+
+    // Recursively create all types found in AST.
+    for k in ast_map.keys() {
+        let t = create_type(k.clone(), &ast_map, &mut type_map);
+    }
+
+    type_map
+}
+
+fn create_type(
+    t: String, 
+    ast_map: &HashMap<String, TypeDefAst>, 
+    type_map: &mut HashMap<String, Type>
+) -> Option<Type> 
+{
     if !type_map.contains_key(&t) {
         let v = ast_map.get(&t).unwrap();
         let new_type = match v {
@@ -376,7 +386,8 @@ struct ModelAst {
 }
 
 
-named!(domain<&str, ProgramAst>, 
+named!(
+    domain<&str, ProgramAst>, 
     do_parse!(
         tag!("domain") >>
         domain_name: delimited!(multispace0, id, multispace0) >>
@@ -424,9 +435,9 @@ named!(model<&str, ProgramAst>,
 
 
 // Export this function to parse FORMULA file in string format.
-pub fn parse_str(content: &str) -> Env {
-    let result = program(content).unwrap();
-    println!("{:?}", result.0);
+pub fn parse_str(content: String) -> Env {
+    let result = program(&content[..]).unwrap();
+    //println!("{:?}", result.0);
     result.1
 }
 
@@ -586,6 +597,7 @@ impl BaseExprAstBehavior for SetComprehensionAst {
         }.into()
     }
 }
+
 impl BaseExprAstBehavior for TermAst {
     fn to_base_expr(&self, domain: &Domain) -> BaseExpr {
         let term = self.to_term(domain);

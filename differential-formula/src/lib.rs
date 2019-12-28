@@ -12,3 +12,4 @@ pub mod parser;
 pub mod rule;
 pub mod term;
 pub mod type_system;
+pub mod util;

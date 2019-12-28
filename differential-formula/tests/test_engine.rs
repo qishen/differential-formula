@@ -103,8 +103,8 @@ fn test_ddengine() {
     let mut engine = DDEngine::new();
 
     // Parse string and install program in the engine.
-    let env = DDEngine::parse_string(&program1[..]);
-    //println!("{:?}", env);
+    let env = DDEngine::parse_string(program1);
+    println!("{:?}", env);
     engine.install(env);
 
     let domain = engine.get_domain("Graph".to_string()).unwrap();
@@ -124,7 +124,7 @@ fn test_ddengine_2() {
     let mut engine = DDEngine::new();
 
     // Parse string and install program in the engine.
-    let env = DDEngine::parse_string(&content[..]);
+    let env = DDEngine::parse_string(content);
     println!("{:?}", env);
     engine.install(env);
 

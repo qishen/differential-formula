@@ -1,90 +1,18 @@
-use crate::type_system::*;
-
-use core::hash::Hash;
-use core::borrow::Borrow;
 use std::sync::Arc;
 use std::vec::Vec;
-use std::collections::{HashMap, HashSet};
+use std::collections::*;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
-use abomonation::Abomonation;
-
 use im::OrdMap;
 use num::*;
 use serde::{Serialize, Deserialize};
 
-/*
-Rust standard lib does not provide a generic map interface like C# does after v1.0 because 
-it's user's responsibility to define what is a generic map and what functions should be included
-since different users have different needs for generic map interface. Zhong Kou Nan Tiao.
-*/
-pub trait GenericMap<K, V> {
-    fn contains_key<Q>(&self, k: &Q) -> bool 
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq;
-
-    fn get<Q>(&self, k: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq;
-
-    fn insert(&self, k: K, v: V) -> Option<V>;
-}
-
-impl<K, V> GenericMap<K, V> for HashMap<K, V>
-where
-    K: Eq + Hash,
-{
-    fn contains_key<Q>(&self, k: &Q) -> bool
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.contains_key(k)
-    }
-
-    fn get<Q>(&self, k: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.get(k)
-    }
-
-    fn insert(&self, k: K, v: V) -> Option<V> {
-        self.insert(k, v)
-    }
-}
-
-impl<K, V> GenericMap<K, V> for OrdMap<K, V>
-where
-    K: Eq + Hash,
-{
-    fn contains_key<Q>(&self, k: &Q) -> bool
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.contains_key(k)
-    }
-
-    fn get<Q>(&self, k: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.get(k)
-    }
-
-    fn insert(&self, k: K, v: V) -> Option<V> {
-        self.insert(k, v)
-    }
-}
+use crate::type_system::*;
+use crate::util::GenericMap;
 
 
 #[enum_dispatch(Term)]

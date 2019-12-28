@@ -1,16 +1,15 @@
 use std::sync::Arc;
 use std::vec::Vec;
-use std::collections::{HashMap, HashSet};
+use std::collections::*;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
-use abomonation::Abomonation;
 use serde::{Serialize, Deserialize};
 
-use crate::term::*;
+use crate::term::Term;
 use crate::rule::*;
 
 

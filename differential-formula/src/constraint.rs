@@ -4,24 +4,18 @@ extern crate differential_dataflow;
 extern crate abomonation_derive;
 extern crate abomonation;
 
-use rand::{Rng, SeedableRng, StdRng};
-use std::iter::*;
-use std::any::Any;
-use std::rc::Rc;
 use std::sync::Arc;
-use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::string::String;
 
 use enum_dispatch::enum_dispatch;
 
-use crate::term::*;
-use crate::rule::*;
+use crate::term::{Term, TermBehavior};
 use crate::expression::*;
 use crate::type_system::*;
+use crate::util::GenericMap;
 
 
 #[derive(Clone, Debug)]

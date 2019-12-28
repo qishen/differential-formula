@@ -3,10 +3,7 @@ extern crate rand;
 extern crate timely;
 extern crate differential_dataflow;
 
-use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
-use std::any::Any;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
@@ -15,13 +12,13 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
-use im::*;
 use enum_dispatch::enum_dispatch;
 use num::*;
 
 use crate::term::*;
 use crate::rule::*;
 use crate::constraint::*;
+use crate::util::GenericMap;
 
 #[derive(Clone, Debug)]
 pub struct SetComprehension {
