@@ -1,5 +1,7 @@
 use crate::type_system::*;
 
+use core::hash::Hash;
+use core::borrow::Borrow;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
@@ -11,29 +13,104 @@ use std::string::String;
 use enum_dispatch::enum_dispatch;
 use abomonation::Abomonation;
 
+use im::OrdMap;
 use num::*;
+use serde::{Serialize, Deserialize};
+
+/*
+Rust standard lib does not provide a generic map interface like C# does after v1.0 because 
+it's user's responsibility to define what is a generic map and what functions should be included
+since different users have different needs for generic map interface. Zhong Kou Nan Tiao.
+*/
+pub trait GenericMap<K, V> {
+    fn contains_key<Q>(&self, k: &Q) -> bool 
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq;
+
+    fn get<Q>(&self, k: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq;
+
+    fn insert(&self, k: K, v: V) -> Option<V>;
+}
+
+impl<K, V> GenericMap<K, V> for HashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    fn contains_key<Q>(&self, k: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.contains_key(k)
+    }
+
+    fn get<Q>(&self, k: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.get(k)
+    }
+
+    fn insert(&self, k: K, v: V) -> Option<V> {
+        self.insert(k, v)
+    }
+}
+
+impl<K, V> GenericMap<K, V> for OrdMap<K, V>
+where
+    K: Eq + Hash,
+{
+    fn contains_key<Q>(&self, k: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.contains_key(k)
+    }
+
+    fn get<Q>(&self, k: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.get(k)
+    }
+
+    fn insert(&self, k: K, v: V) -> Option<V> {
+        self.insert(k, v)
+    }
+}
 
 
 #[enum_dispatch(Term)]
 pub trait TermBehavior {
     fn variables(&self) -> HashSet<Term>;
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool where T: GenericMap<Term, Term>; 
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>>;
+    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>>;
     fn is_groundterm(&self) -> bool;
-    fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term;
-    fn is_dc_variable(&self) -> bool; // Don't care variable '_'.
+    // Use GenericMap trait to make function accept different map implementations.
+    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term;
+    // Check if the term is a don't-care variable with variable root name as '_'.
+    fn is_dc_variable(&self) -> bool; 
     fn root_var(&self) -> Term;
     fn get_subterm_by_label(&self, label: &String) -> Option<Term>;
     fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term>;
 }
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Composite {
     pub sort: Arc<Type>,
     pub arguments: Vec<Arc<Term>>,
     pub alias: Option<String>
 }
 
-impl Abomonation for Composite {}
+//impl Abomonation for Composite {}
 
 impl Display for Composite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -85,51 +162,77 @@ impl TermBehavior for Composite {
         set
     }
 
-    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
-        let mut bindings = HashMap::new();
-        let result: Result<Composite, _> = term.clone().try_into();
-        if let Ok(c) = result {
-            if self.sort == c.sort {
-                for i in 0..self.arguments.len() {
-                    let x = self.arguments.get(i).unwrap().as_ref();
-                    let y = c.arguments.get(i).unwrap().as_ref();
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
+    where
+        T: GenericMap<Term, Term>
+    {
+        match term {
+            Term::Composite(c) => {
+                if self.sort == c.sort {
+                    for i in 0..self.arguments.len() {
+                        let x = self.arguments.get(i).unwrap().as_ref();
+                        let y = c.arguments.get(i).unwrap().as_ref();
 
-                    match x {
-                        Term::Atom(a) => {
-                            // Immediately return None if both arguments of Atom type are not equal.
-                            if x != y {
-                                return None;
-                            }
-                        },
-                        _ => {
-                            let sub_bindings_option = x.get_bindings(&y);
-                            match sub_bindings_option {
-                                Some(mut sub_bindings) => {
-                                    for (k, v) in sub_bindings.drain() {
-                                        // Detect a variable binding conflict and return None immediately.
-                                        if bindings.contains_key(&k) {
-                                            if bindings.get(&k).unwrap() != &v {
-                                                return None;
+                        match x {
+                            Term::Atom(a) => {
+                                // Immediately return false if both Atom arguments are not equal.
+                                if x != y {
+                                    return false;
+                                }
+                            },
+                            _ => {
+                                // HashMap is faster than OrdMap in general.
+                                let mut sub_binding = HashMap::new();
+                                let has_binding = x.get_bindings_in_place(&mut sub_binding, &y);
+                                if has_binding {
+                                    for (k, v) in sub_binding.drain() {
+                                        // Detect a variable binding conflict and return false immediately.
+                                        if binding.contains_key(&k) {
+                                            if binding.get(&k).unwrap() != &v {
+                                                return false;
                                             }
                                         } else {
-                                            bindings.insert(k, v);
+                                            binding.insert(k, v);
                                         }
                                     }    
-                                },
-                                None => { 
-                                    // Return None when no binding found for current argument.
-                                    return None; 
+                                } else {
+                                    // No binding found for current argument.
+                                    return false;
                                 }
                             }
                         }
                     }
+                } else {
+                    return false;
                 }
-            } else {
-                return None;
+            },
+            _ => {
+                return false;
             }
-        } 
+        };
 
-        Some(bindings)
+        true
+    }
+
+
+    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
+        let mut bindings = HashMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding {
+            Some(bindings)
+        } else {
+            None
+        }
+    }
+
+    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
+        let mut bindings = OrdMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding {
+            Some(bindings)
+        } else {
+            None
+        }
     }
 
     fn is_groundterm(&self) -> bool {
@@ -141,7 +244,7 @@ impl TermBehavior for Composite {
         true
     }
 
-    fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term {
+    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
         let mut composite = self.clone();
         for i in 0..composite.arguments.len() {
             let arg = composite.arguments.get(i).unwrap();
@@ -196,7 +299,7 @@ impl TermBehavior for Composite {
 }
 
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Variable {
     pub var: String,
     pub fragments: Vec<String>
@@ -212,7 +315,7 @@ impl Display for Variable {
     }
 }
 
-impl Abomonation for Variable {}
+//impl Abomonation for Variable {}
 
 impl Variable {
     pub fn new(var: String, fragments: Vec<String>) -> Self {
@@ -234,13 +337,27 @@ impl TermBehavior for Variable {
         set
     }
 
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
+    where T: GenericMap<Term, Term>
+    {
+        // Skip the variable if it is an underscore but still return true for empty map.
+        if !self.is_dc_variable() {
+            binding.insert(self.clone().into(), term.clone());
+        }
+        true
+    } 
+
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
         let mut map = HashMap::new();
-        // Skip the variable if it is an underscore.
-        if !self.is_dc_variable() {
-            map.insert(self.clone().into(), term.clone());
-        }
+        // Don't need to check if binding exists because it's always true.
+        self.get_bindings_in_place(&mut map, term);
+        Some(map)
+    }
 
+    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
+        let mut map = OrdMap::new();
+        // Don't need to check if binding exists because it's always true.
+        self.get_bindings_in_place(&mut map, term);
         Some(map)
     }
 
@@ -248,7 +365,7 @@ impl TermBehavior for Variable {
         false
     }
 
-    fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term {
+    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
         let root = self.root_var();
         let vterm: Term = self.clone().into();
         if map.contains_key(&vterm) {
@@ -263,7 +380,6 @@ impl TermBehavior for Variable {
         }
     }
 
-    // Don't care variable "_"
     fn is_dc_variable(&self) -> bool {
         if self.var == "_" { true }
         else { false }
@@ -285,7 +401,7 @@ impl TermBehavior for Variable {
 
 
 #[enum_dispatch]
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Atom {
     Int(BigInt),
     Str(String),
@@ -293,7 +409,7 @@ pub enum Atom {
     Float(BigRational),
 }
 
-impl Abomonation for Atom {}
+//impl Abomonation for Atom {}
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -313,7 +429,17 @@ impl TermBehavior for Atom {
         HashSet::new()
     }
 
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool
+    where T: GenericMap<Term, Term>
+    {
+        false
+    }
+
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
+        None
+    }
+
+    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
         None
     }
 
@@ -321,7 +447,7 @@ impl TermBehavior for Atom {
         true
     }
 
-    fn propagate_bindings(&self, map: &HashMap<Term, Term>) -> Term {
+    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
         self.clone().into()
     }
 
@@ -341,14 +467,15 @@ impl TermBehavior for Atom {
 }
 
 #[enum_dispatch]
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Term {
     Composite,
     Variable,
     Atom
 }
 
-impl Abomonation for Term {}
+
+//impl Abomonation for Term {}
 
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

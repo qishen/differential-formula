@@ -9,10 +9,13 @@ edition = "2018"
 [dependencies]
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
-timely = "0.10"
+# Enable `bincode` feature to use serde instead of Abomonation for serialization.
+timely = { version = "0.11", features = ["bincode"] } 
 timely_sort = "0.1.6"
-differential-dataflow = "0.10"
+differential-dataflow = "0.11"
 rand = "0.4"
 enum_dispatch = "0.2.0"
 nom = "5"
-num = "0.2"
+num = { version = "0.2", features = ["serde"] }
+im = { version = "14", features = ["serde"] }
+serde = { version = "1", features = ["derive", "rc", "std"] }

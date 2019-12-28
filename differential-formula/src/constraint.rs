@@ -21,6 +21,7 @@ use enum_dispatch::enum_dispatch;
 use crate::term::*;
 use crate::rule::*;
 use crate::expression::*;
+use crate::type_system::*;
 
 
 #[derive(Clone, Debug)]
@@ -109,7 +110,7 @@ impl Binary {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
-    pub fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<bool> {
+    pub fn evaluate<T>(&self, binding: &T) -> Option<bool> where T: GenericMap<Term, Term> {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 
             return None; 
@@ -131,11 +132,27 @@ impl Binary {
     }
 }
 
+
+
+#[derive(Clone, Debug)]
+pub struct TypeConstraint {
+    pub var: Term,
+    pub sort: Arc<Type>,
+}
+
+impl Display for TypeConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} : {}", self.var, self.sort.name())
+    }
+}
+
+
 #[enum_dispatch]
 #[derive(Clone, Debug)]
 pub enum Constraint {
     Predicate,
     Binary,
+    TypeConstraint,
 }
 
 impl Display for Constraint {
@@ -143,6 +160,7 @@ impl Display for Constraint {
         let con_str = match self {
             Constraint::Predicate(p) => { format!("{}", p) },
             Constraint::Binary(b) => { format!("{}", b) },
+            Constraint::TypeConstraint(t) => { format!("{}", t) },
         };
 
         write!(f, "{}", con_str) 

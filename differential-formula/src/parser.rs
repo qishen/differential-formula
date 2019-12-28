@@ -623,6 +623,25 @@ trait ConstraintAstBehavior {
 enum ConstraintAst {
     PredicateAst,
     BinaryAst,
+    TypeConstraintAst,
+}
+
+#[derive(Clone, Debug)]
+struct TypeConstraintAst {
+    var: TermAst,
+    sort: TypeDefAst,
+}
+
+impl ConstraintAstBehavior for TypeConstraintAst {
+    fn to_constraint(&self, domain: &Domain) -> Constraint {
+        let typename = self.sort.name().unwrap();
+        let sort = domain.type_map.get(&typename).unwrap().clone();
+
+        TypeConstraint {
+            var: self.var.to_term(domain),
+            sort,
+        }.into()
+    }
 }
 
 
@@ -847,9 +866,26 @@ can be matched as a float number, so any composite term with type name starting 
 named!(constraint<&str, ConstraintAst>,
     alt!(
         map!(predicate, |x| { x.into() }) |
-        map!(binary, |x| { x.into() }) 
+        map!(binary, |x| { x.into() }) |
+        map!(type_constraint, |x| { x.into() })
     )
 );
+
+named!(type_constraint<&str, TypeConstraintAst>,
+    do_parse!(
+        var: variable_ast >>
+        op: delimited!(space0, alt!(tag!("is") | tag!(":")), space0) >>
+        sort: typename >>
+        (parse_type_constraint(var, sort))
+    )
+);
+
+fn parse_type_constraint(var: TermAst, sort: TypeDefAst) -> TypeConstraintAst{
+    TypeConstraintAst {
+        var,
+        sort
+    }
+}
 
 named!(binary<&str, BinaryAst>,
     do_parse!(

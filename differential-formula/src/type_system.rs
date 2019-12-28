@@ -8,13 +8,14 @@ use std::string::String;
 
 use enum_dispatch::enum_dispatch;
 use abomonation::Abomonation;
+use serde::{Serialize, Deserialize};
 
 use crate::term::*;
 use crate::rule::*;
 
 
 #[enum_dispatch]
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum Type {
     BaseType,
     CompositeType,
@@ -29,7 +30,7 @@ pub trait TypeBehavior {
     fn name(&self) -> String;
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Undefined {}
 
 impl TypeBehavior for Undefined {
@@ -38,7 +39,7 @@ impl TypeBehavior for Undefined {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RangeType {
     pub low: Term,
     pub high: Term,
@@ -51,7 +52,7 @@ impl TypeBehavior for RangeType {
 }
 
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum BaseType {
     Boolean,
     String,
@@ -68,7 +69,7 @@ impl TypeBehavior for BaseType {
 }
 
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
     pub name: String,
     pub arguments: Vec<(Option<String>, Type)>
@@ -81,7 +82,7 @@ impl TypeBehavior for CompositeType {
 }
 
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
     pub name: String,
     pub subtypes: Vec<Type>,

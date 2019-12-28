@@ -15,6 +15,7 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
+use im::*;
 use enum_dispatch::enum_dispatch;
 use num::*;
 
@@ -174,7 +175,7 @@ impl ExprBehavior for BaseExpr {
         setcompres
     }
 
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt> {
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term> {
         match self {
             BaseExpr::Term(term) => {
                 match term {
@@ -264,7 +265,7 @@ impl ExprBehavior for ArithExpr {
         list
     }
 
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt> {
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term> {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
         let result = match self.op {
@@ -284,7 +285,7 @@ pub trait ExprBehavior {
     fn variables(&self) -> HashSet<Term>;
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
-    fn evaluate(&self, binding: &HashMap<Term, Term>) -> Option<BigInt>; 
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term>; 
 }
 
 #[enum_dispatch]

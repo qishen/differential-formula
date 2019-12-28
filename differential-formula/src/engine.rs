@@ -1,7 +1,12 @@
 extern crate rand;
 extern crate timely;
 extern crate differential_dataflow;
+extern crate serde;
 
+use core::hash::Hash;
+use core::borrow::Borrow;
+
+use im::OrdMap;
 use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
 use std::any::Any;
@@ -16,6 +21,8 @@ use std::string::String;
 
 use enum_dispatch::enum_dispatch;
 use abomonation::Abomonation;
+use serde::*;
+use num::*;
 
 use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
@@ -37,17 +44,7 @@ use crate::rule::*;
 use crate::type_system::*;
 use crate::parser::parse_str;
 
-use num::*;
 
-
-// Have to use this workaround to implement Abomonation trait because Rust forbids
-// you to implement trait for a foreign type that is not from local crate.
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct WrappedBigInt {
-    content: BigInt,
-}
-
-impl Abomonation for WrappedBigInt {}
 
 pub struct Session {
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
@@ -173,27 +170,6 @@ impl DDEngine {
         Session::new(input, probe, domain, worker)
     }
 
-    /*pub fn create_test_dataflow(&mut self) -> InputSession<i32, (Term, Term), isize> {
-        let mut input = InputSession::<i32, (Term, Term), isize>::new();
-        self.worker.dataflow(|scope| {
-            let models = input.to_collection(scope);
-            let models_reverse = models.map(|(x, y)| {
-                println!("The reverse tuple is ({:?}, {:?})", y, x);
-                (y, x)
-            });
-
-            models
-                .join(&models_reverse)
-                //.consolidate()
-                .map(|(a, (b, c))| {
-                    println!("Result is {:?}", vec![a, b, c]);
-                });
-        });
-
-        input
-    }*/
-
-
     pub fn dataflow_filtered_by_type<G>(
         terms: &Collection<G, Term>,
         pred_term: Term,
@@ -219,7 +195,7 @@ impl DDEngine {
     pub fn dataflow_filtered_by_positive_predicate_constraint<G>(
         terms: &Collection<G, Term>, 
         pos_pred_constraint: Constraint,
-    ) -> Collection<G, HashMap<Term, Term>> 
+    ) -> Collection<G, OrdMap<Term, Term>> 
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
@@ -233,7 +209,7 @@ impl DDEngine {
             .map(move |term| {
                 // Get a hash map mapping variable to term based on matching term. 
                 // TODO: Handle situations when no binding is found and return None.
-                let mut binding = pred_term.get_bindings(&term).unwrap();
+                let mut binding = pred_term.get_ordered_bindings(&term).unwrap();
 
                 // Predicate may have alias, if so add itself to existing binding.
                 // TODO: what if alias variable is already in existing variables.
@@ -247,27 +223,27 @@ impl DDEngine {
     }
 
     pub fn dataflow_from_term_bindings_split<G>(
-        bindings: &Collection<G, HashMap<Term, Term>>, 
+        bindings: &Collection<G, OrdMap<Term, Term>>, 
         keys1: Vec<Term>,
         keys2: Vec<Term>,
-    ) -> Collection<G, (Vec<Term>, Vec<Term>)>
+    ) -> Collection<G, (OrdMap<Term, Term>, OrdMap<Term, Term>)>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let collection_of_two_vectors = bindings.map(move |mut bindings| {
-            let mut first = vec![];
-            let mut second = vec![];
+        let collection_of_two_vectors = bindings.map(move |mut binding| {
+            let mut first = OrdMap::new();
+            let mut second = OrdMap::new();
 
             for var in keys1.iter() {
-                if let Some((k, v)) = bindings.remove_entry(var) {
-                    first.push(v);
+                if let Some((k, v)) = binding.remove_with_key(var) {
+                    first.insert(k, v);
                 }
             }
 
             for var in keys2.iter() {
-                if let Some((k, v)) = bindings.remove_entry(var) {
-                    second.push(v);
+                if let Some((k, v)) = binding.remove_with_key(var) {
+                    second.insert(k, v);
                 }
             }
 
@@ -280,10 +256,10 @@ impl DDEngine {
     // Return a filtered binding collection by considering negative predicate.
     pub fn dataflow_filtered_by_negative_predicate_constraint<G>(
         models: &Collection<G, Term>, 
-        prev_collection: &Collection<G, HashMap<Term, Term>>,
+        prev_collection: &Collection<G, OrdMap<Term, Term>>,
         prev_vars: Vec<Term>,
         neg_pred_constraint: Constraint,
-    ) -> Collection<G, HashMap<Term, Term>>
+    ) -> Collection<G, OrdMap<Term, Term>>
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -369,8 +345,8 @@ impl DDEngine {
             .join(&vector_from_neg_bindings.map(|x| (x, true)))
             .map(move |(key, (other, _))| {
                 // Combine two vectors back into a single binding after join operation.
-                let mut binding = HashMap::new();
-                let map_from_two_lists = |map: &mut HashMap<Term, Term>, key: Vec<Term>, value: Vec<Term>| {
+                let mut binding = OrdMap::new();
+                let map_from_two_lists = |map: &mut OrdMap<Term, Term>, key: Vec<Term>, value: Vec<Term>| {
                     let mut value_iter = value.into_iter();
                     for var in key.into_iter() {
                         map.insert(var, value_iter.next().unwrap());
@@ -386,7 +362,7 @@ impl DDEngine {
 
 
     pub fn dataflow_from_constraints<G>(models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
-        -> Collection<G, HashMap<Term, Term>>
+        -> (Vec<Term>, Collection<G, OrdMap<Term, Term>>)
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -467,22 +443,13 @@ impl DDEngine {
             prev_collection = split_prev_collection
                 .join(&split_collection)
                 .map(move |(inter, (left, right))| {
-                    let mut bindings = HashMap::new();
-                    let map_from_two_lists = |map: &mut HashMap<Term, Term>, key: Vec<Term>, value: Vec<Term>| {
-                        let mut value_iter = value.into_iter();
-                        for var in key.into_iter() {
-                            map.insert(var, value_iter.next().unwrap());
-                        }
-                    };
-
-                    map_from_two_lists(&mut bindings, left_diff_vars_copy.clone(), left);
-                    map_from_two_lists(&mut bindings, right_diff_vars_copy.clone(), right);
-                    map_from_two_lists(&mut bindings, intersection_vars_copy.clone(), inter);
-
-                    bindings
+                    let mut binding = OrdMap::new();
+                    binding.extend(left);
+                    binding.extend(right);
+                    binding.extend(inter);
+                    binding
                 });
                 //.inspect(|x| { print!("Join result is {:?}\n", x); });
-
 
             // Filter out binding with conflict on variables with fragments like x.y.z
             prev_collection = prev_collection.filter(|mut binding| {
@@ -521,8 +488,9 @@ impl DDEngine {
 
         for bin_constraint in rule.binary_constraints_with_derived_term().into_iter() {
             let binary: Binary = bin_constraint.try_into().unwrap();
-            // Let's assume every set comprehension must be explicitly declared as a variable on the left side.
-            // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where.
+            // Let's assume every set comprehension must be explicitly declared with a variable on the left side of binary constraint.
+            // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.
+
             // Every derived variable must be declared once before used in other constraints 
             // e.g. y = (x + x) * x.
             let left_base_expr: BaseExpr = binary.left.try_into().unwrap();
@@ -532,41 +500,12 @@ impl DDEngine {
                 Expr::BaseExpr(right_base_expr) => {
                     match right_base_expr {
                         BaseExpr::SetComprehension(setcompre) => {
-                            let aggregation_stream = DDEngine::dataflow_from_set_comprehension(models, &setcompre);
-                            let mut prev_vars_copy = prev_vars.clone();
-
-                            // Map hash map to vector because cannot do join on hash map.
-                            let prev_with_padding = prev_collection.map(move |mut x| {
-                                let mut list = vec![];
-                                for var in prev_vars_copy.clone().into_iter() {
-                                    if x.contains_key(&var) {
-                                        let value = x.remove(&var).unwrap();
-                                        list.push(value);
-                                    }
-                                }
-
-                                (true, list)
-                            });
-
-                            prev_vars_copy = prev_vars.clone();
-                            let aggregation_with_padding = aggregation_stream.map(|x| (true, x));
-                            // Extend existing binding with aggregation result.
-                            prev_collection = prev_with_padding
-                                .join(&aggregation_with_padding)
-                                .map(move |(_, (values, num))| {
-                                    let mut binding = HashMap::new();
-                                    let map_from_two_lists = |map: &mut HashMap<Term, Term>, key: Vec<Term>, value: Vec<Term>| {
-                                        let mut value_iter = value.into_iter();
-                                        for var in key.into_iter() {
-                                            map.insert(var, value_iter.next().unwrap());
-                                        }
-                                    };
-
-                                    map_from_two_lists(&mut binding, prev_vars_copy.clone(), values);
-                                    let atom_term: Term = Atom::Int(num.content).into();
-                                    binding.insert(var_term.clone(), atom_term);
-                                    binding
-                                });
+                            prev_collection = DDEngine::dataflow_from_set_comprehension(
+                                var_term,
+                                &prev_collection, 
+                                models, 
+                                &setcompre
+                            );
                         },
                         _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
                     }
@@ -583,6 +522,7 @@ impl DDEngine {
             }
         }
 
+        // Since there are no derived terms then directly evaluate the expression to filter binding collection.
         for bin_constraint in rule.binary_constraints_without_derived_term().into_iter() {
             let binary: Binary = bin_constraint.try_into().unwrap();
             prev_collection = prev_collection.filter(move |binding| {
@@ -590,82 +530,99 @@ impl DDEngine {
             });
         }
 
-        prev_collection
+        (prev_vars.clone(), prev_collection)
             //.inspect(|x| {
             //    println!("binding is {:?}", x);  
             //})
     }
 
+    
+    pub fn dataflow_convert_map_to_vec<G>(
+        vars: Vec<Term>,
+        collection: &Collection<G, HashMap<Term, Term>>
+    ) -> Collection<G, Vec<Term>> 
+    where
+        G: Scope,
+        G::Timestamp: differential_dataflow::lattice::Lattice,
+    {
+        // Map hash map to vector because cannot do join on hash map.
+        collection.map(move |mut x| {
+            let mut list = vec![];
+            for var in vars.clone().into_iter() {
+                if x.contains_key(&var) {
+                    let value = x.remove(&var).unwrap();
+                    list.push(value);
+                }
+            }
+
+            list
+        })
+    }
+
 
     pub fn dataflow_from_set_comprehension<G>(
+        var: Term,
+        outer_collection: &Collection<G, OrdMap<Term, Term>>,
         models: &Collection<G, Term>, 
         setcompre: &SetComprehension,
-    ) -> Collection<G, WrappedBigInt>
+    ) -> Collection<G, OrdMap<Term, Term>>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
+        // Each binding from the input will enter into a separate scope when evaluating set comprehension.
+        // e.g. B(A(a, b), k) :- A(a, b), k = count({x | x is A(a, b)}). k is always evaluated to 1 no matter 
+        // how many terms of type A the current program has.
         let head_terms = setcompre.vars.clone();
+        let setcompre_op = setcompre.op.clone();
         let constraints = &setcompre.condition;
-        let binding_collection = DDEngine::dataflow_from_constraints(models, constraints);
-        
-        let mut head_terms_iterator = head_terms.into_iter();
-        let mut headterm = head_terms_iterator.next().unwrap();
-        // Gather all terms matched by the patterns in the head of set comprehension.
-        let mut set_stream = binding_collection
-            .map(move |binding| {
-                headterm.propagate_bindings(&binding)
-            });
+        let (vars, mut collection) = DDEngine::dataflow_from_constraints(models, constraints);
 
-        if let Some(headterm) = head_terms_iterator.next() {
-            let headterm_stream = binding_collection
-                .map(move |binding| {
-                    headterm.propagate_bindings(&binding)
-                });
-            
-            set_stream = set_stream.concat(&headterm_stream);
-        }
+        let ordered_outer_collection = outer_collection.map(|x| {
+            let ordered_map: OrdMap<Term, Term> = OrdMap::from_iter(x.into_iter());
+            (true, ordered_map)
+        });
 
-        let aggregation_stream = match setcompre.op {
+        let ordered_collection = collection.map(|x| {
+            let ordered_map: OrdMap<Term, Term> = OrdMap::from_iter(x.into_iter());
+            (true, ordered_map)
+        });
 
-            SetCompreOp::Count => {
-                let count_stream = set_stream
-                    .map(|x| (true, x))
-                    .reduce(|_key, input, output| {
-                        // Return the number of terms in the set.
-                        let big_count = BigInt::from_i64(input.len() as i64).unwrap();
-                        output.push((big_count, 1));
-                    })
-                    .map(|x| WrappedBigInt { content: x.1 });
-                
-                count_stream
-            },
+        let aggregation_stream = ordered_outer_collection.join(&ordered_collection)
+            .map(move |(_, (outer, inner))| { (outer, inner) })
+            .reduce(move |key, input, output| {
+                // Collect all derived terms in set comprehension.
+                let mut terms = vec![];
+                for (binding, count) in input.iter() {
+                    for head_term in head_terms.clone() {
+                        // TODO: Deep clone may slow down performance.
+                        let term = head_term.propagate_bindings(&binding.clone().clone());
+                        terms.push((term, count));
+                    }
+                }
 
-            SetCompreOp::Sum => {
-                let sum_stream = set_stream
-                    .map(|x| (true, x))
-                    .reduce(|_key, input, output| {
+                match setcompre_op {
+                    SetCompreOp::Count => {
+                        let mut num = BigInt::from_i64(0 as i64).unwrap();
+                        for (term, count) in terms {
+                            num += count.clone() as i64;
+                        }                        
+                        output.push((num, 1));
+                    },
+                    SetCompreOp::Sum => {
                         let mut sum = BigInt::from_i64(0).unwrap();
-                        for (term, count) in input.iter() {
+                        for (term, count) in terms {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
-                                Atom::Int(i) => { sum += i; },
+                                Atom::Int(i) => { sum += i * count; },
                                 _ => {},
                             };
                         }
                         output.push((sum, 1));
-                    })
-                    .map(|x| WrappedBigInt { content: x.1 });
-                
-                sum_stream
-            },
-
-            SetCompreOp::MaxAll => {
-                let max_stream = set_stream
-                    .map(|x| (true, x))
-                    .reduce(|_key, input, output| {
+                    },
+                    SetCompreOp::MaxAll => {
                         let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
-                        for (term, count) in input.iter() {
+                        for (term, count) in terms {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
                                 Atom::Int(i) => { if i > max { max = i; } },
@@ -673,18 +630,10 @@ impl DDEngine {
                             };
                         }
                         output.push((max, 1));
-                    })
-                    .map(|x| WrappedBigInt { content: x.1 });
-
-                max_stream
-            },
-
-            SetCompreOp::MinAll => {
-                let min_stream = set_stream
-                    .map(|x| (true, x))
-                    .reduce(|_key, input, output| {
+                    },
+                    _ => {
                         let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
-                        for (term, count) in input.iter() {
+                        for (term, count) in terms {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
                             match atom {
                                 Atom::Int(i) => { if i < min { min = i; } },
@@ -692,15 +641,17 @@ impl DDEngine {
                             };
                         }
                         output.push((min, 1));
-                    })
-                    .map(|x| WrappedBigInt { content: x.1 });
-                
-                min_stream
-            },
-        };
+                    },
+                };
+
+            }).map(move |(mut binding, num)| {
+                let num_term: Term = Atom::Int(num).into();
+                binding.insert(var.clone(), num_term);
+                binding
+            });
 
         aggregation_stream
-            .inspect(|x| { println!("Aggregation result is {:?}", x); })
+            .inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
     }
 
     pub fn dataflow_from_single_rule<G>(models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>
@@ -718,7 +669,7 @@ impl DDEngine {
             
             // Filter models by constraints and return a collection of variable binding.
             let constraints = &rule.body;
-            let binding_collection = DDEngine::dataflow_from_constraints(transitive_models, constraints);
+            let (vars, binding_collection) = DDEngine::dataflow_from_constraints(transitive_models, constraints);
 
             // Now we have a collection of bindings for all variables in the rule body, then we use each 
             // binding in the collection to derive new terms from head by propagating bindings. 

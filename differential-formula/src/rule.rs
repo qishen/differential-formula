@@ -58,6 +58,9 @@ impl Rule {
                 Constraint::Binary(binary) => {
                     var_set.extend(binary.left.variables());
                     var_set.extend(binary.right.variables());
+                },
+                Constraint::TypeConstraint(type_constraint) => {
+                    var_set.insert(type_constraint.var.clone());
                 }
             }
         }
@@ -97,6 +100,9 @@ impl Rule {
                         let vars = setcompre.matched_variables();
                         var_set.extend(vars);
                     }
+                },
+                Constraint::TypeConstraint(type_constraint) => {
+                    // The single variable here must be already matched else where.
                 }
             }
         }
@@ -177,7 +183,7 @@ impl Rule {
                 Constraint::Binary(b) => {
                     !self.is_constraint_with_derived_term(x.clone())
                 },
-                Constraint::Predicate(p) => { false }
+                _ => { false }
             }
         }).map(|x| x.clone()).collect();
 
