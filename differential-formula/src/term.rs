@@ -252,6 +252,25 @@ impl Variable {
             fragments,
         }
     }
+
+    pub fn fragments_diff(a: &Term, b: &Term) -> Option<Vec<String>> {
+        let av: Variable = a.clone().try_into().unwrap();
+        let bv: Variable = b.clone().try_into().unwrap();
+        // Root vars have to be equal and b has longer fragments than a or same length.
+        if av.var != bv.var || av.fragments.len() > bv.fragments.len() {
+            None
+        }
+        else {
+            let mut remains = bv.fragments;
+            for aval in av.fragments {
+                let bval = remains.remove(0);
+                if aval != bval {
+                    return None;
+                }
+            }
+            Some(remains)
+        }
+    }
 }
 
 

@@ -571,8 +571,33 @@ impl DDEngine {
             (true, ordered_map)
         });
 
+        // Make a production of inner binding and outer binding.
         let aggregation_stream = ordered_outer_collection.join(&ordered_collection)
             .map(move |(_, (outer, inner))| { (outer, inner) })
+            .filter(|(outer, inner)| {
+                for inner_key in inner.keys() {
+                    let var: Variable = inner_key.clone().try_into().unwrap();
+                    let key_root = inner_key.root_var();
+                    let inner_val = inner.get(inner_key).unwrap();
+                    if outer.contains_key(inner_key) {
+                        let outer_val = outer.get(inner_key).unwrap();
+                        if inner_val != outer_val {
+                            return false;
+                        }
+                    }
+                    // outer variable: x (won't be x.y...), inner variable: x.y.z...
+                    else if outer.contains_key(&key_root) {
+                        let labels = Variable::fragments_diff(&key_root, inner_key).unwrap();
+                        let outer_val = outer.get(&key_root).unwrap();
+                        let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
+                        if inner_val != &outer_sub_val {
+                            return false;
+                        }
+                    }
+                }
+
+                true
+            })
             .reduce(move |key, input, output| {
                 // Collect all derived terms in set comprehension.
                 let mut terms = vec![];
