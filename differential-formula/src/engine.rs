@@ -214,7 +214,7 @@ impl DDEngine {
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let collection_of_two_vectors = bindings.map(move |mut binding| {
+        let map_tuple_collection = bindings.map(move |mut binding| {
             let mut first = OrdMap::new();
             let mut second = OrdMap::new();
 
@@ -233,7 +233,7 @@ impl DDEngine {
             (first, second)
         });
 
-        collection_of_two_vectors
+        map_tuple_collection
     }
 
     // Return a filtered binding collection by considering negative predicate.
@@ -252,95 +252,36 @@ impl DDEngine {
         let neg_term_composite: Composite = neg_pred.term.clone().try_into().unwrap();
         let mut neg_term_vars = neg_pred.term.variables();
 
-        // Temporarily derive all terms for negative predicate.
-        let neg_term_collection = prev_collection.map(move |binding| {
-            neg_pred_term.propagate_bindings(&binding)
+        // Derive terms for negative predicate with previous binding collection.
+        let derived_neg_models_with_binding = prev_collection.map(move |binding| {
+            (neg_pred_term.propagate_bindings(&binding), binding)
         });
 
-        // We only care about models of the type of negative predicate.
+        // Get models matching the type of negative predicate and its variable relationship.
         neg_pred_term = neg_pred.term.clone();
-        let filtered_old_models = DDEngine::dataflow_filtered_by_type(models, neg_pred_term); 
-
-        // Substract existing models from the derived terms 
-        // of negative predicate.
-        let derived_terms_with_old_models_substracted = neg_term_collection
-            .map(|x| (x, true))
-            .antijoin(&filtered_old_models)
-            .map(|(x,_)| x);
-        
-        // Refill the moved variable to be used in closure again.
-        neg_pred_term = neg_pred.term.clone();
-        neg_term_vars = neg_term_vars.clone();
-        // Turn binding into vector in the order of term variables.
-        let vector_from_neg_bindings = derived_terms_with_old_models_substracted
-            .map(move |x| {
-                let mut binding = neg_pred_term.get_bindings(&x);
-                binding
-            })
-            .filter(|binding| {
-                // Filter out terms that cannot be binded to negative term.
-                binding != &None
-            })
-            .map(move |mut binding_or_none| {
-                let mut list = vec![];
-                let mut binding = binding_or_none.unwrap();
-                for var in neg_term_vars.iter() {
-                    let val = binding.remove(var).unwrap();
-                    list.push(val);
+        let mut existing_neg_models = DDEngine::dataflow_filtered_by_type(models, neg_pred_term.clone())
+            .filter(move |x| {
+                // Filter out models that can be match to negative predicate like no Path(a, a).
+                // e.g. models = [Path(1, 2), Path(1, 1)], then Path(1, 2) doesn't count here.
+                let result = x.get_bindings(&neg_pred_term);
+                match result {
+                    None => false,
+                    _ => true,
                 }
-                list
             });
-        
-        // split vars into two vectors, one with all vars in negative term, the other one with the rest.
-        let mut other_vars_set: HashSet<Term> = HashSet::from_iter(prev_vars.clone());
-        for var in neg_pred.term.variables().iter() {
-            other_vars_set.remove(var);
-        }
 
-        let other_vars = Vec::from_iter(other_vars_set);
-        let other_vars_copy = other_vars.clone();
-        
-        let neg_vars_set = neg_pred.term.variables();
-        let neg_vars = Vec::from_iter(neg_vars_set);
-        let neg_vars_copy = neg_vars.clone();
+        /* 
+        Substract neg-pred-matched existing models from the derived terms of negative predicate.
+        a = [(term, binding)] antijoin b = [term], for each x in b, for each y in b, y = (term, binding)
+        if y.0 = x then disgard current y in a.
+        */
+        let models_after_substraction = derived_neg_models_with_binding
+            .antijoin(&existing_neg_models);
 
-        // Filter binding collection to exclude those bindings that derive some negative predicate terms 
-        // that already exist in previous model term collection.
-        let filtered_bindings = prev_collection
-            .map(move |mut binding| {
-                let mut key = vec![];
-                let mut other = vec![];
-
-                for var in neg_vars.iter() {
-                    let val = binding.remove(var).unwrap();
-                    key.push(val);
-                }
-
-                for var in other_vars.iter() {
-                    let val = binding.remove(var).unwrap();
-                    other.push(val);
-                }
-                
-                // `key` contains terms mapped from all variables in negative term, 
-                // `other` contains terms mapped from the rest variables excluding those in negative term.
-                (key, other)
-            })
-            .join(&vector_from_neg_bindings.map(|x| (x, true)))
-            .map(move |(key, (other, _))| {
-                // Combine two vectors back into a single binding after join operation.
-                let mut binding = OrdMap::new();
-                let map_from_two_lists = |map: &mut OrdMap<Term, Term>, key: Vec<Term>, value: Vec<Term>| {
-                    let mut value_iter = value.into_iter();
-                    for var in key.into_iter() {
-                        map.insert(var, value_iter.next().unwrap());
-                    }
-                };
-                map_from_two_lists(&mut binding, neg_vars_copy.clone(), key);
-                map_from_two_lists(&mut binding, other_vars_copy.clone(), other);
+        models_after_substraction           
+            .map(|(term, binding)| {
                 binding
-            });
-        
-        filtered_bindings
+            })        
     }
 
 
@@ -520,29 +461,6 @@ impl DDEngine {
     }
 
     
-    pub fn dataflow_convert_map_to_vec<G>(
-        vars: Vec<Term>,
-        collection: &Collection<G, HashMap<Term, Term>>
-    ) -> Collection<G, Vec<Term>> 
-    where
-        G: Scope,
-        G::Timestamp: differential_dataflow::lattice::Lattice,
-    {
-        // Map hash map to vector because cannot do join on hash map.
-        collection.map(move |mut x| {
-            let mut list = vec![];
-            for var in vars.clone().into_iter() {
-                if x.contains_key(&var) {
-                    let value = x.remove(&var).unwrap();
-                    list.push(value);
-                }
-            }
-
-            list
-        })
-    }
-
-
     pub fn dataflow_from_set_comprehension<G>(
         var: Term,
         outer_collection: &Collection<G, OrdMap<Term, Term>>,
@@ -572,9 +490,10 @@ impl DDEngine {
         });
 
         // Make a production of inner binding and outer binding.
-        let aggregation_stream = ordered_outer_collection.join(&ordered_collection)
+        let binding_with_aggregation_stream = ordered_outer_collection.join(&ordered_collection)
             .map(move |(_, (outer, inner))| { (outer, inner) })
             .filter(|(outer, inner)| {
+                // Filter out conflict binding tuple of outer and inner scope.
                 for inner_key in inner.keys() {
                     let var: Variable = inner_key.clone().try_into().unwrap();
                     let key_root = inner_key.root_var();
@@ -658,7 +577,7 @@ impl DDEngine {
                 binding
             });
 
-        aggregation_stream
+        binding_with_aggregation_stream
             .inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
     }
 
@@ -687,9 +606,8 @@ impl DDEngine {
                     .map(move |binding| {
                         term.propagate_bindings(&binding)
                     })
-                    .inspect(|x| {
-                        println!("Updates on new derived terms are {:?}.", x);
-                    });
+                    //.inspect(|x| { println!("Updates on new derived terms are {:?}.", x); })
+                    ;
 
                 combined_models = combined_models.concat(&headterm_stream);
             }
