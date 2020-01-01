@@ -589,12 +589,18 @@ impl BaseExprAstBehavior for SetComprehensionAst {
             condition.push(constraint_ast.to_constraint(domain));
         }
         
-        SetComprehension {
+        // Count and Sum operator does not have explicit default value but let's set it to 0.
+        let default = match self.default.clone() {
+            None => { BigInt::from_i64(0 as i64).unwrap() },
+            Some(val) => { val },
+        };
+
+        SetComprehension::new( 
             vars,
             condition,
-            op: self.op.clone(),
-            default: self.default.clone(),
-        }.into()
+            self.op.clone(),
+            default,
+        ).into()
     }
 }
 
@@ -956,10 +962,7 @@ impl RuleAst {
             body.push(constraint_ast.to_constraint(domain));
         }
 
-        Rule {
-            head,
-            body,
-        }
+        Rule::new(head, body)
     }
 }
 

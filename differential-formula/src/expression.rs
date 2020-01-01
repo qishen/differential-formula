@@ -20,26 +20,24 @@ use crate::rule::*;
 use crate::constraint::*;
 use crate::util::GenericMap;
 
-#[derive(Clone, Debug)]
+#[readonly::make]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SetComprehension {
     pub vars: Vec<Term>,
     pub condition: Vec<Constraint>,
     pub op: SetCompreOp,
-    pub default: Option<BigInt>,
+    pub default: BigInt,
 }
 
 // Turn SetComprehension into a headless rule.
 impl From<SetComprehension> for Rule {
     fn from(setcompre: SetComprehension) -> Self {
-        Rule {
-            head: vec![],
-            body: setcompre.condition.clone(),
-        }
+        Rule::new(vec![], setcompre.condition.clone())
     }
 }
 
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SetCompreOp {
     Sum,
     Count,
@@ -80,6 +78,14 @@ impl Display for SetComprehension {
 }
 
 impl SetComprehension {
+    pub fn new(vars: Vec<Term>, condition: Vec<Constraint>, op: SetCompreOp, default: BigInt) -> Self {
+        SetComprehension {
+            vars,
+            condition,
+            op,
+            default,
+        }
+    }
     pub fn variables(&self) -> HashSet<Term> {
         let rule: Rule = self.clone().into();
         rule.variables()
@@ -92,7 +98,7 @@ impl SetComprehension {
 }
 
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArithmeticOp {
     Add,
     Min,
@@ -119,7 +125,7 @@ impl BaseExprBehavior for SetComprehension {}
 impl BaseExprBehavior for Term {}
 
 #[enum_dispatch]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BaseExpr {
     SetComprehension,
     Term,
@@ -226,7 +232,7 @@ impl Display for BaseExpr {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArithExpr {
     pub op: ArithmeticOp,
     pub left: Arc<Expr>,
@@ -286,7 +292,7 @@ pub trait ExprBehavior {
 }
 
 #[enum_dispatch]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expr {
     BaseExpr,
     ArithExpr,

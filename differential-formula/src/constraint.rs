@@ -11,14 +11,15 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 use enum_dispatch::enum_dispatch;
+use num::*;
 
-use crate::term::{Term, TermBehavior};
+use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
 use crate::util::GenericMap;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Predicate {
     pub negated: bool,
     pub term: Term,
@@ -58,10 +59,55 @@ impl Predicate {
 
         var_set
     }
+
+    // Negative predicate constraint is count({setcompre}) = 0 in disguise.
+    pub fn to_binary_constraints(&self, var: Term) -> Option<(Constraint, Constraint)> {
+        // Positive predicate is not allowed to be converted into Binary constraint.
+        if !self.negated {
+            return None;
+        }
+
+        // Give it an alias starting with "~" that cannot be accepted by parser to make sure it
+        // will never coincide with variables in current rule defined by user.
+        let alias: Term = Variable::new("~dc".to_string(), vec![]).into();
+        let vars = vec![alias.clone()];
+        let pos_predicate = Predicate {
+            negated: false,
+            term: self.term.clone(),
+            alias: Some(alias),
+        };
+
+        let setcompre = SetComprehension::new(
+            vars, 
+            vec![pos_predicate.into()],
+            SetCompreOp::Count,
+            BigInt::from_i64(0 as i64).unwrap(),
+        );
+
+        let var_base_expr: BaseExpr = var.into();
+        let setcompre_base_expr: BaseExpr = setcompre.into();
+        
+        let binary = Binary {
+            op: BinOp::Eq,
+            left: var_base_expr.clone().into(),
+            right: setcompre_base_expr.into(),
+        };
+
+        let big_zero = BigInt::from_i64(0 as i64).unwrap();
+        let zero_term: Term = Atom::Int(big_zero).into();
+        let zero_base_expr: BaseExpr = zero_term.into();
+        let binary2 = Binary {
+            op: BinOp::Eq,
+            left: var_base_expr.into(),
+            right: zero_base_expr.into(),
+        };
+
+        Some((binary.into(), binary2.into()))
+    }
 }
 
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Eq, Hash)]
 pub enum BinOp {
     Eq,
     Ne,
@@ -86,7 +132,7 @@ impl Display for BinOp {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Binary {
     pub op: BinOp,
     pub left: Expr,
@@ -128,7 +174,7 @@ impl Binary {
 
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TypeConstraint {
     pub var: Term,
     pub sort: Arc<Type>,
@@ -142,7 +188,7 @@ impl Display for TypeConstraint {
 
 
 #[enum_dispatch]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Constraint {
     Predicate,
     Binary,

@@ -4,6 +4,7 @@ use differential_formula::constraint::*;
 use differential_formula::expression::*;
 use differential_formula::term::*;
 use differential_formula::engine::*;
+use differential_formula::type_system::*;
 use differential_formula::rule::*;
 
 use differential_formula::composite;
@@ -16,6 +17,24 @@ use std::sync::Arc;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+
+
+static model1: &str = "
+model m of Graph {
+    n0 is Node(0).
+    n1 is Node(1).
+    n2 is Node(2).
+    n3 is Node(3).
+    n4 is Node(4).
+
+    Edge(n0, n0).
+    Edge(n0, n1).
+    Edge(n1, n2).
+    //Edge(n2, n2).
+    Edge(n2, n3).
+    Edge(n3, n4).
+}";
+
 
 fn generate_graph_program(rules: &str, model: &str) -> String {
     let program = format!("
@@ -36,29 +55,74 @@ fn generate_graph_program(rules: &str, model: &str) -> String {
     program
 }
 
-#[test]
-fn test_ddengine() {
+fn create_session(rules: &str, model: &str) -> (Domain, Session) {
+    let program = generate_graph_program(rules, model);
+    println!("{}", program);
 
+    let mut engine = DDEngine::new();
+
+    // Parse string and install program in the engine.
+    let env = DDEngine::parse_string(program);
+    //  println!("{:?}", env);
+    engine.install(env);
+
+    let domain = engine.get_domain("Graph".to_string()).unwrap();
+    let model = engine.get_model("m".to_string()).unwrap();
+
+    let mut session = engine.create_session("Graph".to_string());
+    session.load_model(model);
+    (domain, session)
+}
+
+#[test]
+fn test_ddengine_1() {
     let rules1 = "
         Path(a, b) :- Edge(a, b).
-        Path(a, c) :- Path(a, b), Path(b, c).
+        //Path(a, c) :- Path(a, b), Path(b, c).
     ";
 
+    let (domain, session) = create_session(rules1, model1);
+}
+
+#[test]
+fn test_ddengine_2() {
     let rules2 = "
         Edge(a, c) :- Edge(a, b), Edge(b, c).
     ";
+    
+    let (domain, session) = create_session(rules2, model1);
+}
 
+#[test]
+fn test_ddengine_3() {
     let rules3 = "
         Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
     ";
 
+    let (domain, session) = create_session(rules3, model1);
+}
+
+#[test]
+fn test_ddengine_4() {
     let rules4 = "
-        Nocycle(u) :- Path(u, v), no Path(u, u).
+        Path(a, b) :- Edge(a, b).
+        Path(a, c) :- Path(a, b), Path(b, c).
+        Nocycle(u) :- u is Node(_), no Path(u, u).
     ";
 
+    let (domain, session) = create_session(rules4, model1);
+}
+
+#[test]
+fn test_ddengine_5() {
     let rules5 = "
         Line(a, b, c, d) :- Edge(a, b), Edge(c, d).
     ";
+
+    let (domain, session) = create_session(rules5, model1);
+}
+
+fn test_ddengine() {
 
     let rules6 = "
         TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
@@ -82,40 +146,11 @@ fn test_ddengine() {
         Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).
     ";
 
-    let model1 = "
-    model m of Graph {
-        n0 is Node(0).
-        n1 is Node(1).
-        n2 is Node(2).
-        n3 is Node(3).
-        n4 is Node(4).
-
-        Edge(n0, n0).
-        Edge(n0, n1).
-        Edge(n1, n2).
-        Edge(n2, n3).
-        Edge(n3, n4).
-    }";
-
-    let program1 = generate_graph_program(rules7, model1);
-    println!("{}", program1);
-
-    let mut engine = DDEngine::new();
-
-    // Parse string and install program in the engine.
-    let env = DDEngine::parse_string(program1);
-    println!("{:?}", env);
-    engine.install(env);
-
-    let domain = engine.get_domain("Graph".to_string()).unwrap();
-    let model = engine.get_model("m".to_string()).unwrap();
-
-    let mut session = engine.create_session("Graph".to_string());
-    session.load_model(model);
 }
 
+
 #[test]
-fn test_ddengine_2() {
+fn test_ddengine_on_social_network() {
     //let content = std::env::current_dir();
     let path = Path::new("./tests/samples/SocialNetwork.4ml");
     let content = fs::read_to_string(path).unwrap();
@@ -125,7 +160,7 @@ fn test_ddengine_2() {
 
     // Parse string and install program in the engine.
     let env = DDEngine::parse_string(content);
-    println!("{:?}", env);
+    // println!("{:?}", env);
     engine.install(env);
 
     let domain = engine.get_domain("SocialNetwork".to_string()).unwrap();

@@ -473,6 +473,35 @@ impl Term {
 
         (av, intersection, bv)
     }
+
+    // Check if two binding map has conflits in variable mappings.
+    pub fn has_conflit<T>(outer: &T, inner: &T) -> bool 
+    where T: GenericMap<Term, Term>
+    {
+        // Filter out conflict binding tuple of outer and inner scope.
+        for inner_key in inner.keys() {
+            let var: Variable = inner_key.clone().try_into().unwrap();
+            let key_root = inner_key.root_var();
+            let inner_val = inner.get(inner_key).unwrap();
+            if outer.contains_key(inner_key) {
+                let outer_val = outer.get(inner_key).unwrap();
+                if inner_val != outer_val {
+                    return true;
+                }
+            }
+            // outer variable: x (won't be x.y...), inner variable: x.y.z...
+            else if outer.contains_key(&key_root) {
+                let labels = Variable::fragments_diff(&key_root, inner_key).unwrap();
+                let outer_val = outer.get(&key_root).unwrap();
+                let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
+                if inner_val != &outer_sub_val {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }
 
 #[macro_export]

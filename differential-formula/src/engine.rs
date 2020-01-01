@@ -186,23 +186,31 @@ impl DDEngine {
         let predicate: Predicate = pos_pred_constraint.try_into().unwrap();
         let pred_alias = predicate.alias;
         let pred_term = predicate.term.clone();
-        let pred_term_copy = pred_term.clone();
 
-        DDEngine::dataflow_filtered_by_type(terms, pred_term_copy) 
+        let binding_collection = DDEngine::dataflow_filtered_by_type(terms, pred_term.clone()) 
             .map(move |term| {
-                // Get a hash map mapping variable to term based on matching term. 
-                // TODO: Handle situations when no binding is found and return None.
-                let mut binding = pred_term.get_ordered_bindings(&term).unwrap();
-
-                // Predicate may have alias, if so add itself to existing binding.
+                let binding_opt = pred_term.get_ordered_bindings(&term);
+                (term, binding_opt)
+            })
+            .filter(|(_, binding_opt)| {
+                match binding_opt {
+                    None => false,
+                    _ => true,
+                }
+            })
+            .map(move |(term, binding_opt)| {
+                // If predicate may have alias then add itself to existing binding.
                 // TODO: what if alias variable is already in existing variables.
+                let mut binding = binding_opt.unwrap();
                 if let Some(vterm) = &pred_alias {
                     binding.insert(vterm.clone(), term);
                 }
 
                 binding
-            })
+            });
             //.inspect(|x| { println!("Initial bindings for the first constraint is {:?}", x); });
+
+        binding_collection
     }
 
     pub fn dataflow_from_term_bindings_split<G>(
@@ -236,65 +244,15 @@ impl DDEngine {
         map_tuple_collection
     }
 
-    // Return a filtered binding collection by considering negative predicate.
-    pub fn dataflow_filtered_by_negative_predicate_constraint<G>(
-        models: &Collection<G, Term>, 
-        prev_collection: &Collection<G, OrdMap<Term, Term>>,
-        prev_vars: Vec<Term>,
-        neg_pred_constraint: Constraint,
-    ) -> Collection<G, OrdMap<Term, Term>>
-    where
-        G: Scope,
-        G::Timestamp: differential_dataflow::lattice::Lattice,
-    {
-        let neg_pred: Predicate = neg_pred_constraint.try_into().unwrap();
-        let mut neg_pred_term = neg_pred.term.clone();
-        let neg_term_composite: Composite = neg_pred.term.clone().try_into().unwrap();
-        let mut neg_term_vars = neg_pred.term.variables();
-
-        // Derive terms for negative predicate with previous binding collection.
-        let derived_neg_models_with_binding = prev_collection.map(move |binding| {
-            (neg_pred_term.propagate_bindings(&binding), binding)
-        });
-
-        // Get models matching the type of negative predicate and its variable relationship.
-        neg_pred_term = neg_pred.term.clone();
-        let mut existing_neg_models = DDEngine::dataflow_filtered_by_type(models, neg_pred_term.clone())
-            .filter(move |x| {
-                // Filter out models that can be match to negative predicate like no Path(a, a).
-                // e.g. models = [Path(1, 2), Path(1, 1)], then Path(1, 2) doesn't count here.
-                let result = x.get_bindings(&neg_pred_term);
-                match result {
-                    None => false,
-                    _ => true,
-                }
-            });
-
-        /* 
-        Substract neg-pred-matched existing models from the derived terms of negative predicate.
-        a = [(term, binding)] antijoin b = [term], for each x in b, for each y in b, y = (term, binding)
-        if y.0 = x then disgard current y in a.
-        */
-        let models_after_substraction = derived_neg_models_with_binding
-            .antijoin(&existing_neg_models);
-
-        models_after_substraction           
-            .map(|(term, binding)| {
-                binding
-            })        
-    }
-
-
     pub fn dataflow_from_constraints<G>(models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
-        -> (Vec<Term>, Collection<G, OrdMap<Term, Term>>)
+        -> Collection<G, OrdMap<Term, Term>>
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
         // Construct a headless rule from a list of constraints.
-        let rule = Rule { head: vec![], body: constraints.clone() };
-        let pos_preds = rule.pos_preds();
-        let neg_preds = rule.neg_preds();
+        let temp_rule = Rule::new(vec![], constraints.clone());
+        let pos_preds = temp_rule.pos_preds();
         let mut pos_preds_iterator = pos_preds.into_iter();
 
         // Rule execution needs at least one positive predicate to start with.
@@ -399,19 +357,8 @@ impl DDEngine {
             prev_vars.extend(right_diff_vars_copy);
         } 
 
-        // Filter binding collection by negative predicate constraints.
-        for neg_pred_constraint in neg_preds.into_iter() {
-            prev_collection = DDEngine::dataflow_filtered_by_negative_predicate_constraint(
-                &models, 
-                &prev_collection, 
-                prev_vars.clone(), 
-                neg_pred_constraint
-            );
-        } 
-
-
-        for bin_constraint in rule.binary_constraints_with_derived_term().into_iter() {
-            let binary: Binary = bin_constraint.try_into().unwrap();
+        for bin_constraint in temp_rule.definition_constraints().into_iter() {
+            let binary: Binary = bin_constraint.clone().try_into().unwrap();
             // Let's assume every set comprehension must be explicitly declared with a variable on the left side of binary constraint.
             // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.
 
@@ -446,25 +393,26 @@ impl DDEngine {
             }
         }
 
+        let temp_rule1 = temp_rule.clone();
+        //prev_collection.inspect(move |x| { println!("binding for {} is {:?}", temp_rule1, x); });
+
         // Since there are no derived terms then directly evaluate the expression to filter binding collection.
-        for bin_constraint in rule.binary_constraints_without_derived_term().into_iter() {
-            let binary: Binary = bin_constraint.try_into().unwrap();
+        for bin_constraint in temp_rule.pure_constraints().into_iter() {
+            let binary: Binary = bin_constraint.clone().try_into().unwrap();
             prev_collection = prev_collection.filter(move |binding| {
                 binary.evaluate(binding).unwrap()
             });
         }
 
-        (prev_vars.clone(), prev_collection)
-            //.inspect(|x| {
-            //    println!("binding is {:?}", x);  
-            //})
+        prev_collection
+            //.inspect(move |x| { println!("binding for {} is {:?}", temp_rule1, x); })
     }
 
     
     pub fn dataflow_from_set_comprehension<G>(
         var: Term,
-        outer_collection: &Collection<G, OrdMap<Term, Term>>,
-        models: &Collection<G, Term>, 
+        ordered_outer_collection: &Collection<G, OrdMap<Term, Term>>, // Binding collectionf from outer scope of set comprehension.
+        models: &Collection<G, Term>, // Existing model collection.
         setcompre: &SetComprehension,
     ) -> Collection<G, OrdMap<Term, Term>>
     where 
@@ -476,46 +424,45 @@ impl DDEngine {
         // how many terms of type A the current program has.
         let head_terms = setcompre.vars.clone();
         let setcompre_op = setcompre.op.clone();
+        let mut setcompre_default = setcompre.default.clone();
         let constraints = &setcompre.condition;
-        let (vars, mut collection) = DDEngine::dataflow_from_constraints(models, constraints);
+        let mut setcompre_var = var.clone();
+        
+        // Evaluate constraints in set comprehension and return ordered binding collection.
+        let mut ordered_collection = DDEngine::dataflow_from_constraints(models, constraints);
 
-        let ordered_outer_collection = outer_collection.map(|x| {
-            let ordered_map: OrdMap<Term, Term> = OrdMap::from_iter(x.into_iter());
-            (true, ordered_map)
+        //ordered_collection.inspect(move |x| { println!("inner binding is {:?}", x); });
+
+        /*
+        In case the production (outer, inner) could be empty set if inner binding collection is empty,
+        directly add default set comprehension value to the outer binding and concatenate the new stream into
+        production stream later on.
+        */
+        let ordered_outer_collection_plus_default = ordered_outer_collection.map(move |mut outer| {
+            let num_term: Term = Atom::Int(setcompre_default.clone()).into();
+            outer.insert(setcompre_var.clone(), num_term);
+            outer
         });
 
-        let ordered_collection = collection.map(|x| {
-            let ordered_map: OrdMap<Term, Term> = OrdMap::from_iter(x.into_iter());
-            (true, ordered_map)
-        });
-
-        // Make a production of inner binding and outer binding.
-        let binding_with_aggregation_stream = ordered_outer_collection.join(&ordered_collection)
-            .map(move |(_, (outer, inner))| { (outer, inner) })
+        setcompre_var = var.clone();
+        setcompre_default = setcompre.default.clone();
+        // Make a production of inner binding and outer binding collection but it could be empty.
+        let production_stream = ordered_outer_collection.map(|x| (true, x))
+            .join(&ordered_collection.map(|x| (true, x)))
+            .map(move |(_, (outer, inner))| { (outer, inner) });
+        
+        setcompre_var = var.clone();
+        let binding_and_aggregation_stream = production_stream 
             .filter(|(outer, inner)| {
-                // Filter out conflict binding tuple of outer and inner scope.
-                for inner_key in inner.keys() {
-                    let var: Variable = inner_key.clone().try_into().unwrap();
-                    let key_root = inner_key.root_var();
-                    let inner_val = inner.get(inner_key).unwrap();
-                    if outer.contains_key(inner_key) {
-                        let outer_val = outer.get(inner_key).unwrap();
-                        if inner_val != outer_val {
-                            return false;
-                        }
-                    }
-                    // outer variable: x (won't be x.y...), inner variable: x.y.z...
-                    else if outer.contains_key(&key_root) {
-                        let labels = Variable::fragments_diff(&key_root, inner_key).unwrap();
-                        let outer_val = outer.get(&key_root).unwrap();
-                        let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
-                        if inner_val != &outer_sub_val {
-                            return false;
-                        }
-                    }
-                }
-
-                true
+                /*
+                If outer and inner binding does not have variable confilct on keys then do a reduce operation to 
+                group binding tuples by its first element outer binding.
+                e.g. rule :- Path(a, b), dc0 = count({dc | Path(u, u)}), dc0 = 0. 
+                (Path(1, 2), Path(0, 0)), (Path(1, 2), Path(1, 1)) reduces to Path(1, 2) -> [Path(0, 0), Path(1, 1)]
+                Finally aggregate over the list of bindings that belong to the outer binding.
+                */
+                let has_conflit = Term::has_conflit(outer, inner);
+                !has_conflit
             })
             .reduce(move |key, input, output| {
                 // Collect all derived terms in set comprehension.
@@ -571,14 +518,31 @@ impl DDEngine {
                     },
                 };
 
-            }).map(move |(mut binding, num)| {
+            });
+            
+        let remained_binding_after_aggregation = binding_and_aggregation_stream.map(|(x, aggregation)| { x });
+        let binding_with_aggregation_stream = binding_and_aggregation_stream
+            .map(move |(mut binding, num)| {
                 let num_term: Term = Atom::Int(num).into();
-                binding.insert(var.clone(), num_term);
+                binding.insert(setcompre_var.clone(), num_term);
                 binding
             });
 
-        binding_with_aggregation_stream
-            .inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
+        setcompre_var = var.clone();
+        setcompre_default = setcompre.default.clone();
+        let binding_with_default_stream = ordered_outer_collection.map(|x| (x, true))
+            .antijoin(&remained_binding_after_aggregation)
+            .map(move |(mut outer, _)| {
+                // Add default value of set comprehension to each binding.
+                let num_term: Term = Atom::Int(setcompre_default.clone()).into();
+                outer.insert(setcompre_var.clone(), num_term);
+                outer 
+            });
+
+        let final_binding_stream = binding_with_aggregation_stream.concat(&binding_with_default_stream);
+
+        final_binding_stream
+            //.inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
     }
 
     pub fn dataflow_from_single_rule<G>(models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>
@@ -586,20 +550,14 @@ impl DDEngine {
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let head_terms = rule.head.clone();
+        let head_terms = rule.get_head();
 
         // Iteratively add new derived models to dataflow until fix point is reached.
         let models_after_rule_execution = models
         .iterate(|transitive_models| {
-            // Put models into subscope without changing.
-            // let models = models.enter(&transitive_models.scope());
-            
-            // Filter models by constraints and return a collection of variable binding.
-            let constraints = &rule.body;
-            let (vars, binding_collection) = DDEngine::dataflow_from_constraints(transitive_models, constraints);
+            let constraints = rule.get_body();
+            let binding_collection = DDEngine::dataflow_from_constraints(&transitive_models, &constraints);
 
-            // Now we have a collection of bindings for all variables in the rule body, then we use each 
-            // binding in the collection to derive new terms from head by propagating bindings. 
             let mut combined_models = transitive_models.map(|x| x);
             for term in head_terms.into_iter() {
                 let headterm_stream = binding_collection
@@ -612,10 +570,8 @@ impl DDEngine {
                 combined_models = combined_models.concat(&headterm_stream);
             }
 
-            // Iteratively loop the dataflow until all models are different.
             combined_models.distinct()
         });
-        //.inspect(|x| { println!("Final output {:?}", x); });
 
         models_after_rule_execution
     }

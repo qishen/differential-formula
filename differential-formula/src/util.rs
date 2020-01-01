@@ -1,7 +1,9 @@
 use core::hash::Hash;
 use core::borrow::Borrow;
 
+use std::iter::*;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use im::OrdMap;
 
 
@@ -11,6 +13,8 @@ it's user's responsibility to define what is a generic map and what functions sh
 since different users have different needs for generic map interface. Zhong Kou Nan Tiao.
 */
 pub trait GenericMap<K, V> {
+    fn keys(&self) -> Vec<&K>;
+
     fn contains_key<Q>(&self, k: &Q) -> bool 
     where
         K: Borrow<Q>,
@@ -29,6 +33,15 @@ where
     K: Eq + Hash + Ord + Clone,
     V: Clone,
 {
+    fn keys(&self) -> Vec<&K> {
+        let mut list = vec![];
+        let keys = HashMap::keys(self);
+        for key in keys {
+            list.push(key);
+        }
+        list
+    }
+
     fn contains_key<Q>(&self, k: &Q) -> bool
     where
         K: Borrow<Q>,
@@ -55,6 +68,15 @@ where
     K: Eq + Hash + Ord + Clone,
     V: Clone,
 {
+    fn keys(&self) -> Vec<&K> {
+        let mut list = vec![];
+        let keys = OrdMap::keys(self);
+        for key in keys {
+            list.push(key);
+        }
+        list
+    }
+
     fn contains_key<Q>(&self, k: &Q) -> bool
     where
         K: Borrow<Q>,

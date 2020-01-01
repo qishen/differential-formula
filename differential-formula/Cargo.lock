@@ -90,6 +90,7 @@ dependencies = [
  "nom",
  "num",
  "rand",
+ "readonly",
  "serde",
  "timely",
  "timely_sort",
@@ -339,6 +340,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "678054eb77286b51581ba43620cc911abf02758c91f93f479767aed0f90458b2"
 dependencies = [
  "rand_core 0.3.1",
+]
+
+[[package]]
+name = "readonly"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9fd3125016eb3257fe8038dcafaa5fbecc081bcd46defe9ccb98ceae0175219"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
