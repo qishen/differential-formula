@@ -195,7 +195,10 @@ impl ExprBehavior for BaseExpr {
                         // The expression is a variable and find the value in hash map by that variable
                         let root_var = term.root_var();
                         let val_term = match &root_var == term {
-                            true => { binding.get(term).unwrap().clone() },
+                            true => { 
+                                println!("failed here {:?}, {:?}", binding.keys(), &term);
+                                binding.get(term).unwrap().clone() 
+                            },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
                                 let val_term = binding.get(&root_var).unwrap();

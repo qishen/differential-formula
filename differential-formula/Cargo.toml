@@ -20,3 +20,4 @@ num = { version = "0.2", features = ["serde"] }
 im = { version = "14", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc", "std"] }
 readonly = "0.1"
+petgraph = "0.5"

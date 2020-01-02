@@ -25,7 +25,7 @@ use crate::term::*;
 use crate::expression::*;
 use crate::rule::*;
 use crate::type_system::*;
-use crate::parser::parse_str;
+use crate::parser::*;
 
 
 
@@ -53,8 +53,9 @@ impl Session {
         }
     }
 
-    fn parse_term(term_str: String) {
-
+    pub fn parse_term_str(&self, term_str: String) -> Term {
+        // Call function from parser.
+        parse_into_term(&self.domain, term_str)
     }
 
     fn _advance(&mut self) {
@@ -318,20 +319,25 @@ impl DDEngine {
                 &prev_collection, 
                 intersection_vars.clone(), 
                 left_diff_vars.clone(),
-            );
+            )
+
+                //.inspect(|x| { print!("Second check is {:?}\n", x); })
+                ;
 
             // Join operation cannot be performed on HashMap of terms, we use vec of terms instead
             // and have to turn three lists back into HashMap for the next iteration.
             prev_collection = split_prev_collection
                 .join(&split_collection)
+                //.inspect(|x| { print!("Third check is {:?}\n", x); })
                 .map(move |(inter, (left, right))| {
                     let mut binding = OrdMap::new();
                     binding.extend(left);
                     binding.extend(right);
                     binding.extend(inter);
                     binding
-                });
-                //.inspect(|x| { print!("Join result is {:?}\n", x); });
+                })
+                //.inspect(|x| { print!("Join result is {:?}\n", x); })
+                ;
 
             // Filter out binding with conflict on variables with fragments like x.y.z
             prev_collection = prev_collection.filter(|mut binding| {
@@ -357,7 +363,7 @@ impl DDEngine {
             prev_vars.extend(right_diff_vars_copy);
         } 
 
-        for bin_constraint in temp_rule.definition_constraints().into_iter() {
+        for bin_constraint in temp_rule.ordered_definition_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
             // Let's assume every set comprehension must be explicitly declared with a variable on the left side of binary constraint.
             // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.
@@ -376,7 +382,9 @@ impl DDEngine {
                                 &prev_collection, 
                                 models, 
                                 &setcompre
-                            );
+                            )
+                            .inspect(|x| { println!("Check it here {:?}", x); })
+                            ;
                         },
                         _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
                     }
@@ -554,6 +562,7 @@ impl DDEngine {
 
         // Iteratively add new derived models to dataflow until fix point is reached.
         let models_after_rule_execution = models
+        //.inspect(|x| { println!("Beginning check out {:?}", x)})
         .iterate(|transitive_models| {
             let constraints = rule.get_body();
             let binding_collection = DDEngine::dataflow_from_constraints(&transitive_models, &constraints);
@@ -577,10 +586,11 @@ impl DDEngine {
     }
 
 
-    pub fn create_dataflow(&mut self, domain: &Domain, worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>) -> (
-        InputSession<i32, Term, isize>, 
-        timely::dataflow::ProbeHandle<i32>,
-    )
+    pub fn create_dataflow(
+        &mut self, 
+        domain: &Domain, 
+        worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>
+    ) -> (InputSession<i32, Term, isize>, timely::dataflow::ProbeHandle<i32>)
     {
         let mut input = InputSession::<i32, Term, isize>::new();
         let stratified_rules = domain.stratified_rules();
@@ -613,22 +623,6 @@ impl DDEngine {
         });
 
         (input, probe)
-    }
-
-    pub fn add_fact() {
-        unimplemented!();
-    }
-
-    pub fn remove_fact() {
-        unimplemented!();
-    }
-
-    pub fn add_rule() {
-        unimplemented!();
-    }
-
-    pub fn remove_rule() {
-        unimplemented!();
     }
 
 }

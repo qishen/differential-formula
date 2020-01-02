@@ -4,7 +4,6 @@ extern crate differential_dataflow;
 extern crate abomonation_derive;
 extern crate abomonation;
 
-use rand::{Rng, SeedableRng, StdRng};
 use std::iter::*;
 use std::any::Any;
 use std::rc::Rc;
@@ -15,6 +14,9 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
+
+use petgraph::graph::*;
+use petgraph::algo::*;
 
 use crate::term::*;
 use crate::expression::*;
@@ -58,7 +60,7 @@ impl Rule {
         rule
     }
 
-    
+
     pub fn get_head(&self) -> Vec<Term> {
         self.head.clone()
     }
@@ -123,11 +125,17 @@ impl Rule {
 
     // Return derived variables by simply deducting matched variables from all variables.
     pub fn derived_variables(&self) -> HashSet<Term> {
+        /*
+        If variable with fragments like x.y.z = a + b is mistaken as derived variable, 
+        then remove it from derived variable list.
+        */
         let mut diff_vars = HashSet::new();
         let matched_vars = self.matched_variables();
         let all_vars = self.variables();
+
         for var in all_vars.into_iter() {
-            if !matched_vars.contains(&var) {
+            // var cannot have fragments as a derived variable.
+            if !matched_vars.contains(&var) && var == var.root_var() {
                 diff_vars.insert(var);
             }
         }
@@ -214,11 +222,11 @@ impl Rule {
 
     /*
     A list of constraints in which every variable inside it can be directly evaluated by binding map.
-    Simply binary constraints that are not definition constraints.
+    Simply return all binary constraints that are not definition constraints.
     */
     pub fn pure_constraints(&self) -> Vec<&Constraint> {
         let mut pure_constraints = vec![];
-        let definition_constraint_set: HashSet<&Constraint> = HashSet::from_iter(self.definition_constraints());
+        let definition_constraint_set: HashSet<&Constraint> = HashSet::from_iter(self.ordered_definition_constraints());
         for constraint in self.binary_constraints() {
             if !definition_constraint_set.contains(constraint) {
                 pure_constraints.push(constraint);
@@ -229,26 +237,67 @@ impl Rule {
 
 
     /* 
-    All constraints that are declarations of new derived variable and they were never matched
+    Definition constraints are declarations of new derived variable and they were never matched
     in other predicates in the same rule.
     e.g. var = [set comprehension] or var = [Expr]. Expr can not be an atom.
+    Re-arrange the order of definition constraints to make sure c = count({..}) is executed
+    before val = c * c.
     */
-    pub fn definition_constraints(&self) -> Vec<&Constraint> {
+    pub fn ordered_definition_constraints(&self) -> Vec<&Constraint> {
         let mut definition_constraints = vec![];
         let declared_vars = self.derived_variables();
         for declared_var in declared_vars.iter() {
             let cons = self.definition_constraints_of_variable(declared_var);
-            // Assume set comprehension is always put on the top before other types of expression.
+            /* 
+            Assume set comprehension is always put on the top before other types of expression.
+            Only the first one is considered as definition constraint and rest of them are pure
+            constraints.
+            e.g. [c = count({..}), c = a + 1, c = 1], the last two are pure constraints.
+            */
             let first = cons.get(0).unwrap();
             definition_constraints.push(first.clone());
         }
-        definition_constraints
+
+        let mut map = HashMap::new();
+        let mut graph = Graph::new();
+        for constraint in definition_constraints.clone() {
+            // Each node is indexed and associated with a weight in which you can store some data.
+            let node = graph.add_node(constraint);
+            map.insert(constraint, node);
+        }
+
+        for constraint in definition_constraints.clone() {
+            let &node = map.get(constraint).unwrap();
+            // left of binary must be a variable term.
+            let binary: Binary = constraint.clone().try_into().unwrap();
+            let base_expr: BaseExpr = binary.left.try_into().unwrap();
+            let left_var: Term = base_expr.try_into().unwrap(); 
+
+            for other_constraint in definition_constraints.clone() {
+                let other_binary: Binary = other_constraint.clone().try_into().unwrap();
+                // Check if the right side of the other definition constraint contain this definition variable.
+                if other_binary.right.variables().contains(&left_var) {
+                    let &other_node = map.get(other_constraint).unwrap();
+                    graph.add_edge(node, other_node, 1);
+                }
+            }
+        }
+
+        let mut ordered_definition_constraints = vec![];
+        let indexes = toposort(&graph, None).unwrap();
+
+        for index in indexes {
+            let &constraint = graph.node_weight(index).unwrap();
+            ordered_definition_constraints.push(constraint);
+        }
+         
+        ordered_definition_constraints
     }
 
 
     /*
     Return all binary constraints in which the left side is the specified variable.
-    e.g. result = [a = count({...}), a = b + c, a = ]
+    e.g. result = [a = count({...}), a = b + c, a = 1]
     */
     fn definition_constraints_of_variable(&self, variable: &Term) -> Vec<&Constraint> {
         let mut matched_constraints = vec![];

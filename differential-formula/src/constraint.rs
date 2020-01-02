@@ -45,8 +45,9 @@ impl Display for Predicate {
     }
 }
 
-impl Predicate {
-    pub fn variables(&self) -> HashSet<Term> {
+
+impl ConstraintBehavior for Predicate {
+    fn variables(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
         let vars = self.term.variables();
         for var in vars.into_iter() {
@@ -59,7 +60,10 @@ impl Predicate {
 
         var_set
     }
+}
 
+
+impl Predicate {
     // Negative predicate constraint is count({setcompre}) = 0 in disguise.
     pub fn to_binary_constraints(&self, var: Term) -> Option<(Constraint, Constraint)> {
         // Positive predicate is not allowed to be converted into Binary constraint.
@@ -145,6 +149,15 @@ impl Display for Binary {
     }
 }
 
+impl ConstraintBehavior for Binary {
+    fn variables(&self) -> HashSet<Term> {
+        let mut set = HashSet::new();
+        set.extend(self.left.variables());
+        set.extend(self.right.variables());
+        set
+    }
+}
+
 impl Binary {
     pub fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
@@ -186,6 +199,20 @@ impl Display for TypeConstraint {
     }
 }
 
+impl ConstraintBehavior for TypeConstraint {
+    fn variables(&self) -> HashSet<Term> {
+        let mut set = HashSet::new();
+        set.insert(self.var.clone());
+        set
+    }
+}
+
+
+#[enum_dispatch(Constraint)]
+pub trait ConstraintBehavior {
+    fn variables(&self) -> HashSet<Term>;
+}
+
 
 #[enum_dispatch]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -208,5 +235,3 @@ impl Display for Constraint {
 }
 
 
-#[enum_dispatch(Constraint)]
-pub trait ConstraintBehavior {}

@@ -504,6 +504,7 @@ named!(program<&str, Env>,
                         match c.alias {
                             None => {},
                             Some(alias) => {
+                                // alias here shouldn't have fragments.
                                 let vterm: Term = Variable::new(alias, vec![]).into();
                                 alias_map.insert(vterm, term);
                             }
@@ -986,6 +987,12 @@ fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
 }
 
 
+pub fn parse_into_term(domain: &Domain, s: String) -> Term {
+    let term_ast = composite(&s[..]).unwrap().1;
+    term_ast.to_term(domain)
+}
+
+
 named!(composite<&str, TermAst>, 
     do_parse!(
         alias: opt!(terminated!(id, delimited!(multispace0, tag!("is"), multispace0))) >>
@@ -1006,11 +1013,11 @@ named!(composite<&str, TermAst>,
             ), 
             char!(')')
         ) >>
-        (parse_term(alias, t, args))
+        (parse_composite(alias, t, args))
     )
 );
 
-fn parse_term(alias: Option<String>, sort: String, args: Vec<TermAst>) -> TermAst {
+fn parse_composite(alias: Option<String>, sort: String, args: Vec<TermAst>) -> TermAst {
     CompositeTermAst {
         name: sort.to_string(),
         arguments: args.into_iter().map(|x| Box::new(x)).collect(),

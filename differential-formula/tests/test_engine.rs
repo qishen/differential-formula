@@ -81,7 +81,7 @@ fn test_ddengine_1() {
         //Path(a, c) :- Path(a, b), Path(b, c).
     ";
 
-    let (domain, session) = create_session(rules1, model1);
+    let (domain, mut session) = create_session(rules1, model1);
 }
 
 #[test]
@@ -90,7 +90,12 @@ fn test_ddengine_2() {
         Edge(a, c) :- Edge(a, b), Edge(b, c).
     ";
     
-    let (domain, session) = create_session(rules2, model1);
+    let (domain, mut session) = create_session(rules2, model1);
+    
+    let edge45 = session.parse_term_str("Edge(Node(4), Node(5))".to_string());
+    let edge56 = session.parse_term_str("Edge(Node(5), Node(6))".to_string());
+
+    session.add_terms(vec![edge45, edge56]);
 }
 
 #[test]
@@ -99,7 +104,7 @@ fn test_ddengine_3() {
         Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
     ";
 
-    let (domain, session) = create_session(rules3, model1);
+    let (domain, mut session) = create_session(rules3, model1);
 }
 
 #[test]
@@ -110,7 +115,14 @@ fn test_ddengine_4() {
         Nocycle(u) :- u is Node(_), no Path(u, u).
     ";
 
-    let (domain, session) = create_session(rules4, model1);
+    let (domain, mut session) = create_session(rules4, model1);
+
+    let edge00 = session.parse_term_str("Edge(Node(0), Node(0))".to_string());
+    let edge22 = session.parse_term_str("Edge(Node(2), Node(2))".to_string());
+    let edge45 = session.parse_term_str("Edge(Node(5), Node(5))".to_string());
+    
+    session.add_term(edge45);
+    session.remove_term(edge00);
 }
 
 #[test]
@@ -119,7 +131,7 @@ fn test_ddengine_5() {
         Line(a, b, c, d) :- Edge(a, b), Edge(c, d).
     ";
 
-    let (domain, session) = create_session(rules5, model1);
+    let (domain, mut session) = create_session(rules5, model1);
 }
 
 fn test_ddengine() {
