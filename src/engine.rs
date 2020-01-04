@@ -54,6 +54,7 @@ impl Session {
             probe,
             env,
             domain_name,
+            
             model_name,
             step_count: 1,
         }
