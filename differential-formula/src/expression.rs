@@ -196,7 +196,6 @@ impl ExprBehavior for BaseExpr {
                         let root_var = term.root_var();
                         let val_term = match &root_var == term {
                             true => { 
-                                println!("failed here {:?}, {:?}", binding.keys(), &term);
                                 binding.get(term).unwrap().clone() 
                             },
                             false => {

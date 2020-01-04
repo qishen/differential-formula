@@ -521,11 +521,7 @@ named!(program<&str, Env>,
                 model_store.push(term);
             }
 
-            let model = Model {
-                model_name: model_name.clone(),
-                domain_name: model_ast.domain_name,
-                models: model_store,
-            };
+            let model = Model::new(model_name.clone(), model_ast.domain_name, model_store, alias_map);
 
             model_map.insert(model_name, model);
         }
@@ -987,9 +983,38 @@ fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
 }
 
 
-pub fn parse_into_term(domain: &Domain, s: String) -> Term {
-    let term_ast = composite(&s[..]).unwrap().1;
-    term_ast.to_term(domain)
+pub fn parse_into_term(
+    env_opt: &Option<Env>, 
+    domain_name: String, 
+    model_name: Option<String>, 
+    s: &str
+) -> Option<Term>
+{
+    match env_opt {
+        Some(env) => {
+            let domain = env.get_domain_by_name(domain_name).unwrap();
+            let term_ast = composite(s).unwrap().1;
+            let mut term = term_ast.to_term(domain);
+            
+            // if model is not none replace variable in the new term by propagating alias map.
+            let result_term = match model_name {
+                Some(name) => {
+                    let model = env.get_model_by_name(name).unwrap();
+                    /* 
+                    1. Replace variable in the new term by propagating alias map.
+                    2. Update its alias and argument's alias recursively by propagating reverse alias map.
+                    */
+                    term.propagate_bindings(&model.alias_map)
+                        .propagate_reverse_bindings(&model.reverse_alias_map)
+                },
+                _ => { term }
+            };
+
+            Some(result_term)
+        },
+        _ => { None }
+    }
+    
 }
 
 

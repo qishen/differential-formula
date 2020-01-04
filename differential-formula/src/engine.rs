@@ -33,29 +33,35 @@ pub struct Session {
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
     input: InputSession<i32, Term, isize>,
     probe: timely::dataflow::ProbeHandle<i32>,
-    domain: Domain,
+    env: Option<Env>,
+    domain_name: String,
+    model_name: Option<String>,
     step_count: i32,
 }
 
 impl Session {
     fn new(input: InputSession<i32, Term, isize>, 
             probe: timely::dataflow::ProbeHandle<i32>, 
-            domain: Domain,
-            worker: timely::worker::Worker<timely::communication::allocator::Thread>
+            worker: timely::worker::Worker<timely::communication::allocator::Thread>,
+            env: Option<Env>,
+            domain_name: String,
+            model_name: Option<String>,
         ) -> Self {
 
         Session {
             worker,
             input,
             probe,
-            domain,
+            env,
+            domain_name,
+            model_name,
             step_count: 1,
         }
     }
 
-    pub fn parse_term_str(&self, term_str: String) -> Term {
+    pub fn parse_term_str(&self, term_str: &str) -> Option<Term> {
         // Call function from parser.
-        parse_into_term(&self.domain, term_str)
+        parse_into_term(&self.env, self.domain_name.clone(), self.model_name.clone(), term_str)
     }
 
     fn _advance(&mut self) {
@@ -125,7 +131,7 @@ impl DDEngine {
 
     }
 
-    pub fn get_domain(&self, name: String) -> Option<Domain> {
+    pub fn get_domain(&self, name: String) -> Option<&Domain> {
         let domain = match &self.env {
             None => None,
             Some(env) => env.get_domain_by_name(name),
@@ -134,7 +140,7 @@ impl DDEngine {
         domain
     }
 
-    pub fn get_model(&self, name: String) -> Option<Model> {
+    pub fn get_model(&self, name: String) -> Option<&Model> {
         let model = match &self.env {
             None => None,
             Some(env) => env.get_model_by_name(name),
@@ -143,15 +149,23 @@ impl DDEngine {
         model
     }
 
-    pub fn create_session(&mut self, domain_name: String) -> Session {
+    pub fn create_session(&mut self, domain_name: &str, model_name: Option<&str>) -> Session {
         // Create a single thread worker.
         let allocator = timely::communication::allocator::Thread::new();
         let mut worker = timely::worker::Worker::new(allocator);
 
-        let domain = self.get_domain(domain_name).unwrap();
-        let (mut input, probe) = self.create_dataflow(&domain, &mut worker);
+        let domain = self.get_domain(domain_name.to_string()).unwrap();
+        let (mut input, probe) = self.create_dataflow(&domain.clone(), &mut worker);
 
-        Session::new(input, probe, domain, worker)
+        // TODO: Need to remove deep clone by adding lifetime to field with reference in Session.
+        Session::new(
+            input, 
+            probe, 
+            worker, 
+            self.env.clone(), 
+            domain_name.to_string(), 
+            model_name.map(|x| { x.to_string() }),
+        )
     }
 
     pub fn dataflow_filtered_by_type<G>(
@@ -243,6 +257,7 @@ impl DDEngine {
         });
 
         map_tuple_collection
+            //.inspect(|x| { println!("Split binding {:?}", x); })
     }
 
     pub fn dataflow_from_constraints<G>(models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
@@ -319,16 +334,10 @@ impl DDEngine {
                 &prev_collection, 
                 intersection_vars.clone(), 
                 left_diff_vars.clone(),
-            )
+            );            ;
 
-                //.inspect(|x| { print!("Second check is {:?}\n", x); })
-                ;
-
-            // Join operation cannot be performed on HashMap of terms, we use vec of terms instead
-            // and have to turn three lists back into HashMap for the next iteration.
             prev_collection = split_prev_collection
                 .join(&split_collection)
-                //.inspect(|x| { print!("Third check is {:?}\n", x); })
                 .map(move |(inter, (left, right))| {
                     let mut binding = OrdMap::new();
                     binding.extend(left);
@@ -383,7 +392,7 @@ impl DDEngine {
                                 models, 
                                 &setcompre
                             )
-                            .inspect(|x| { println!("Check it here {:?}", x); })
+                            //.inspect(|x| { println!("Check it here {:?}", x); })
                             ;
                         },
                         _ => {}, // Ignored because it does not make sense to derive new term from single variable term.

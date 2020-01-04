@@ -9,7 +9,7 @@ use std::string::String;
 use enum_dispatch::enum_dispatch;
 use serde::{Serialize, Deserialize};
 
-use crate::term::Term;
+use crate::term::*;
 use crate::rule::*;
 
 
@@ -133,8 +133,43 @@ pub struct Model {
     pub model_name: String,
     pub domain_name: String,
     pub models: Vec<Term>,
+    // variable term to composite term mapping.
+    pub alias_map: HashMap<Term, Term>, 
+    // composite term to string alias mapping and the composite can't have alias built in.
+    pub reverse_alias_map: HashMap<Term, String>, 
 }
 
+impl Model {
+    pub fn new(model_name: String, 
+        domain_name: String, 
+        models: Vec<Term>, 
+        alias_map: HashMap<Term, Term>) -> Self {
+        
+        let mut reverse_alias_map = HashMap::new();
+        for key in alias_map.keys() {
+            let variable: Variable = key.clone().try_into().unwrap();
+            let var_str = variable.var;
+            
+            /* 
+            Clone each entry in the alias map to create reverse alias map mapping composite term to 
+            alias in the format of string and the alias is removed for each key.
+            */
+            let mut val_composite: Composite = alias_map.get(key).unwrap().clone().try_into().unwrap();
+            val_composite.alias = None;
+            reverse_alias_map.insert(val_composite.into(), var_str);
+        }
+
+        let model = Model {
+            model_name,
+            domain_name,
+            models,
+            alias_map,
+            reverse_alias_map,
+        };
+
+        model
+    }
+}
 
 
 #[derive(Debug, Clone)]
@@ -143,20 +178,21 @@ pub struct Env {
     pub model_map: HashMap<String, Model>,
 }
 
+
 impl Env {
-    pub fn get_model_by_name(&self, name: String) -> Option<Model> {
+    pub fn get_model_by_name(&self, name: String) -> Option<&Model> {
         // Make a clone of the model in Env and return it.
         match self.model_map.get(&name) {
             None => None,
-            Some(model) => Some(model.clone())
+            Some(model) => Some(model),
         }
     }
 
-    pub fn get_domain_by_name(&self, name: String) -> Option<Domain> {
+    pub fn get_domain_by_name(&self, name: String) -> Option<&Domain> {
         // Make a clone of the domain in Env and return it.
         match self.domain_map.get(&name) {
             None => None,
-            Some(model) => Some(model.clone())
+            Some(model) => Some(model),
         }
     }
 }

@@ -22,10 +22,16 @@ pub trait TermBehavior {
     fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>>;
     fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>>;
     fn is_groundterm(&self) -> bool;
+
     // Use GenericMap trait to make function accept different map implementations.
     fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term;
+
+    // Add alias to the term and its subterms recursively if a match is found in reversed map.
+    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term;
+
     // Check if the term is a don't-care variable with variable root name as '_'.
     fn is_dc_variable(&self) -> bool; 
+
     fn root_var(&self) -> Term;
     fn get_subterm_by_label(&self, label: &String) -> Option<Term>;
     fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term>;
@@ -187,6 +193,31 @@ impl TermBehavior for Composite {
         composite.into()
     }
 
+    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
+        let mut new_arguments = vec![];
+        for arg in self.arguments.iter() {
+            let new_term = arg.propagate_reverse_bindings(reverse_map);
+            new_arguments.push(Arc::new(new_term));
+        }
+
+        // The new term does not contain alias but will change it later if a match is found in reverse alias map.
+        let mut new_composite_term: Term = Composite {
+            sort: self.sort.clone(),
+            arguments: new_arguments,
+            alias: None,
+        }.into();
+
+        // if the raw term is matched in reverse map with a string alias, add the alias to this composite term.
+        if reverse_map.contains_key(&new_composite_term) {
+            let alias = reverse_map.get(&new_composite_term).unwrap();
+            let mut new_composite: Composite = new_composite_term.try_into().unwrap();
+            new_composite.alias = Some(alias.clone());
+            new_composite_term = new_composite.into();
+        }
+
+        new_composite_term
+    }
+
     fn is_dc_variable(&self) -> bool { false }
 
     fn root_var(&self) -> Term {
@@ -327,6 +358,11 @@ impl TermBehavior for Variable {
         }
     }
 
+    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
+        // Won't have matching for variable term, so return a cloned copy of variable term.
+        self.clone().into()
+    }
+
     fn is_dc_variable(&self) -> bool {
         if self.var == "_" { true }
         else { false }
@@ -395,6 +431,11 @@ impl TermBehavior for Atom {
     }
 
     fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
+        self.clone().into()
+    }
+
+    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
+        // Won't have matching for atom term, so return a cloned copy of atom term.
         self.clone().into()
     }
 
