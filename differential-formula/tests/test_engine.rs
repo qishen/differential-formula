@@ -66,12 +66,12 @@ fn create_session(rules: &str, model: &str) -> (Domain, Session) {
     //  println!("{:?}", env);
     engine.install(env);
 
-    let domain = engine.get_domain("Graph".to_string()).unwrap();
-    let model = engine.get_model("m".to_string()).unwrap();
+    let domain = engine.get_domain("Graph".to_string()).unwrap().clone();
+    let model = engine.get_model("m".to_string()).unwrap().clone();
 
-    let mut session = engine.create_session("Graph".to_string());
+    let mut session = engine.create_session("Graph", Some("m"));
     session.load_model(model);
-    (domain, session)
+    (domain.clone(), session)
 }
 
 #[test]
@@ -92,8 +92,8 @@ fn test_ddengine_2() {
     
     let (domain, mut session) = create_session(rules2, model1);
     
-    let edge45 = session.parse_term_str("Edge(Node(4), Node(5))".to_string());
-    let edge56 = session.parse_term_str("Edge(Node(5), Node(6))".to_string());
+    let edge45 = session.parse_term_str("Edge(Node(4), Node(5))").unwrap();
+    let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
 
     session.add_terms(vec![edge45, edge56]);
 }
@@ -117,11 +117,15 @@ fn test_ddengine_4() {
 
     let (domain, mut session) = create_session(rules4, model1);
 
-    let edge00 = session.parse_term_str("Edge(Node(0), Node(0))".to_string());
-    let edge22 = session.parse_term_str("Edge(Node(2), Node(2))".to_string());
-    let edge45 = session.parse_term_str("Edge(Node(5), Node(5))".to_string());
+    let edge00 = session.parse_term_str("Edge(Node(0), Node(0))").unwrap();
+    let edge22 = session.parse_term_str("Edge(Node(2), Node(2))").unwrap();
+    let edge45 = session.parse_term_str("Edge(Node(4), Node(5))").unwrap();
+
+    // Need to explicitly declare Node(5) to use it even though edge45 has it as argument.
+    let node5 = session.parse_term_str("Node(5)").unwrap();
     
-    session.add_term(edge45);
+    session.add_terms(vec![node5, edge45]);
+    session.add_term(edge22);
     session.remove_term(edge00);
 }
 
@@ -175,9 +179,9 @@ fn test_ddengine_on_social_network() {
     // println!("{:?}", env);
     engine.install(env);
 
-    let domain = engine.get_domain("SocialNetwork".to_string()).unwrap();
-    let model = engine.get_model("example".to_string()).unwrap();
+    let domain = engine.get_domain("SocialNetwork".to_string()).unwrap().clone();
+    let model = engine.get_model("example".to_string()).unwrap().clone();
 
-    let mut session = engine.create_session("SocialNetwork".to_string());
+    let mut session = engine.create_session("SocialNetwork", Some("example"));
     session.load_model(model);
 }
