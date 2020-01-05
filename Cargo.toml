@@ -4,6 +4,12 @@ version = "0.1.0"
 authors = ["Qishen Zhang <qishen23@gmail.com>"]
 edition = "2018"
 
+exclude = [
+    "tests/samples/CommandLine.exe",
+    "tests/samples/CommandLine.exe.config",
+    "tests/samples/Core.dll"
+]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
