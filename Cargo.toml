@@ -1,6 +1,6 @@
 [package]
 name = "differential-formula"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Qishen Zhang <qishen23@gmail.com>"]
 edition = "2018"
 description = "Incremental Formal Modeling Using Logic Programming and Analysis"
