@@ -106,12 +106,14 @@ impl Session {
 
 pub struct DDEngine {
     pub env: Option<Env>,
+    pub inspect: bool,
 }
 
 impl DDEngine {
     pub fn new() -> Self {
         let engine = DDEngine {
             env: None,
+            inspect: false,
         };
 
         engine
@@ -170,6 +172,7 @@ impl DDEngine {
     }
 
     pub fn dataflow_filtered_by_type<G>(
+        &self,
         terms: &Collection<G, Term>,
         pred_term: Term,
     ) -> Collection<G, Term>
@@ -192,6 +195,7 @@ impl DDEngine {
 
 
     pub fn dataflow_filtered_by_positive_predicate_constraint<G>(
+        &self,
         terms: &Collection<G, Term>, 
         pos_pred_constraint: Constraint,
     ) -> Collection<G, OrdMap<Term, Term>> 
@@ -203,7 +207,7 @@ impl DDEngine {
         let pred_alias = predicate.alias;
         let pred_term = predicate.term.clone();
 
-        let binding_collection = DDEngine::dataflow_filtered_by_type(terms, pred_term.clone()) 
+        let binding_collection = self.dataflow_filtered_by_type(terms, pred_term.clone()) 
             .map(move |term| {
                 let binding_opt = pred_term.get_ordered_bindings(&term);
                 (term, binding_opt)
@@ -230,6 +234,7 @@ impl DDEngine {
     }
 
     pub fn dataflow_from_term_bindings_split<G>(
+        &self,
         bindings: &Collection<G, OrdMap<Term, Term>>, 
         keys1: Vec<Term>,
         keys2: Vec<Term>,
@@ -261,7 +266,7 @@ impl DDEngine {
             //.inspect(|x| { println!("Split binding {:?}", x); })
     }
 
-    pub fn dataflow_from_constraints<G>(models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
+    pub fn dataflow_from_constraints<G>(&self, models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
         -> Collection<G, OrdMap<Term, Term>>
     where
         G: Scope,
@@ -289,7 +294,7 @@ impl DDEngine {
 
         // Filter models by its type to match the positive predicate term and the output of dataflow
         // is not models but a collection of bindings mapping each variable to a ground term.
-        let mut prev_collection = DDEngine::dataflow_filtered_by_positive_predicate_constraint(
+        let mut prev_collection = self.dataflow_filtered_by_positive_predicate_constraint(
             models, 
             initial_pred_constraint,
         );
@@ -318,20 +323,20 @@ impl DDEngine {
             let intersection_vars_copy = intersection_vars.clone();
             
             // Filter term collection by predicate constraint.
-            let filtered_collection = DDEngine::dataflow_filtered_by_positive_predicate_constraint(
+            let filtered_collection = self.dataflow_filtered_by_positive_predicate_constraint(
                 models, 
                 pos_constraint,
             );
 
             // Split bindings of current term into two vectors for join operation later.
-            let split_collection = DDEngine::dataflow_from_term_bindings_split(
+            let split_collection = self.dataflow_from_term_bindings_split(
                 &filtered_collection, 
                 intersection_vars.clone(),
                 right_diff_vars.clone(),
             );
 
             // Split bindings of previous terms into two vectors for join operation later.
-            let split_prev_collection = DDEngine::dataflow_from_term_bindings_split(
+            let split_prev_collection = self.dataflow_from_term_bindings_split(
                 &prev_collection, 
                 intersection_vars.clone(), 
                 left_diff_vars.clone(),
@@ -387,7 +392,7 @@ impl DDEngine {
                 Expr::BaseExpr(right_base_expr) => {
                     match right_base_expr {
                         BaseExpr::SetComprehension(setcompre) => {
-                            prev_collection = DDEngine::dataflow_from_set_comprehension(
+                            prev_collection = self.dataflow_from_set_comprehension(
                                 var_term,
                                 &prev_collection, 
                                 models, 
@@ -411,9 +416,6 @@ impl DDEngine {
             }
         }
 
-        let temp_rule1 = temp_rule.clone();
-        //prev_collection.inspect(move |x| { println!("binding for {} is {:?}", temp_rule1, x); });
-
         // Since there are no derived terms then directly evaluate the expression to filter binding collection.
         for bin_constraint in temp_rule.pure_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
@@ -423,11 +425,11 @@ impl DDEngine {
         }
 
         prev_collection
-            //.inspect(move |x| { println!("binding for {} is {:?}", temp_rule1, x); })
     }
 
     
     pub fn dataflow_from_set_comprehension<G>(
+        &self,
         var: Term,
         ordered_outer_collection: &Collection<G, OrdMap<Term, Term>>, // Binding collectionf from outer scope of set comprehension.
         models: &Collection<G, Term>, // Existing model collection.
@@ -447,9 +449,7 @@ impl DDEngine {
         let mut setcompre_var = var.clone();
         
         // Evaluate constraints in set comprehension and return ordered binding collection.
-        let mut ordered_collection = DDEngine::dataflow_from_constraints(models, constraints);
-
-        //ordered_collection.inspect(move |x| { println!("inner binding is {:?}", x); });
+        let mut ordered_collection = self.dataflow_from_constraints(models, constraints);
 
         /*
         In case the production (outer, inner) could be empty set if inner binding collection is empty,
@@ -563,7 +563,7 @@ impl DDEngine {
             //.inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
     }
 
-    pub fn dataflow_from_single_rule<G>(models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>
+    pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -575,16 +575,14 @@ impl DDEngine {
         //.inspect(|x| { println!("Beginning check out {:?}", x)})
         .iterate(|transitive_models| {
             let constraints = rule.get_body();
-            let binding_collection = DDEngine::dataflow_from_constraints(&transitive_models, &constraints);
+            let binding_collection = self.dataflow_from_constraints(&transitive_models, &constraints);
 
             let mut combined_models = transitive_models.map(|x| x);
             for term in head_terms.into_iter() {
                 let headterm_stream = binding_collection
                     .map(move |binding| {
                         term.propagate_bindings(&binding)
-                    })
-                    //.inspect(|x| { println!("Updates on new derived terms are {:?}.", x); })
-                    ;
+                    });
 
                 combined_models = combined_models.concat(&headterm_stream);
             }
@@ -615,7 +613,7 @@ impl DDEngine {
                 for rule in stratum.iter() {
                     println!("Stratum {}: {}", i, rule);
 
-                    let models_after_rule_execution = DDEngine::dataflow_from_single_rule(
+                    let models_after_rule_execution = self.dataflow_from_single_rule(
                         &new_models, 
                         rule
                     );
@@ -625,8 +623,9 @@ impl DDEngine {
                         .distinct();
                 }
 
-                new_models
-                    .inspect(move |x| { println!("Stratum {}: {:?}", &i, x); });
+                if self.inspect {
+                    new_models.inspect(move |x| { println!("Stratum {}: {:?}", &i, x); });
+                }
             }
 
             new_models.probe()

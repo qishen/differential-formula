@@ -60,6 +60,7 @@ fn create_session(rules: &str, model: &str) -> (Domain, Session) {
     println!("{}", program);
 
     let mut engine = DDEngine::new();
+    engine.inspect = true;
 
     // Parse string and install program in the engine.
     let env = DDEngine::parse_string(program);
@@ -138,41 +139,79 @@ fn test_ddengine_5() {
     let (domain, mut session) = create_session(rules5, model1);
 }
 
-fn test_ddengine() {
 
+#[test]
+fn test_ddengine_6() {
     let rules6 = "
         TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
     ";
 
+    let (domain, mut session) = create_session(rules6, model1);
+}
+
+#[test]
+fn test_ddengine_6x() {
     let rules6x = "
         TwoEdge(x, y) :- x is Edge(_, _), y is Edge(_, _).
     ";
 
+    let (domain, mut session) = create_session(rules6x, model1);
+}
+
+#[test]
+fn test_ddengine_7() {
     let rules7 = "
         TwoEdge(x, x, square) :- x is Edge(c, d), 
                                  aggr = count({Edge(a, a), b | Edge(a, b)}), 
-                                 square = aggr * aggr, aggr * 2 > 16 .
+                                 square = aggr * aggr, aggr * 2 = 20 .
     ";
 
+    let (domain, mut session) = create_session(rules7, model1);
+
+    let edge45 = session.parse_term_str("Edge(Node(4), Node(5))").unwrap();
+    let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
+
+    session.add_terms(vec![edge45, edge56]);
+}
+
+#[test]
+fn test_ddengine_8() {
     let rules8 = "
         Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).
     ";
 
+    let (domain, mut session) = create_session(rules8, model1);
+}
+
+#[test]
+fn test_ddengine_8x() {
     let rules8x = "
         Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).
     ";
 
+    let (domain, mut session) = create_session(rules8x, model1);
+}
+
+//#[test]
+// TODO: Fix the constraint classification in rule.
+fn test_ddengine_9() {
+    // Let's try a nested aggregation.
+    let rules9 = "
+    TwoEdge(x, x, num) :- x is Edge(c, d), aggr1 = count({ n | n is Node(_), aggr2 = count({ x | x is Edge(a, b) }) }), num = aggr1 * 100 .
+    ";
+
+    let (domain, mut session) = create_session(rules9, model1);
 }
 
 
 #[test]
 fn test_ddengine_on_social_network() {
-    //let content = std::env::current_dir();
     let path = Path::new("./tests/samples/SocialNetwork.4ml");
     let content = fs::read_to_string(path).unwrap();
     
 
     let mut engine = DDEngine::new();
+    engine.inspect = true;
 
     // Parse string and install program in the engine.
     let env = DDEngine::parse_string(content);
