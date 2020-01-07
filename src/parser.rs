@@ -729,12 +729,14 @@ named!(arith_op<&str, ArithmeticOp>,
 );
 
 named!(setcompre_op<&str, SetCompreOp>,
-    map!(alt!(tag!("count") | tag!("sum") | tag!("minAll") | tag!("maxAll")), |x| {
+    map!(alt!(tag!("count") | tag!("sum") | tag!("minAll") | tag!("maxAll") | tag!("topK") | tag!("bottomK")), |x| {
         match x {
             "count" => SetCompreOp::Count,
             "sum" => SetCompreOp::Sum,
             "minAll" => SetCompreOp::MinAll,
-            _ => SetCompreOp::MaxAll,
+            "maxAll" => SetCompreOp::MaxAll,
+            "topK" => SetCompreOp::TopK,
+            _ => SetCompreOp::BottomK,
         }
     })
 );

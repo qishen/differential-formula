@@ -5,12 +5,14 @@ extern crate serde;
 
 use std::iter::*;
 use std::vec::Vec;
-use std::collections::{HashMap, HashSet};
+use std::collections::*;
 use std::convert::TryInto;
 use std::string::String;
+use std::cmp::Reverse;
 
 use num::*;
 use im::OrdMap;
+use num_iter::range;
 
 use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
@@ -470,6 +472,7 @@ impl DDEngine {
             .map(move |(_, (outer, inner))| { (outer, inner) });
         
         setcompre_var = var.clone();
+        setcompre_default = setcompre.default.clone();
         let binding_and_aggregation_stream = production_stream 
             .filter(|(outer, inner)| {
                 /*
@@ -499,7 +502,7 @@ impl DDEngine {
                         for (term, count) in terms {
                             num += count.clone() as i64;
                         }                        
-                        output.push((num, 1));
+                        output.push((vec![num], 1));
                     },
                     SetCompreOp::Sum => {
                         let mut sum = BigInt::from_i64(0).unwrap();
@@ -510,7 +513,7 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((sum, 1));
+                        output.push((vec![sum], 1));
                     },
                     SetCompreOp::MaxAll => {
                         let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
@@ -521,9 +524,9 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((max, 1));
+                        output.push((vec![max], 1));
                     },
-                    _ => {
+                    SetCompreOp::MinAll => {
                         let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                         for (term, count) in terms {
                             let atom: Atom = term.clone().clone().try_into().unwrap();
@@ -532,18 +535,68 @@ impl DDEngine {
                                 _ => {},
                             };
                         }
-                        output.push((min, 1));
+                        output.push((vec![min], 1));
                     },
+                    SetCompreOp::TopK => {
+                        let k = setcompre_default.clone();
+                        let mut max_heap = BinaryHeap::new();
+                        for (term, count) in terms {
+                            let atom: Atom = term.clone().clone().try_into().unwrap();
+                            match atom {
+                                Atom::Int(i) => { 
+                                    max_heap.push(i);
+                                },
+                                _ => {},
+                            };
+                        }
+
+                        let mut topk = vec![];
+                        for i in num_iter::range(BigInt::zero(), k) {
+                            if !max_heap.is_empty() {
+                                topk.push(max_heap.pop().unwrap());
+                            }
+                        }
+
+                        output.push((topk, 1));
+                    },
+                    _ => {
+                        let k = setcompre_default.clone();
+                        let mut min_heap = BinaryHeap::new();
+                        for (term, count) in terms {
+                            let atom: Atom = term.clone().clone().try_into().unwrap();
+                            match atom {
+                                Atom::Int(i) => { 
+                                    min_heap.push(Reverse(i));
+                                },
+                                _ => {},
+                            };
+                        }
+
+                        let mut bottomk = vec![];
+                        for i in num_iter::range(BigInt::zero(), k) {
+                            if !min_heap.is_empty() {
+                                let r = min_heap.pop().unwrap().0;
+                                bottomk.push(r);
+                            }
+                        }
+
+                        output.push((bottomk, 1));
+                    }
                 };
 
             });
-            
+        
+        // The stream of bindings that does contribution to the aggregation result.
         let remained_binding_after_aggregation = binding_and_aggregation_stream.map(|(x, aggregation)| { x });
         let binding_with_aggregation_stream = binding_and_aggregation_stream
-            .map(move |(mut binding, num)| {
-                let num_term: Term = Atom::Int(num).into();
+            .map(move |(mut binding, nums)| {
+                // Take the first element in num list when operator is count, sum, maxAll, minAll.
+                let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
                 binding.insert(setcompre_var.clone(), num_term);
                 binding
+
+                // When operator is topk or bottomk.
+                // TODO: return a list of numeric values but how?
             });
 
         setcompre_var = var.clone();
@@ -611,8 +664,10 @@ impl DDEngine {
             for (i, stratum) in stratified_rules.into_iter().enumerate() {
                 // Rules to be executed are from the same stratum and independent from each other.
                 for rule in stratum.iter() {
-                    println!("Stratum {}: {}", i, rule);
-
+                    if self.inspect {
+                        println!("Stratum {}: {}", i, rule);
+                    }
+                    
                     let models_after_rule_execution = self.dataflow_from_single_rule(
                         &new_models, 
                         rule

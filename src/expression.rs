@@ -43,6 +43,8 @@ pub enum SetCompreOp {
     Count,
     MinAll,
     MaxAll,
+    TopK,
+    BottomK,
 }
 
 impl Display for SetCompreOp {
@@ -52,6 +54,8 @@ impl Display for SetCompreOp {
             SetCompreOp::Count => { "count" },
             SetCompreOp::MinAll => { "minAll" },
             SetCompreOp::MaxAll => { "maxAll" },
+            SetCompreOp::TopK => { "topK" },
+            SetCompreOp::BottomK => { "bottomK" },
         };
 
         write!(f, "{}", op_str)
