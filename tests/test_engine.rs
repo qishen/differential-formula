@@ -175,6 +175,22 @@ fn test_ddengine_7() {
 }
 
 #[test]
+fn test_ddengine_7x() {
+    let rules7x = "
+        Node(num) :- x is Node(_), num = aggr + 100, aggr = maxAll(1000, { k | Edge(_, Node(k)) }).
+    ";
+
+    let (domain, mut session) = create_session(rules7x, model1);
+
+    let edge34 = session.parse_term_str("Edge(Node(3), Node(4))").unwrap();
+    let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
+
+    session.add_term(edge56.clone());
+
+    session.remove_terms(vec![edge34, edge56]);
+}
+
+#[test]
 fn test_ddengine_8() {
     let rules8 = "
         Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).
@@ -202,6 +218,8 @@ fn test_ddengine_9() {
 
     let (domain, mut session) = create_session(rules9, model1);
 }
+
+
 
 
 #[test]
