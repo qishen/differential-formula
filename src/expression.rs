@@ -3,6 +3,7 @@ extern crate rand;
 extern crate timely;
 extern crate differential_dataflow;
 
+use std::borrow::*;
 use std::iter::*;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -138,7 +139,7 @@ pub enum BaseExpr {
 // TODO: put them separately into methods in the BaseExprBehavior trait.
 impl ExprBehavior for BaseExpr {
     fn variables(&self) -> HashSet<Term> {
-        let mut term_set: HashSet<Term> = HashSet::new();
+        let mut term_set = HashSet::new();
         match self {
             BaseExpr::SetComprehension(setcompre) => {
                 // Turn it into a rule and find all rule variables.
@@ -149,8 +150,7 @@ impl ExprBehavior for BaseExpr {
             BaseExpr::Term(term) => {
                 match term {
                     Term::Variable(v) => {
-                        let var_term: Term = v.clone().into();
-                        term_set.insert(var_term);
+                        term_set.insert(term.clone());
                     },
                     _ => {},
                 }
@@ -182,7 +182,12 @@ impl ExprBehavior for BaseExpr {
         setcompres
     }
 
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term> {
+    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    where 
+        T: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>, 
+    {
         match self {
             BaseExpr::Term(term) => {
                 match term {
@@ -197,15 +202,16 @@ impl ExprBehavior for BaseExpr {
                     },
                     Term::Variable(variable) => {
                         // The expression is a variable and find the value in hash map by that variable
-                        let root_var = term.root_var();
+                        let root_var = term.root();
                         let val_term = match &root_var == term {
                             true => { 
-                                binding.get(term).unwrap().clone() 
+                                binding.get(term).unwrap().borrow().clone() 
                             },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
-                                let val_term = binding.get(&root_var).unwrap();
-                                let val_subterm = val_term.get_subterm_by_labels(&variable.fragments).unwrap();
+                                let val_term = binding.get(&root_var).unwrap().borrow();
+                                let val_subterm = val_term.find_subterm(term).unwrap().clone();
+                                //let val_subterm = val_term.get_subterm_by_labels(&variable.fragments).unwrap();
                                 val_subterm
                             }
                         };
@@ -274,7 +280,12 @@ impl ExprBehavior for ArithExpr {
         list
     }
 
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term> {
+    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    where 
+        T: GenericMap<K, V>, 
+        K: Borrow<Term>,
+        V: Borrow<Term>,
+    {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
         let result = match self.op {
@@ -294,7 +305,12 @@ pub trait ExprBehavior {
     fn variables(&self) -> HashSet<Term>;
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> where T: GenericMap<Term, Term>; 
+    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    where 
+        T: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>,
+    ; 
 }
 
 #[enum_dispatch]

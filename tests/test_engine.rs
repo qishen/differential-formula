@@ -220,6 +220,14 @@ fn test_ddengine_9() {
 }
 
 
+#[test]
+fn test_ddengine_10() {
+    let rules10 = "
+    Node(num) :- num = aggr * 1000, aggr = count({Edge(a, a), b | Edge(a, b)}).
+    ";
+
+    let (domain, mut session) = create_session(rules10, model1);
+}
 
 
 #[test]

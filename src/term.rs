@@ -1,3 +1,4 @@
+use std::borrow::*;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
@@ -7,7 +8,7 @@ use std::fmt::{Debug, Display};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
-use im::OrdMap;
+use im::{OrdMap, OrdSet};
 use num::*;
 use serde::{Serialize, Deserialize};
 
@@ -17,14 +18,7 @@ use crate::util::GenericMap;
 
 #[enum_dispatch(Term)]
 pub trait TermBehavior {
-    fn variables(&self) -> HashSet<Term>;
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool where T: GenericMap<Term, Term>; 
-    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>>;
-    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>>;
     fn is_groundterm(&self) -> bool;
-
-    // Use GenericMap trait to make function accept different map implementations.
-    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term;
 
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term;
@@ -32,9 +26,7 @@ pub trait TermBehavior {
     // Check if the term is a don't-care variable with variable root name as '_'.
     fn is_dc_variable(&self) -> bool; 
 
-    fn root_var(&self) -> Term;
-    fn get_subterm_by_label(&self, label: &String) -> Option<Term>;
-    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term>;
+    fn root(&self) -> Term;
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -72,12 +64,6 @@ impl Composite {
         }
     }
 
-    pub fn variables_intersection(&self, another: Composite) -> (Vec<Term>, Vec<Term>, Vec<Term>) {
-        let mut a = self.variables();
-        let mut b = another.variables();
-        Term::terms_intersection(a, b)
-    }
-
     pub fn validate(&self) -> bool {
         true
     }
@@ -85,90 +71,6 @@ impl Composite {
 }
 
 impl TermBehavior for Composite {
-    fn variables(&self) -> HashSet<Term> {
-        let mut set  = HashSet::new();
-        for arg in self.arguments.iter() {
-            let arg_vars = arg.variables();
-            for var in arg_vars.into_iter() {
-                set.insert(var);
-            }
-        }
-        set
-    }
-
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
-    where
-        T: GenericMap<Term, Term>
-    {
-        match term {
-            Term::Composite(c) => {
-                if self.sort == c.sort {
-                    for i in 0..self.arguments.len() {
-                        let x = self.arguments.get(i).unwrap().as_ref();
-                        let y = c.arguments.get(i).unwrap().as_ref();
-
-                        match x {
-                            Term::Atom(a) => {
-                                // Immediately return false if both Atom arguments are not equal.
-                                if x != y {
-                                    return false;
-                                }
-                            },
-                            _ => {
-                                // HashMap is faster than OrdMap in general.
-                                let mut sub_binding = HashMap::new();
-                                let has_binding = x.get_bindings_in_place(&mut sub_binding, &y);
-                                if has_binding {
-                                    for (k, v) in sub_binding.drain() {
-                                        // Detect a variable binding conflict and return false immediately.
-                                        if binding.contains_key(&k) {
-                                            if binding.get(&k).unwrap() != &v {
-                                                return false;
-                                            }
-                                        } else {
-                                            binding.insert(k, v);
-                                        }
-                                    }    
-                                } else {
-                                    // No binding found for current argument.
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    return false;
-                }
-            },
-            _ => {
-                return false;
-            }
-        };
-
-        true
-    }
-
-
-    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
-        let mut bindings = HashMap::new();
-        let has_binding = self.get_bindings_in_place(&mut bindings, term);
-        if has_binding {
-            Some(bindings)
-        } else {
-            None
-        }
-    }
-
-    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
-        let mut bindings = OrdMap::new();
-        let has_binding = self.get_bindings_in_place(&mut bindings, term);
-        if has_binding {
-            Some(bindings)
-        } else {
-            None
-        }
-    }
-
     fn is_groundterm(&self) -> bool {
         for arg in self.arguments.iter() {
             if !arg.is_groundterm() {
@@ -176,21 +78,6 @@ impl TermBehavior for Composite {
             }
         }
         true
-    }
-
-    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
-        let mut composite = self.clone();
-        for i in 0..composite.arguments.len() {
-            let arg = composite.arguments.get(i).unwrap();
-            if map.contains_key(arg) {
-                let replacement = map.get(arg).unwrap();
-                composite.arguments[i] = Arc::new(replacement.clone());
-            } else {
-                let term = arg.propagate_bindings(map);
-                composite.arguments[i] = Arc::new(term);
-            }
-        }
-        composite.into()
     }
 
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
@@ -218,49 +105,19 @@ impl TermBehavior for Composite {
         new_composite_term
     }
 
-    fn is_dc_variable(&self) -> bool { false }
+    fn is_dc_variable(&self) -> bool { 
+        false 
+    }
 
-    fn root_var(&self) -> Term {
+    fn root(&self) -> Term {
         self.clone().into()
-    }
-
-    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
-        let sort: CompositeType = self.sort.as_ref().clone().try_into().unwrap();
-        for (i, (label_opt, t)) in sort.arguments.iter().enumerate() {
-            match label_opt {
-                Some(l) => {
-                    if label == l {
-                        let term = self.arguments.get(i).unwrap().as_ref().clone();
-                        return Some(term);
-                    }
-                },
-                None => {},
-            }
-        }
-
-        None
-    }
-
-    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
-        let mut term: Term = self.clone().into();
-        for fragment in labels {
-            let term_opt = term.get_subterm_by_label(fragment);
-            match term_opt {
-                None => { return None; },
-                Some(t) => { 
-                    term = t; 
-                }
-            }
-        }
-
-        Some(term)
     }
 }
 
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Variable {
-    pub var: String,
+    pub root: String,
     pub fragments: Vec<String>
 }
 
@@ -270,16 +127,14 @@ impl Display for Variable {
         if self.fragments.len() > 0 {
             rest = ".".to_string() + &rest[..]; 
         }
-        write!(f, "{}{}", self.var, rest)
+        write!(f, "{}{}", self.root, rest)
     }
 }
 
-//impl Abomonation for Variable {}
-
 impl Variable {
-    pub fn new(var: String, fragments: Vec<String>) -> Self {
+    pub fn new(root: String, fragments: Vec<String>) -> Self {
         Variable {
-            var,
+            root,
             fragments,
         }
     }
@@ -288,7 +143,7 @@ impl Variable {
         let av: Variable = a.clone().try_into().unwrap();
         let bv: Variable = b.clone().try_into().unwrap();
         // Root vars have to be equal and b has longer fragments than a or same length.
-        if av.var != bv.var || av.fragments.len() > bv.fragments.len() {
+        if av.root != bv.root || av.fragments.len() > bv.fragments.len() {
             None
         }
         else {
@@ -306,56 +161,8 @@ impl Variable {
 
 
 impl TermBehavior for Variable {
-    fn variables(&self) -> HashSet<Term> {
-        let mut set = HashSet::new();
-        if !self.is_dc_variable() {
-            set.insert(self.clone().into());
-        }
-
-        set
-    }
-
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
-    where T: GenericMap<Term, Term>
-    {
-        // Skip the variable if it is an underscore but still return true for empty map.
-        if !self.is_dc_variable() {
-            binding.insert(self.clone().into(), term.clone());
-        }
-        true
-    } 
-
-    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
-        let mut map = HashMap::new();
-        // Don't need to check if binding exists because it's always true.
-        self.get_bindings_in_place(&mut map, term);
-        Some(map)
-    }
-
-    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
-        let mut map = OrdMap::new();
-        // Don't need to check if binding exists because it's always true.
-        self.get_bindings_in_place(&mut map, term);
-        Some(map)
-    }
-
     fn is_groundterm(&self) -> bool {
         false
-    }
-
-    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
-        let root = self.root_var();
-        let vterm: Term = self.clone().into();
-        if map.contains_key(&vterm) {
-            // Fina an exact match in hash map and return its value.
-            map.get(&vterm).unwrap().clone()
-        } else if map.contains_key(&root) {
-            // Dig into the root term to find the subterm by labels. 
-            map.get(&root).unwrap().get_subterm_by_labels(&self.fragments).unwrap()
-        } else {
-            // No match and just return variable itself.
-            vterm
-        }
     }
 
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
@@ -364,21 +171,12 @@ impl TermBehavior for Variable {
     }
 
     fn is_dc_variable(&self) -> bool {
-        if self.var == "_" { true }
+        if self.root == "_" { true }
         else { false }
     }
 
-    fn root_var(&self) -> Term {
-        Variable::new(self.var.clone(), vec![]).into()
-    }
-
-
-    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
-        None
-    }
-
-    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
-        None
+    fn root(&self) -> Term {
+        Variable::new(self.root.clone(), vec![]).into()
     }
 }
 
@@ -392,7 +190,6 @@ pub enum Atom {
     Float(BigRational),
 }
 
-//impl Abomonation for Atom {}
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -408,49 +205,19 @@ impl Display for Atom {
 
 
 impl TermBehavior for Atom {
-    fn variables(&self) -> HashSet<Term> {
-        HashSet::new()
-    }
-
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool
-    where T: GenericMap<Term, Term>
-    {
-        false
-    }
-
-    fn get_bindings(&self, term: &Term) -> Option<HashMap<Term, Term>> {
-        None
-    }
-
-    fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Term, Term>> {
-        None
-    }
-
     fn is_groundterm(&self) -> bool {
         true
     }
 
-    fn propagate_bindings<T: GenericMap<Term, Term>>(&self, map: &T) -> Term {
-        self.clone().into()
-    }
-
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
-        // Won't have matching for atom term, so return a cloned copy of atom term.
+        // Won't have matching for atom term, return a cloned copy of atom term.
         self.clone().into()
     }
 
     fn is_dc_variable(&self) -> bool { false }
 
-    fn root_var(&self) -> Term {
+    fn root(&self) -> Term {
         self.clone().into()
-    }
-
-    fn get_subterm_by_label(&self, label: &String) -> Option<Term> {
-        None
-    }
-
-    fn get_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
-        None
     }
 }
 
@@ -462,8 +229,6 @@ pub enum Term {
     Atom
 }
 
-
-//impl Abomonation for Term {}
 
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -490,52 +255,79 @@ impl Debug for Term {
 
 
 impl Term {
-    pub fn terms_intersection(mut a: HashSet<Term>, mut b: HashSet<Term>) -> (Vec<Term>, Vec<Term>, Vec<Term>) {
-        let mut intersection = Vec::new();
-        let mut av = Vec::new();
-        let mut bv = Vec::new();
-
-        for term in a.drain() {
-            if b.contains(&term) {
-                b.remove(&term);
-                intersection.push(term);
-            } else {
-                av.push(term);
-            }
+    pub fn variables(&self) -> HashSet<&Term> {
+        let mut set  = HashSet::new();
+        match self {
+            Term::Composite(c) => {
+                for arg in c.arguments.iter() {
+                    set.extend(arg.variables());
+                }
+            },
+            Term::Variable(v) => {
+                if !v.is_dc_variable() {
+                    set.insert(self);
+                }
+            },
+            _ => {}
         }
 
-        for term in b.drain() {
-            bv.push(term);
+        set
+    }
+
+    /// A static function that computes the intersection of two ordered sets.
+    /// lifetimes are specified to make sure two inputs live long enough since outputs rely on the references
+    /// of both inputs.
+    pub fn two_sets_intersection(a: OrdSet<Term>, b: OrdSet<Term>) 
+    -> (OrdSet<Term>, OrdSet<Term>, OrdSet<Term>)
+    {
+        let mut middle = OrdSet::new();
+        let mut left = a.clone();
+        let mut right = b.clone();
+        // Save the intersection and remove intersection from both sets and keep the leftovers.
+        for overlap_var in a.intersection(b) {
+            middle.insert(overlap_var.clone());
+            left.remove(&overlap_var);
+            right.remove(&overlap_var);
         }
 
-        av.sort();
-        intersection.sort();
-        bv.sort();
+        (left, middle, right)
+    }
+    
+    /// Compare the variables in two terms and find the intersection part.
+    pub fn intersect(&self, other: &Term) -> (OrdSet<Term>, OrdSet<Term>, OrdSet<Term>) {
+        let vars = self.variables();
+        let other_vars = self.variables();
 
-        (av, intersection, bv)
+        Term::two_sets_intersection(
+            OrdSet::from(vars).into_iter().map(|x| x.clone()).collect(), 
+            OrdSet::from(other_vars).into_iter().map(|x| x.clone()).collect(),
+        )
     }
 
     // Check if two binding map has conflits in variable mappings.
-    pub fn has_conflit<T>(outer: &T, inner: &T) -> bool 
-    where T: GenericMap<Term, Term>
+    pub fn has_conflit<T, K, V>(outer: &T, inner: &T) -> bool 
+    where 
+        T: GenericMap<K, V>,
+        K: Borrow<Term> ,
+        V: Borrow<Term>,
     {
         // Filter out conflict binding tuple of outer and inner scope.
         for inner_key in inner.keys() {
-            let var: Variable = inner_key.clone().try_into().unwrap();
-            let key_root = inner_key.root_var();
-            let inner_val = inner.get(inner_key).unwrap();
-            if outer.contains_key(inner_key) {
-                let outer_val = outer.get(inner_key).unwrap();
+            let key_root = inner_key.borrow().root();
+            let inner_val = inner.get(inner_key.borrow()).unwrap().borrow();
+            if outer.contains_key(inner_key.borrow()) {
+                let outer_val = outer.get(inner_key.borrow()).unwrap().borrow();
                 if inner_val != outer_val {
                     return true;
                 }
             }
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
             else if outer.contains_key(&key_root) {
-                let labels = Variable::fragments_diff(&key_root, inner_key).unwrap();
-                let outer_val = outer.get(&key_root).unwrap();
-                let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
-                if inner_val != &outer_sub_val {
+                //let labels = Variable::fragments_diff(&key_root, inner_key.borrow()).unwrap();
+                let outer_val = outer.get(&key_root).unwrap().borrow();
+                let outer_sub_val = outer_val.find_subterm(inner_key).unwrap();
+                //let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
+                if inner_val != outer_sub_val {
                     return true;
                 }
             }
@@ -543,6 +335,164 @@ impl Term {
 
         false
     }
+
+    pub fn get_bindings(&self, term: &Term) -> Option<HashMap<Arc<Term>, Arc<Term>>> {
+        let mut bindings = HashMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding {
+            Some(bindings)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Arc<Term>, Arc<Term>>> {
+        let mut bindings= OrdMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding {
+            Some(bindings)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
+    where T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        match self {
+            Term::Atom(a) => {
+                false // Not even legal to match atom term to another one.
+            },
+            Term::Variable(v) => {
+                // Skip the variable if it is an underscore but still return true for empty map.
+                if !self.is_dc_variable() {
+                    binding.insert(Arc::new(self.clone()), Arc::new(term.clone()));
+                }
+                true
+            },
+            Term::Composite(selfc) => {
+                match term {
+                    Term::Composite(c) => {
+                        if selfc.sort == c.sort {
+                            for i in 0..selfc.arguments.len() {
+                                let x = selfc.arguments.get(i).unwrap().as_ref();
+                                let y = c.arguments.get(i).unwrap().as_ref();
+        
+                                match x {
+                                    Term::Atom(a) => {
+                                        // Immediately return false if both Atom arguments are not equal.
+                                        if x != y {
+                                            return false;
+                                        }
+                                    },
+                                    _ => {
+                                        // HashMap is faster than OrdMap in general.
+                                        let mut sub_binding = HashMap::new();
+                                        let has_binding = x.get_bindings_in_place(&mut sub_binding, &y);
+                                        if has_binding {
+                                            for (k, v) in sub_binding.drain() {
+                                                // Detect a variable binding conflict and return false immediately.
+                                                if binding.contains_key(&k) {
+                                                    if binding.get(&k).unwrap() != &v {
+                                                        return false;
+                                                    }
+                                                } else {
+                                                    binding.insert(k, v);
+                                                }
+                                            }    
+                                        } else {
+                                            // No binding found for current argument.
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            return false;
+                        }
+                    },
+                    _ => {
+                        return false;
+                    }
+                };
+        
+                true
+            },
+        }
+        
+    } 
+
+    /// Propagate the binding to a term and return a new term. The map must implement
+    /// GenericMap with the type of its value restricted to Arc<Term>.
+    pub fn propagate_bindings<T, K, V>(&self, map: &T) -> Term 
+    where 
+        T: GenericMap<K, V>,
+        K: Borrow<Term>, 
+        V: Borrow<Term>,
+    {
+        let new_term = match self {
+            Term::Composite(c) => {
+                let mut composite = c.clone();
+
+                for i in 0..composite.arguments.len() {
+                    let arg = composite.arguments.get(i).unwrap();
+                    if map.contains_key(arg) {
+                        match map.get(arg).unwrap() {
+                            Arc => {},
+                            _ => {},
+                        };
+                        let replacement = map.get(arg).unwrap().borrow(); 
+                        // TODO: A deep copy occurs here since we don't know the type of V.   
+                        composite.arguments[i] = Arc::new(replacement.clone());
+                    } else {
+                        let term = arg.propagate_bindings(map);
+                        composite.arguments[i] = Arc::new(term);
+                    }
+                }
+
+                composite.into()
+            },
+            Term::Variable(v) => {
+                let root = self.root();
+                if map.contains_key(self) {
+                    // Find an exact match in hash map and return its value cloned.
+                    map.get(self).unwrap().borrow().clone()
+                } else if map.contains_key(&root) {
+                    // Dig into the root term to find the subterm by labels. 
+                    let root_term = map.get(&root).unwrap().borrow();
+                    root_term.find_subterm(self).unwrap().clone()
+                } else {
+                    // No match and just return variable itself.
+                    self.clone()
+                }
+            },
+            Term::Atom(a) => {
+                self.clone().into()
+            }
+        };
+
+        new_term
+    }
+
+    /// Find the subterm of a composite term when given a variable term with fragments.
+    pub fn find_subterm<T>(&self, term: &T) -> Option<&Term> 
+    where 
+        T: Borrow<Term>,
+    {
+        // Only apply to composite term and param must be a variable term.
+        match self {
+            Term::Composite(c) => {
+                match term.borrow() {
+                    Term::Variable(v) => {
+                        c.sort.find_subterm(self, &v.fragments)
+                    },
+                    _ => { None }
+                }
+            },
+            _ => { None }
+        }
+    }
+    
 }
 
 #[macro_export]

@@ -1,8 +1,8 @@
+use std::borrow::*;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
 use std::convert::TryInto;
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::string::String;
 
@@ -23,6 +23,45 @@ pub enum Type {
     Undefined
 }
 
+impl Type {
+    pub fn find_subterm<'a, T>(&self, term: &'a T, labels: &Vec<String>) -> Option<&'a Term> 
+    where T: Borrow<Term>,
+    {
+        match self {
+            Type::CompositeType(ctype) => {
+                let aggregated_term = labels.iter().fold(Some(term.borrow()), |subterm_opt, label| {
+                    match subterm_opt {
+                        Some(subterm) => {
+                            // Find the first match or return None when none of them are matched.
+                            ctype.arguments.iter().enumerate().find_map(|(i, (l_opt, t))| {
+                                match l_opt {
+                                    Some(l) => {
+                                        if label == l {
+                                            match subterm {
+                                                Term::Composite(cterm) => {
+                                                    let cterm_arc = cterm.arguments.get(i).unwrap().clone();
+                                                    Some(cterm_arc.as_ref())
+                                                },
+                                                _ => { None }
+                                            }
+                                        }
+                                        else { None }
+                                    },
+                                    None => { None },
+                                }
+                            })
+                        },
+                        None => { None }
+                    }
+                });
+
+                aggregated_term
+            },
+            // Only apply to composite type.
+            _ => { None }
+        }
+    }
+}
 
 #[enum_dispatch(Type)]
 pub trait TypeBehavior {
@@ -148,7 +187,7 @@ impl Model {
         let mut reverse_alias_map = HashMap::new();
         for key in alias_map.keys() {
             let variable: Variable = key.clone().try_into().unwrap();
-            let var_str = variable.var;
+            let var_str = variable.root;
             
             /* 
             Clone each entry in the alias map to create reverse alias map mapping composite term to 

@@ -135,7 +135,7 @@ impl Rule {
 
         for var in all_vars.into_iter() {
             // var cannot have fragments as a derived variable.
-            if !matched_vars.contains(&var) && var == var.root_var() {
+            if !matched_vars.contains(&var) && var == var.root() {
                 diff_vars.insert(var);
             }
         }

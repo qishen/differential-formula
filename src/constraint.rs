@@ -4,6 +4,7 @@ extern crate differential_dataflow;
 extern crate abomonation_derive;
 extern crate abomonation;
 
+use std::borrow::Borrow;
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
@@ -49,10 +50,7 @@ impl Display for Predicate {
 impl ConstraintBehavior for Predicate {
     fn variables(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
-        let vars = self.term.variables();
-        for var in vars.into_iter() {
-            var_set.insert(var);
-        }
+        var_set.extend(self.term.variables().into_iter().map(|x| x.clone()));
         
         if self.alias != None {
             var_set.insert(self.alias.clone().unwrap());
@@ -163,7 +161,12 @@ impl Binary {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
-    pub fn evaluate<T>(&self, binding: &T) -> Option<bool> where T: GenericMap<Term, Term> {
+    pub fn evaluate<T, K, V>(&self, binding: &T) -> Option<bool> 
+    where 
+        T: GenericMap<K, V>, 
+        K: Borrow<Term>,
+        V: Borrow<Term>,
+    {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 
             return None; 
