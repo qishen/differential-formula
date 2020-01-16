@@ -39,8 +39,9 @@ impl Type {
                                         if label == l {
                                             match subterm {
                                                 Term::Composite(cterm) => {
-                                                    let cterm_arc = cterm.arguments.get(i).unwrap().clone();
-                                                    Some(cterm_arc.as_ref())
+                                                    let cterm_arc = cterm.arguments.get(i).unwrap();
+                                                    // Impl Borrow<Q> where Q is infered as Term for Arc<Term> exists. 
+                                                    Some(cterm_arc.borrow())
                                                 },
                                                 _ => { None }
                                             }

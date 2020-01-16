@@ -13,19 +13,19 @@ it's user's responsibility to define what is a generic map and what functions sh
 since different users have different needs for generic map interface. Zhong Kou Nan Tiao.
 */
 pub trait GenericMap<K, V> {
-    fn keys(&self) -> Vec<&K>;
+    fn gkeys(&self) -> Vec<&K>;
 
-    fn contains_key<Q>(&self, k: &Q) -> bool 
+    fn contains_gkey<Q>(&self, k: &Q) -> bool 
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord;
 
-    fn get<Q>(&self, k: &Q) -> Option<&V>
+    fn gget<Q>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord;
 
-    fn insert(&mut self, k: K, v: V) -> Option<V>;
+    fn ginsert(&mut self, k: K, v: V) -> Option<V>;
 }
 
 impl<K, V> GenericMap<K, V> for HashMap<K, V>
@@ -33,7 +33,7 @@ where
     K: Eq + Hash + Ord + Clone,
     V: Clone,
 {
-    fn keys(&self) -> Vec<&K> {
+    fn gkeys(&self) -> Vec<&K> {
         let mut list = vec![];
         let keys = HashMap::keys(self);
         for key in keys {
@@ -42,7 +42,7 @@ where
         list
     }
 
-    fn contains_key<Q>(&self, k: &Q) -> bool
+    fn contains_gkey<Q>(&self, k: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord,
@@ -50,7 +50,7 @@ where
         HashMap::contains_key(self, k)
     }
 
-    fn get<Q>(&self, k: &Q) -> Option<&V>
+    fn gget<Q>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord,
@@ -58,7 +58,7 @@ where
         HashMap::get(self, k)
     }
 
-    fn insert(&mut self, k: K, v: V) -> Option<V> {
+    fn ginsert(&mut self, k: K, v: V) -> Option<V> {
         HashMap::insert(self, k, v)
     }
 }
@@ -68,7 +68,7 @@ where
     K: Eq + Hash + Ord + Clone,
     V: Clone,
 {
-    fn keys(&self) -> Vec<&K> {
+    fn gkeys(&self) -> Vec<&K> {
         let mut list = vec![];
         let keys = OrdMap::keys(self);
         for key in keys {
@@ -77,7 +77,7 @@ where
         list
     }
 
-    fn contains_key<Q>(&self, k: &Q) -> bool
+    fn contains_gkey<Q>(&self, k: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord,
@@ -85,7 +85,7 @@ where
         OrdMap::contains_key(self, k)
     }
 
-    fn get<Q>(&self, k: &Q) -> Option<&V>
+    fn gget<Q>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + Ord,
@@ -93,7 +93,7 @@ where
         OrdMap::get(self, k)
     }
 
-    fn insert(&mut self, k: K, v: V) -> Option<V> 
+    fn ginsert(&mut self, k: K, v: V) -> Option<V> 
     where
     {
         OrdMap::insert(self, k, v)

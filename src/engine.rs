@@ -30,6 +30,7 @@ use crate::expression::*;
 use crate::rule::*;
 use crate::type_system::*;
 use crate::parser::*;
+use crate::util::GenericMap;
 
 
 
@@ -228,7 +229,7 @@ impl DDEngine {
                 let mut binding = binding_opt.unwrap();
                 if let Some(vterm) = &pred_alias {
                     //binding.insert(vterm, &term);
-                    binding.insert(Arc::new(vterm.clone()), Arc::new(term));
+                    binding.ginsert(Arc::new(vterm.clone()), Arc::new(term));
                 }
 
                 binding
@@ -387,17 +388,20 @@ impl DDEngine {
                     binding.extend(inter);
                     binding
                 });
-
+                    
             // Filter out binding with conflict on variables with fragments like x.y.z
             prev_collection = prev_collection.filter(|mut binding| {
-                for var in binding.keys() {
-                    let root_var = var.root();
+                for var_arc in binding.gkeys() {
+                    let root_var = var_arc.root();
                     // Check if variable has fragments and root variable exists in binding.
-                    if var.borrow() != &root_var && binding.contains_key(&root_var) {
+                    // Cannot directly use var.borrow() to compare with another term here.
+                    let var_ref: &Term = var_arc.borrow();
+                    if var_ref != &root_var && binding.contains_gkey(&root_var) {
                         // TODO: too much clones here.
-                        let root_value = binding.get(&root_var).unwrap().clone();
-                        let sub_value = root_value.find_subterm(var).unwrap();
-                        if &sub_value == binding.get(var).unwrap().borrow() { 
+                        let root_value = binding.gget(&root_var).unwrap().clone();
+                        let sub_value = root_value.find_subterm(var_ref).unwrap();
+                        let value: &Term = binding.get(var_ref).unwrap().borrow();
+                        if sub_value == value { 
                             return true; 
                         } 
                         else { 
@@ -428,7 +432,7 @@ impl DDEngine {
                     match right_base_expr {
                         BaseExpr::SetComprehension(setcompre) => {
                             prev_collection = self.dataflow_from_set_comprehension(
-                                var_term,
+                                var_term.clone(),
                                 &prev_collection, 
                                 models, 
                                 &setcompre
@@ -444,7 +448,7 @@ impl DDEngine {
                     prev_collection = prev_collection.map(move |mut binding| {
                         let num = right_base_expr.evaluate(&binding).unwrap();
                         let atom_term: Term = Atom::Int(num).into();
-                        binding.insert(Arc::new(var_term), Arc::new(atom_term));
+                        binding.insert(Arc::new(var_term.clone()), Arc::new(atom_term));
                         binding
                     });
                 }

@@ -95,8 +95,8 @@ impl TermBehavior for Composite {
         }.into();
 
         // if the raw term is matched in reverse map with a string alias, add the alias to this composite term.
-        if reverse_map.contains_key(&new_composite_term) {
-            let alias = reverse_map.get(&new_composite_term).unwrap();
+        if reverse_map.contains_gkey(&new_composite_term) {
+            let alias = reverse_map.gget(&new_composite_term).unwrap();
             let mut new_composite: Composite = new_composite_term.try_into().unwrap();
             new_composite.alias = Some(alias.clone());
             new_composite_term = new_composite.into();
@@ -312,19 +312,19 @@ impl Term {
         V: Borrow<Term>,
     {
         // Filter out conflict binding tuple of outer and inner scope.
-        for inner_key in inner.keys() {
+        for inner_key in inner.gkeys() {
             let key_root = inner_key.borrow().root();
-            let inner_val = inner.get(inner_key.borrow()).unwrap().borrow();
-            if outer.contains_key(inner_key.borrow()) {
-                let outer_val = outer.get(inner_key.borrow()).unwrap().borrow();
+            let inner_val = inner.gget(inner_key.borrow()).unwrap().borrow();
+            if outer.contains_gkey(inner_key.borrow()) {
+                let outer_val = outer.gget(inner_key.borrow()).unwrap().borrow();
                 if inner_val != outer_val {
                     return true;
                 }
             }
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
-            else if outer.contains_key(&key_root) {
+            else if outer.contains_gkey(&key_root) {
                 //let labels = Variable::fragments_diff(&key_root, inner_key.borrow()).unwrap();
-                let outer_val = outer.get(&key_root).unwrap().borrow();
+                let outer_val = outer.gget(&key_root).unwrap().borrow();
                 let outer_sub_val = outer_val.find_subterm(inner_key).unwrap();
                 //let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
                 if inner_val != outer_sub_val {
@@ -366,7 +366,7 @@ impl Term {
             Term::Variable(v) => {
                 // Skip the variable if it is an underscore but still return true for empty map.
                 if !self.is_dc_variable() {
-                    binding.insert(Arc::new(self.clone()), Arc::new(term.clone()));
+                    binding.ginsert(Arc::new(self.clone()), Arc::new(term.clone()));
                 }
                 true
             },
@@ -392,12 +392,12 @@ impl Term {
                                         if has_binding {
                                             for (k, v) in sub_binding.drain() {
                                                 // Detect a variable binding conflict and return false immediately.
-                                                if binding.contains_key(&k) {
-                                                    if binding.get(&k).unwrap() != &v {
+                                                if binding.contains_gkey(&k) {
+                                                    if binding.gget(&k).unwrap() != &v {
                                                         return false;
                                                     }
                                                 } else {
-                                                    binding.insert(k, v);
+                                                    binding.ginsert(k, v);
                                                 }
                                             }    
                                         } else {
@@ -436,12 +436,12 @@ impl Term {
 
                 for i in 0..composite.arguments.len() {
                     let arg = composite.arguments.get(i).unwrap();
-                    if map.contains_key(arg) {
-                        match map.get(arg).unwrap() {
+                    if map.contains_gkey(arg) {
+                        match map.gget(arg).unwrap() {
                             Arc => {},
                             _ => {},
                         };
-                        let replacement = map.get(arg).unwrap().borrow(); 
+                        let replacement = map.gget(arg).unwrap().borrow(); 
                         // TODO: A deep copy occurs here since we don't know the type of V.   
                         composite.arguments[i] = Arc::new(replacement.clone());
                     } else {
@@ -454,12 +454,12 @@ impl Term {
             },
             Term::Variable(v) => {
                 let root = self.root();
-                if map.contains_key(self) {
+                if map.contains_gkey(self) {
                     // Find an exact match in hash map and return its value cloned.
-                    map.get(self).unwrap().borrow().clone()
-                } else if map.contains_key(&root) {
+                    map.gget(self).unwrap().borrow().clone()
+                } else if map.contains_gkey(&root) {
                     // Dig into the root term to find the subterm by labels. 
-                    let root_term = map.get(&root).unwrap().borrow();
+                    let root_term = map.gget(&root).unwrap().borrow();
                     root_term.find_subterm(self).unwrap().clone()
                 } else {
                     // No match and just return variable itself.

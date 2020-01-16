@@ -205,11 +205,11 @@ impl ExprBehavior for BaseExpr {
                         let root_var = term.root();
                         let val_term = match &root_var == term {
                             true => { 
-                                binding.get(term).unwrap().borrow().clone() 
+                                binding.gget(term).unwrap().borrow().clone() 
                             },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
-                                let val_term = binding.get(&root_var).unwrap().borrow();
+                                let val_term = binding.gget(&root_var).unwrap().borrow();
                                 let val_subterm = val_term.find_subterm(term).unwrap().clone();
                                 //let val_subterm = val_term.get_subterm_by_labels(&variable.fragments).unwrap();
                                 val_subterm
