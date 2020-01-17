@@ -7,6 +7,7 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::string::String;
 
+use derivative::*;
 use enum_dispatch::enum_dispatch;
 use im::{OrdMap, OrdSet};
 use num::*;
@@ -22,18 +23,25 @@ pub trait TermBehavior {
 
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term;
-
-    fn root(&self) -> Term;
 }
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+
+// Ignore alias field when calculate hash and compare equality.
+#[derive(Derivative)]
+#[derivative(Hash)]
+#[derivative(PartialEq)]
+#[derivative(Eq)]
+//#[derivative(PartialOrd)]
+//#[derivative(Ord)]
+#[derive(Debug, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Composite {
     pub sort: Arc<Type>,
     pub arguments: Vec<Arc<Term>>,
+    #[derivative(Hash="ignore")]
+    #[derivative(PartialEq="ignore")]
+    //#[derivative(Eq="ignore")]
     pub alias: Option<String>
 }
-
-//impl Abomonation for Composite {}
 
 impl Display for Composite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -101,17 +109,14 @@ impl TermBehavior for Composite {
 
         new_composite_term
     }
-
-    fn root(&self) -> Term {
-        self.clone().into()
-    }
 }
 
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Variable {
     pub root: String,
-    pub fragments: Vec<String>
+    pub fragments: Vec<String>,
+    pub base_term: Option<Arc<Term>>,
 }
 
 impl Display for Variable {
@@ -126,9 +131,21 @@ impl Display for Variable {
 
 impl Variable {
     pub fn new(root: String, fragments: Vec<String>) -> Self {
-        Variable {
-            root,
-            fragments,
+        if fragments.len() == 0 {
+            Variable {
+                root,
+                fragments,
+                base_term: None,
+            }
+        }
+        else {
+            // Create a base term with same root but no fragments so base term can be easily accessed later without clones.
+            let base_term: Term = Variable::new(root.clone(), vec![]).into();
+            Variable {
+                root,
+                fragments,
+                base_term: Some(Arc::new(base_term))
+            }
         }
     }
 
@@ -161,10 +178,6 @@ impl TermBehavior for Variable {
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
         // Won't have matching for variable term, so return a cloned copy of variable term.
         self.clone().into()
-    }
-
-    fn root(&self) -> Term {
-        Variable::new(self.root.clone(), vec![]).into()
     }
 }
 
@@ -199,10 +212,6 @@ impl TermBehavior for Atom {
 
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
         // Won't have matching for atom term, return a cloned copy of atom term.
-        self.clone().into()
-    }
-
-    fn root(&self) -> Term {
         self.clone().into()
     }
 }
@@ -241,8 +250,20 @@ impl Debug for Term {
 
 
 impl Term {
+    pub fn root(&self) -> &Term {
+        match self {
+            Term::Variable(v) => {
+                match &v.base_term {
+                    Some(boxed_term) => { boxed_term.borrow() },
+                    None => { self }
+                }
+            },
+            _ => { self }
+        }
+    }
+
     // Check if the term is a don't-care variable with variable root name as '_'.
-    fn is_dc_variable(&self) -> bool {
+    pub fn is_dc_variable(&self) -> bool {
         match self {
             Term::Variable(v) => {
                 if v.root == "_" { true }
@@ -319,9 +340,9 @@ impl Term {
                 }
             }
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
-            else if outer.contains_gkey(&key_root) {
+            else if outer.contains_gkey(key_root) {
                 //let labels = Variable::fragments_diff(&key_root, inner_key.borrow()).unwrap();
-                let outer_val = outer.gget(&key_root).unwrap().borrow();
+                let outer_val = outer.gget(key_root).unwrap().borrow();
                 let outer_sub_val = outer_val.find_subterm(inner_key).unwrap();
                 //let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
                 if inner_val != outer_sub_val {
@@ -361,7 +382,8 @@ impl Term {
         T: GenericMap<Arc<Term>, Arc<Term>>
     {
         match self {
-            _ => { false }, 
+            Term::Atom(sa) => { false }, 
+            Term::Variable(sv) => { true },
             Term::Composite(sc) => {
                 match term.borrow() {
                     Term::Composite(c) => {
@@ -372,20 +394,19 @@ impl Term {
         
                                 match x.borrow() {
                                     Term::Atom(xa) => {
-                                        // Immediately return false if both Atom arguments are not equal.
+                                        // Atom arguments need to be equal.
                                         if x != y {
                                             return false;
                                         }
                                     },
                                     Term::Variable(xv) => {
-                                        if !self.is_dc_variable() {
-                                            // Clone the atomic reference is faster than clone the whole term.
+                                        if !x.is_dc_variable() {
                                             binding.ginsert(x.clone(), y.clone());
                                         }
                                     },
                                     Term::Composite(xc) => {
                                         let mut sub_binding = HashMap::new();
-                                        let has_binding = x.get_bindings_in_place(&mut sub_binding, &y);
+                                        let has_binding = x.get_bindings_in_place(&mut sub_binding, y);
                                         if has_binding {
                                             for (k, v) in sub_binding.drain() {
                                                 // Detect a variable binding conflict and return false immediately.
@@ -434,10 +455,6 @@ impl Term {
                 for i in 0..composite.arguments.len() {
                     let arg = composite.arguments.get(i).unwrap();
                     if map.contains_gkey(arg) {
-                        match map.gget(arg).unwrap() {
-                            Arc => {},
-                            _ => {},
-                        };
                         let replacement = map.gget(arg).unwrap().borrow(); 
                         // TODO: A deep copy occurs here since we don't know the type of V.   
                         composite.arguments[i] = Arc::new(replacement.clone());
@@ -454,9 +471,9 @@ impl Term {
                 if map.contains_gkey(self) {
                     // Find an exact match in hash map and return its value cloned.
                     map.gget(self).unwrap().borrow().clone()
-                } else if map.contains_gkey(&root) {
+                } else if map.contains_gkey(root) {
                     // Dig into the root term to find the subterm by labels. 
-                    let root_term = map.gget(&root).unwrap().borrow();
+                    let root_term = map.gget(root).unwrap().borrow();
                     root_term.find_subterm(self).unwrap().clone()
                 } else {
                     // No match and just return variable itself.

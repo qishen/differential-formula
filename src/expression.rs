@@ -203,7 +203,7 @@ impl ExprBehavior for BaseExpr {
                     Term::Variable(variable) => {
                         // The expression is a variable and find the value in hash map by that variable
                         let root_var = term.root();
-                        let val_term = match &root_var == term {
+                        let val_term = match root_var == term {
                             true => { 
                                 binding.gget(term).unwrap().borrow().clone() 
                             },

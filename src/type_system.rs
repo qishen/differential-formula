@@ -183,12 +183,13 @@ impl Model {
     pub fn new(model_name: String, 
         domain_name: String, 
         models: Vec<Term>, 
-        alias_map: HashMap<Term, Term>) -> Self {
-        
+        alias_map: HashMap<Term, Term>) -> Self 
+    {
+        // Map alias-free term into its alias in string format.
         let mut reverse_alias_map = HashMap::new();
         for key in alias_map.keys() {
             let variable: Variable = key.clone().try_into().unwrap();
-            let var_str = variable.root;
+            let var_str = variable.root; // Assume it shouldn't have fragments in variable term.
             
             /* 
             Clone each entry in the alias map to create reverse alias map mapping composite term to 
@@ -208,6 +209,11 @@ impl Model {
         };
 
         model
+    }
+
+    pub fn get_term_by_name(&self, name: &str) -> &Term {
+        let var: Term = Variable::new(name.to_string(), vec![]).into();
+        self.alias_map.get(&var).unwrap()
     }
 }
 

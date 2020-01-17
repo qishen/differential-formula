@@ -397,9 +397,9 @@ impl DDEngine {
                     // Check if variable has fragments and root variable exists in binding.
                     // Cannot directly use var.borrow() to compare with another term here.
                     let var_ref: &Term = var_arc.borrow();
-                    if var_ref != &root_var && binding.contains_gkey(&root_var) {
+                    if var_ref != root_var && binding.contains_gkey(root_var) {
                         // TODO: too much clones here.
-                        let root_value = binding.gget(&root_var).unwrap().clone();
+                        let root_value = binding.gget(root_var).unwrap().clone();
                         let sub_value = root_value.find_subterm(var_ref).unwrap();
                         let value: &Term = binding.get(var_ref).unwrap().borrow();
                         if sub_value == value { 

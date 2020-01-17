@@ -15,6 +15,7 @@ use nom::character::complete::*;
 use nom::number::complete::*;
 use num::*;
 use enum_dispatch::enum_dispatch;
+use im::OrdMap;
 
 
 #[enum_dispatch(TermAst)]
@@ -491,14 +492,13 @@ named!(program<&str, Env>,
             // Get the domain that current model requires.
             let domain = domain_map.get(&model_ast.domain_name).unwrap();
             let model_name = model_ast.model_name;
+            let mut raw_alias_map = HashMap::new();
             let mut alias_map = HashMap::new();
-            let mut raw_model_store = vec![];
             let mut model_store = vec![];
 
             for term_ast in model_ast.models {
                 // Convert AST into term according to its type.
                 let term = term_ast.to_term(domain);
-                raw_model_store.push(term.clone());
                 match term.clone() {
                     Term::Composite(c) => {
                         match c.alias {
@@ -506,7 +506,7 @@ named!(program<&str, Env>,
                             Some(alias) => {
                                 // alias here shouldn't have fragments.
                                 let vterm: Term = Variable::new(alias, vec![]).into();
-                                alias_map.insert(vterm, term);
+                                raw_alias_map.insert(vterm, term);
                             }
                         }
                     },
@@ -515,10 +515,18 @@ named!(program<&str, Env>,
 
             }
 
-            // Some alias in the term are treated as variables and need to replace them with the right term.
-            for raw_term in raw_model_store {
-                let term = raw_term.propagate_bindings(&alias_map);
-                model_store.push(term);
+            /* 
+            Alias in the raw term is treated as variables and needs to be replaced with the real term.
+            Term propagations have to follow the order that n1 = Node(x) needs to be handled prior to 
+            e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
+            */
+            for key in raw_alias_map.keys() {
+                propagate_alias_map(key, &raw_alias_map, &mut alias_map);
+            }
+
+            for (key, term) in alias_map.iter() {
+                // TODO: Deep clone is bad.
+                model_store.push(term.clone());
             }
 
             let model = Model::new(model_name.clone(), model_ast.domain_name, model_store, alias_map);
@@ -532,6 +540,25 @@ named!(program<&str, Env>,
         }
     })
 );
+
+fn propagate_alias_map(
+    var: &Term, 
+    raw_alias_map: &HashMap<Term, Term>, 
+    alias_map: &mut HashMap<Term, Term>
+) 
+{
+    let raw_term = raw_alias_map.get(var).unwrap();
+    // if current term has variables inside then propagate binding to them first.
+    let raw_term_vars = raw_term.variables();
+    for raw_term_var in raw_term_vars {
+        if raw_alias_map.contains_key(raw_term_var) {
+            propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
+        }
+    }
+
+    let new_term = raw_term.propagate_bindings(alias_map);
+    alias_map.insert(var.clone(), new_term);
+}
 
 
 #[enum_dispatch(ExprAst)]
