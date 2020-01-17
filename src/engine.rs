@@ -214,8 +214,9 @@ impl DDEngine {
 
         let binding_collection = self.dataflow_filtered_by_type(terms, pred_term.clone()) 
             .map(move |term| {
-                let binding_opt = pred_term.get_ordered_bindings(&term);
-                (term, binding_opt)
+                let term_arc = Arc::new(term);
+                let binding_opt = pred_term.get_ordered_bindings(&term_arc);
+                (term_arc, binding_opt)
             })
             .filter(|(_, binding_opt)| {
                 match binding_opt {
@@ -223,13 +224,13 @@ impl DDEngine {
                     _ => true,
                 }
             })
-            .map(move |(term, binding_opt)| {
+            .map(move |(term_arc, binding_opt)| {
                 // If predicate may have alias then add itself to existing binding.
                 // TODO: what if alias variable is already in existing variables.
                 let mut binding = binding_opt.unwrap();
                 if let Some(vterm) = &pred_alias {
                     //binding.insert(vterm, &term);
-                    binding.ginsert(Arc::new(vterm.clone()), Arc::new(term));
+                    binding.ginsert(Arc::new(vterm.clone()), term_arc);
                 }
 
                 binding

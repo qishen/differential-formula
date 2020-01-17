@@ -23,9 +23,6 @@ pub trait TermBehavior {
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
     fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term;
 
-    // Check if the term is a don't-care variable with variable root name as '_'.
-    fn is_dc_variable(&self) -> bool; 
-
     fn root(&self) -> Term;
 }
 
@@ -105,10 +102,6 @@ impl TermBehavior for Composite {
         new_composite_term
     }
 
-    fn is_dc_variable(&self) -> bool { 
-        false 
-    }
-
     fn root(&self) -> Term {
         self.clone().into()
     }
@@ -170,11 +163,6 @@ impl TermBehavior for Variable {
         self.clone().into()
     }
 
-    fn is_dc_variable(&self) -> bool {
-        if self.root == "_" { true }
-        else { false }
-    }
-
     fn root(&self) -> Term {
         Variable::new(self.root.clone(), vec![]).into()
     }
@@ -213,8 +201,6 @@ impl TermBehavior for Atom {
         // Won't have matching for atom term, return a cloned copy of atom term.
         self.clone().into()
     }
-
-    fn is_dc_variable(&self) -> bool { false }
 
     fn root(&self) -> Term {
         self.clone().into()
@@ -255,6 +241,17 @@ impl Debug for Term {
 
 
 impl Term {
+    // Check if the term is a don't-care variable with variable root name as '_'.
+    fn is_dc_variable(&self) -> bool {
+        match self {
+            Term::Variable(v) => {
+                if v.root == "_" { true }
+                else { false }
+            },
+            _ => { false }
+        }
+    }
+
     pub fn variables(&self) -> HashSet<&Term> {
         let mut set  = HashSet::new();
         match self {
@@ -264,7 +261,7 @@ impl Term {
                 }
             },
             Term::Variable(v) => {
-                if !v.is_dc_variable() {
+                if !self.is_dc_variable() {
                     set.insert(self);
                 }
             },
@@ -336,7 +333,8 @@ impl Term {
         false
     }
 
-    pub fn get_bindings(&self, term: &Term) -> Option<HashMap<Arc<Term>, Arc<Term>>> {
+    /// Use HashMap to store the binding derived from term matching but the keys are not ordered.
+    pub fn get_bindings(&self, term: &Arc<Term>) -> Option<HashMap<Arc<Term>, Arc<Term>>> {
         let mut bindings = HashMap::new();
         let has_binding = self.get_bindings_in_place(&mut bindings, term);
         if has_binding {
@@ -346,7 +344,8 @@ impl Term {
         }
     }
 
-    pub fn get_ordered_bindings(&self, term: &Term) -> Option<OrdMap<Arc<Term>, Arc<Term>>> {
+    /// Use OrdMap to store the binding derived from term matching.
+    pub fn get_ordered_bindings(&self, term: &Arc<Term>) -> Option<OrdMap<Arc<Term>, Arc<Term>>> {
         let mut bindings= OrdMap::new();
         let has_binding = self.get_bindings_in_place(&mut bindings, term);
         if has_binding {
@@ -356,37 +355,35 @@ impl Term {
         }
     }
 
-    pub fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Term) -> bool 
-    where T: GenericMap<Arc<Term>, Arc<Term>>
+    /// Assume this method only called by composite term.
+    pub fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
+    where 
+        T: GenericMap<Arc<Term>, Arc<Term>>
     {
         match self {
-            Term::Atom(a) => {
-                false // Not even legal to match atom term to another one.
-            },
-            Term::Variable(v) => {
-                // Skip the variable if it is an underscore but still return true for empty map.
-                if !self.is_dc_variable() {
-                    binding.ginsert(Arc::new(self.clone()), Arc::new(term.clone()));
-                }
-                true
-            },
-            Term::Composite(selfc) => {
-                match term {
+            _ => { false }, 
+            Term::Composite(sc) => {
+                match term.borrow() {
                     Term::Composite(c) => {
-                        if selfc.sort == c.sort {
-                            for i in 0..selfc.arguments.len() {
-                                let x = selfc.arguments.get(i).unwrap().as_ref();
-                                let y = c.arguments.get(i).unwrap().as_ref();
+                        if sc.sort == c.sort {
+                            for i in 0..sc.arguments.len() {
+                                let x = sc.arguments.get(i).unwrap();
+                                let y = c.arguments.get(i).unwrap();
         
-                                match x {
-                                    Term::Atom(a) => {
+                                match x.borrow() {
+                                    Term::Atom(xa) => {
                                         // Immediately return false if both Atom arguments are not equal.
                                         if x != y {
                                             return false;
                                         }
                                     },
-                                    _ => {
-                                        // HashMap is faster than OrdMap in general.
+                                    Term::Variable(xv) => {
+                                        if !self.is_dc_variable() {
+                                            // Clone the atomic reference is faster than clone the whole term.
+                                            binding.ginsert(x.clone(), y.clone());
+                                        }
+                                    },
+                                    Term::Composite(xc) => {
                                         let mut sub_binding = HashMap::new();
                                         let has_binding = x.get_bindings_in_place(&mut sub_binding, &y);
                                         if has_binding {
