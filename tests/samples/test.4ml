@@ -1,0 +1,39 @@
+domain Test
+{
+	V ::= new (Integer).
+	Rank ::= (Integer, V).
+
+	Rank(rank, x) :- 
+		x is V, 
+		o = toOrdinal(x, -1, { y | y is V  }),
+		n = count({ y | y is V }),
+		rank = n - (o + 1).
+		
+	Biggest :- Rank(0, x).
+}
+
+model M of Test
+{
+  V(10).
+  V(11).
+  V(12).
+  V(13).
+}
+
+
+domain Test2 
+{
+	A ::= new (Integer).
+	B ::= new (Integer).
+	
+	//A(c), B(c) :- A(a), B(b), c = a + b, c < 20.
+A(c) :- A(a), B(b), c = a + b, c < 20.
+B(c) :- A(a), B(b), c = a + b, c < 20.
+}
+
+model M2 of Test2 
+{
+	A(1).
+	A(2).
+	B(1).
+}
