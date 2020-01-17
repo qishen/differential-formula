@@ -30,3 +30,4 @@ serde = { version = "1", features = ["derive", "rc", "std"] }
 readonly = "0.1"
 petgraph = "0.5"
 num-iter = "0.1"
+derivative = "1"
