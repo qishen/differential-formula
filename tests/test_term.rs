@@ -7,6 +7,7 @@ use differential_formula::composite;
 use differential_formula::variable;
 use differential_formula::atom;
 
+use std::borrow::Borrow;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
@@ -54,17 +55,23 @@ fn test_term_equality() {
     let n1 = model.get_term_by_name("n1");
     let n1x = model.get_term_by_name("n1x");
     let e1 = model.get_term_by_name("e1");
+    let e1x = model.get_term_by_name("e1x");
     let e2 = model.get_term_by_name("e2");
     let v1: Term = Variable::new("x".to_string(), vec![]).into();
     let v1x: Term = Variable::new("x".to_string(), vec![]).into();
     let v2: Term = Variable::new("x".to_string(), vec!["y".to_string(), "z".to_string()]).into();
     let v2x: Term = Variable::new("x".to_string(), vec!["y".to_string(), "z".to_string()]).into();
     
+    // same terms with different alias are still equal.
     assert_eq!(n1, n1x);
+    assert_eq!(e1, e1x);
     assert_eq!(v1, v1x);
     assert_eq!(v2, v2x);
+
     assert_eq!(v2.root(), &v1);
+    // variable terms with same root but different fragments.
     assert_ne!(v1, v2);
+
     println!("{}", n1);
     println!("{}", n1x);
     println!("{}", e1);
@@ -100,17 +107,21 @@ fn test_term_bindings() {
     let ev1 = model.get_term_by_name("ev1");
     let ev2 = model.get_term_by_name("ev2");
     let ev3 = model.get_term_by_name("ev3");
-
+    
+    // Node(x) -> Node(1)
     let binding1 = nv1.get_bindings(&Arc::new(n1.clone())).unwrap();
+    // Edge(x, y) -> Edge(n1, n2)
     let binding2 = ev1.get_bindings(&Arc::new(e1.clone())).unwrap();
+    // Edge(Node(a), Node(b)) -> Edge(Node(1), Node(2))
     let binding3 = ev2.get_bindings(&Arc::new(e1.clone())).unwrap();
+    // Edge(_, Node(b)) -> Edge(n1, n2)
     let binding4 = ev3.get_bindings(&Arc::new(e1.clone())).unwrap();
 
-    let new_n1 = nv1.propagate_bindings(&binding1);
-    let new_e1 = ev1.propagate_bindings(&binding2);
+    let new_n1 = nv1.propagate_bindings(&binding1).unwrap();
+    let new_e1 = ev1.propagate_bindings(&binding2).unwrap();
 
-    assert_eq!(n1, &new_n1);
-    assert_eq!(e1, &new_e1);
+    assert_eq!(n1, new_n1.borrow());
+    assert_eq!(e1, new_e1.borrow());
 
     println!("{:?}", binding1);
     println!("{:?}", binding2);
