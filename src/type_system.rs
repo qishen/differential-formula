@@ -190,7 +190,6 @@ impl Model {
         for key in alias_map.gkeys() {
             let var: Variable = key.root().clone().try_into().unwrap();
             let var_str = var.root; // Assume it shouldn't have fragments in variable term.
-            
             /* 
             Clone each entry in the alias map to create reverse alias map mapping composite term to 
             alias in the format of string and the alias is removed for each key.

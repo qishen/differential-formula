@@ -18,9 +18,7 @@ use crate::util::GenericMap;
 
 
 #[enum_dispatch(Term)]
-pub trait TermBehavior {
-    fn is_groundterm(&self) -> bool;
-}
+pub trait TermBehavior {}
 
 
 // Ignore alias field when calculate hash and compare equality.
@@ -72,17 +70,8 @@ impl Composite {
 
 }
 
-impl TermBehavior for Composite {
-    fn is_groundterm(&self) -> bool {
-        for arg in self.arguments.iter() {
-            if !arg.is_groundterm() {
-                return false;
-            }
-        }
 
-        true
-    }
-}
+impl TermBehavior for Composite {}
 
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -121,33 +110,10 @@ impl Variable {
             }
         }
     }
-
-    pub fn fragments_diff(a: &Term, b: &Term) -> Option<Vec<String>> {
-        let av: Variable = a.clone().try_into().unwrap();
-        let bv: Variable = b.clone().try_into().unwrap();
-        // Root vars have to be equal and b has longer fragments than a or same length.
-        if av.root != bv.root || av.fragments.len() > bv.fragments.len() {
-            None
-        }
-        else {
-            let mut remains = bv.fragments;
-            for aval in av.fragments {
-                let bval = remains.remove(0);
-                if aval != bval {
-                    return None;
-                }
-            }
-            Some(remains)
-        }
-    }
 }
 
 
-impl TermBehavior for Variable {
-    fn is_groundterm(&self) -> bool {
-        false
-    }
-}
+impl TermBehavior for Variable {}
 
 
 #[enum_dispatch]
@@ -173,12 +139,6 @@ impl Display for Atom {
 }
 
 
-impl TermBehavior for Atom {
-    fn is_groundterm(&self) -> bool {
-        true
-    }
-}
-
 #[enum_dispatch]
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Term {
@@ -187,6 +147,7 @@ pub enum Term {
     Atom
 }
 
+impl TermBehavior for Atom {}
 
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -210,9 +171,22 @@ impl Debug for Term {
     }
 }
 
-
-
 impl Term {
+    pub fn is_groundterm(&self) -> bool {
+        match self {
+            Term::Composite(composite) => {
+                for arg in composite.arguments.iter() {
+                    if !arg.is_groundterm() {
+                        return false;
+                    }
+                }
+                true
+            },
+            Term::Variable(variable) => { false },
+            Term::Atom(atom) => { true },
+        }
+    }
+
     pub fn root(&self) -> &Term {
         match self {
             Term::Variable(v) => {
@@ -256,8 +230,6 @@ impl Term {
     }
 
     /// A static function that computes the intersection of two ordered sets.
-    /// lifetimes are specified to make sure two inputs live long enough since outputs rely on the references
-    /// of both inputs.
     pub fn two_sets_intersection(a: OrdSet<Term>, b: OrdSet<Term>) 
     -> (OrdSet<Term>, OrdSet<Term>, OrdSet<Term>)
     {
@@ -414,10 +386,10 @@ impl Term {
                     let arg = composite.arguments.get(i).unwrap();
                     let arg_borrowed: &Term = arg.borrow();
                     let new_arg = match arg_borrowed {
-                        Term::Composite(c) => {
+                        Term::Composite(_) => {
                             arg_borrowed.propagate_bindings(map).unwrap()
                         },
-                        Term::Variable(v) => {
+                        Term::Variable(_) => {
                             let root = arg_borrowed.root();
                             let result;
                             if map.contains_gkey(arg_borrowed) {
@@ -443,7 +415,7 @@ impl Term {
                 let new_term = Composite {
                     sort: composite.sort.clone(),
                     arguments,
-                    alias: composite.alias.clone(),
+                    alias: None, // composite.alias.clone(), skip the alias is fine.
                 }.into();
 
                 Some(Arc::new(new_term))
@@ -517,82 +489,4 @@ impl Term {
         }
     }
     
-}
-
-#[macro_export]
-macro_rules! atom {
-    ($value:ident) => {
-        if let Some(i) = (&$value as &Any).downcast_ref::<isize>() {
-            let aterm: Term = Atom::Int(i).into();
-            aterm
-        } else if let Some(b) = (&$value as &Any).downcast_ref::<bool>() {
-            let aterm: Term = Atom::Bool(b).into();
-            aterm
-        } else if let Some(s) = (&$value as &Any).downcast_ref::<String>() {
-            let aterm: Term = Atom::Str(s).into();
-            aterm
-        }
-
-        None
-    };
-}
-
-
-#[macro_export]
-macro_rules! variable {
-    ($var:ident.$($fragment:ident).*) => {
-        {
-            let mut vlist = Vec::new();
-            $(
-                vlist.push(stringify!($fragment).to_string());
-            )*
-            
-            let v = Variable {
-                var: stringify!($var).to_string(),
-                fragments: vlist, 
-            };
-
-            let vterm: Term = v.into();
-            vterm
-        }
-    };
-}
-
-
-#[macro_export]
-macro_rules! composite {
-    ($sort:expr, $args:expr, $alias:ident) => {
-        Composite {
-            sort: $sort,
-            arguments: $args,
-            alias: Some(stringify!($alias).to_string()),
-        }.into()
-    };
-
-    ($alias:ident is $sort:expr => ($($arg:expr),+)) => {
-        {
-            // TODO: arg could be either Arc<Term> or just Term.
-            let mut alias = None;
-            let alias_str = stringify!($alias).to_string(); 
-
-            if alias_str != "None".to_string() {
-                alias = Some(alias_str);
-            }
-
-            let c = Composite {
-                sort: $sort,
-                arguments: vec![$(
-                    Arc::new($arg)
-                ),+],
-                alias: alias,
-            };
-
-            let cterm: Term = c.into();
-            cterm
-        }
-    };
-
-    ($sort:expr => ($($arg:expr),+)) => {
-        composite!{ None is $sort($($arg),+) }
-    };
 }

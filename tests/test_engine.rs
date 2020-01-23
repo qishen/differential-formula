@@ -7,10 +7,6 @@ use differential_formula::engine::*;
 use differential_formula::type_system::*;
 use differential_formula::rule::*;
 
-use differential_formula::composite;
-use differential_formula::variable;
-use differential_formula::atom;
-
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
