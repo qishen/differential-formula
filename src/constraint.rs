@@ -161,11 +161,9 @@ impl Binary {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
-    pub fn evaluate<T, K, V>(&self, binding: &T) -> Option<bool> 
+    pub fn evaluate<T>(&self, binding: &T) -> Option<bool> 
     where 
-        T: GenericMap<K, V>, 
-        K: Borrow<Term>,
-        V: Borrow<Term>,
+        T: GenericMap<Arc<Term>, Arc<Term>>, 
     {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 

@@ -5,6 +5,7 @@ use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
 use crate::rule::*;
+use crate::util::*;
 
 use std::convert::TryInto;
 use std::str::FromStr;
@@ -493,20 +494,24 @@ named!(program<&str, Env>,
             let domain = domain_map.get(&model_ast.domain_name).unwrap();
             let model_name = model_ast.model_name;
             let mut raw_alias_map = HashMap::new();
-            let mut alias_map = HashMap::new();
+            let mut alias_map: HashMap<Arc<Term>, Arc<Term>> = HashMap::new();
             let mut model_store = vec![];
+            let mut untouched_models = vec![];
 
             for term_ast in model_ast.models {
                 // Convert AST into term according to its type.
                 let term = term_ast.to_term(domain);
-                match term.clone() {
+                match &term {
                     Term::Composite(c) => {
-                        match c.alias {
-                            None => {},
+                        match &c.alias {
+                            None => {
+                                // if term does not have alias, add it to model store.
+                                untouched_models.push(term);
+                            },
                             Some(alias) => {
-                                // alias here shouldn't have fragments.
-                                let vterm: Term = Variable::new(alias, vec![]).into();
-                                raw_alias_map.insert(vterm, term);
+                                // alias here shouldn't have fragments and add term to model store later.
+                                let vterm: Term = Variable::new(alias.clone(), vec![]).into();
+                                raw_alias_map.insert(Arc::new(vterm), Arc::new(term));
                             }
                         }
                     },
@@ -517,16 +522,21 @@ named!(program<&str, Env>,
 
             /* 
             Alias in the raw term is treated as variables and needs to be replaced with the real term.
-            Term propagations have to follow the order that n1 = Node(x) needs to be handled prior to 
-            e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
+            Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
+            prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
             */
             for key in raw_alias_map.keys() {
                 propagate_alias_map(key, &raw_alias_map, &mut alias_map);
             }
 
             for (key, term) in alias_map.iter() {
-                // TODO: Deep clone is bad.
                 model_store.push(term.clone());
+            }
+
+            // Hanle composite terms that don't have alias associated with them.
+            for term in untouched_models {
+                let new_term = term.propagate_bindings(&alias_map);
+                model_store.push(new_term.unwrap());
             }
 
             let model = Model::new(model_name.clone(), model_ast.domain_name, model_store, alias_map);
@@ -541,23 +551,23 @@ named!(program<&str, Env>,
     })
 );
 
-fn propagate_alias_map(
+fn propagate_alias_map<T>(
     var: &Term, 
-    raw_alias_map: &HashMap<Term, Term>, 
-    alias_map: &mut HashMap<Term, Term>
-) 
+    raw_alias_map: &T, 
+    alias_map: &mut T
+) where T: GenericMap<Arc<Term>, Arc<Term>>
 {
-    let raw_term = raw_alias_map.get(var).unwrap();
+    let raw_term = raw_alias_map.gget(var).unwrap();
     // if current term has variables inside then propagate binding to them first.
     let raw_term_vars = raw_term.variables();
     for raw_term_var in raw_term_vars {
-        if raw_alias_map.contains_key(raw_term_var) {
+        if raw_alias_map.contains_gkey(raw_term_var) {
             propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
         }
     }
 
-    let new_term = raw_term.propagate_bindings(alias_map);
-    alias_map.insert(var.clone(), new_term);
+    let new_term = raw_term.propagate_bindings(alias_map).unwrap();
+    alias_map.ginsert(Arc::new(var.clone()), new_term);
 }
 
 
@@ -1017,7 +1027,7 @@ pub fn parse_into_term(
     domain_name: String, 
     model_name: Option<String>, 
     s: &str
-) -> Option<Term>
+) -> Option<Arc<Term>>
 {
     match env_opt {
         Some(env) => {
@@ -1033,11 +1043,12 @@ pub fn parse_into_term(
                     1. Replace variable in the new term by propagating alias map.
                     2. Update its alias and argument's alias recursively by propagating reverse alias map.
                     */
-                    term.propagate_bindings(&model.alias_map)
-                        .propagate_reverse_bindings(&model.reverse_alias_map)
+                    term.propagate_bindings(&model.alias_map).unwrap()
+                        .propagate_reverse_bindings(&model.reverse_alias_map).unwrap()
                 },
-                _ => { term }
+                _ => { Arc::new(term) }
             };
+
 
             Some(result_term)
         },

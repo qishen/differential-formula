@@ -20,9 +20,6 @@ use crate::util::GenericMap;
 #[enum_dispatch(Term)]
 pub trait TermBehavior {
     fn is_groundterm(&self) -> bool;
-
-    // Add alias to the term and its subterms recursively if a match is found in reversed map.
-    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term;
 }
 
 
@@ -82,32 +79,8 @@ impl TermBehavior for Composite {
                 return false;
             }
         }
+
         true
-    }
-
-    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
-        let mut new_arguments = vec![];
-        for arg in self.arguments.iter() {
-            let new_term = arg.propagate_reverse_bindings(reverse_map);
-            new_arguments.push(Arc::new(new_term));
-        }
-
-        // The new term does not contain alias but will change it later if a match is found in reverse alias map.
-        let mut new_composite_term: Term = Composite {
-            sort: self.sort.clone(),
-            arguments: new_arguments,
-            alias: None,
-        }.into();
-
-        // if the raw term is matched in reverse map with a string alias, add the alias to this composite term.
-        if reverse_map.contains_gkey(&new_composite_term) {
-            let alias = reverse_map.gget(&new_composite_term).unwrap();
-            let mut new_composite: Composite = new_composite_term.try_into().unwrap();
-            new_composite.alias = Some(alias.clone());
-            new_composite_term = new_composite.into();
-        }
-
-        new_composite_term
     }
 }
 
@@ -174,11 +147,6 @@ impl TermBehavior for Variable {
     fn is_groundterm(&self) -> bool {
         false
     }
-
-    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
-        // Won't have matching for variable term, so return a cloned copy of variable term.
-        self.clone().into()
-    }
 }
 
 
@@ -208,11 +176,6 @@ impl Display for Atom {
 impl TermBehavior for Atom {
     fn is_groundterm(&self) -> bool {
         true
-    }
-
-    fn propagate_reverse_bindings<T: GenericMap<Term, String>>(&self, reverse_map: &T) -> Term {
-        // Won't have matching for atom term, return a cloned copy of atom term.
-        self.clone().into()
     }
 }
 
@@ -323,18 +286,16 @@ impl Term {
     }
 
     // Check if two binding map has conflits in variable mappings.
-    pub fn has_conflit<T, K, V>(outer: &T, inner: &T) -> bool 
+    pub fn has_conflit<T>(outer: &T, inner: &T) -> bool 
     where 
-        T: GenericMap<K, V>,
-        K: Borrow<Term> ,
-        V: Borrow<Term>,
+        T: GenericMap<Arc<Term>, Arc<Term>>,
     {
         // Filter out conflict binding tuple of outer and inner scope.
         for inner_key in inner.gkeys() {
-            let key_root = inner_key.borrow().root();
-            let inner_val = inner.gget(inner_key.borrow()).unwrap().borrow();
-            if outer.contains_gkey(inner_key.borrow()) {
-                let outer_val = outer.gget(inner_key.borrow()).unwrap().borrow();
+            let key_root = inner_key.root();
+            let inner_val = inner.gget(inner_key).unwrap();
+            if outer.contains_gkey(inner_key) {
+                let outer_val = outer.gget(inner_key).unwrap().borrow();
                 if inner_val != outer_val {
                     return true;
                 }
@@ -342,10 +303,10 @@ impl Term {
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
             else if outer.contains_gkey(key_root) {
                 //let labels = Variable::fragments_diff(&key_root, inner_key.borrow()).unwrap();
-                let outer_val = outer.gget(key_root).unwrap().borrow();
-                let outer_sub_val = outer_val.find_subterm(inner_key).unwrap();
+                let outer_val = outer.gget(key_root).unwrap();
+                let outer_sub_val = Term::find_subterm(outer_val.clone(), inner_key).unwrap();
                 //let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
-                if inner_val != outer_sub_val {
+                if inner_val != &outer_sub_val {
                     return true;
                 }
             }
@@ -440,65 +401,114 @@ impl Term {
         
     } 
 
-    /// Propagate the binding to a term and return a new term. The map must implement
-    /// GenericMap with the type of its value restricted to Arc<Term>.
-    pub fn propagate_bindings<T, K, V>(&self, map: &T) -> Term 
+    /// Propagate the binding to a term (only works for composite term) and return a new term. 
+    /// The map must implement GenericMap with the type of both key and value restricted to Arc<Term>.
+    pub fn propagate_bindings<T>(&self, map: &T) -> Option<Arc<Term>> 
     where 
-        T: GenericMap<K, V>,
-        K: Borrow<Term>, 
-        V: Borrow<Term>,
+        T: GenericMap<Arc<Term>, Arc<Term>>,
     {
         let new_term = match self {
-            Term::Composite(c) => {
-                let mut composite = c.clone();
-
+            Term::Composite(composite) => {
+                let mut arguments = vec![];
                 for i in 0..composite.arguments.len() {
                     let arg = composite.arguments.get(i).unwrap();
-                    if map.contains_gkey(arg) {
-                        let replacement = map.gget(arg).unwrap().borrow(); 
-                        // TODO: A deep copy occurs here since we don't know the type of V.   
-                        composite.arguments[i] = Arc::new(replacement.clone());
-                    } else {
-                        let term = arg.propagate_bindings(map);
-                        composite.arguments[i] = Arc::new(term);
-                    }
+                    let arg_borrowed: &Term = arg.borrow();
+                    let new_arg = match arg_borrowed {
+                        Term::Composite(c) => {
+                            arg_borrowed.propagate_bindings(map).unwrap()
+                        },
+                        Term::Variable(v) => {
+                            let root = arg_borrowed.root();
+                            let result;
+                            if map.contains_gkey(arg_borrowed) {
+                                // Find an exact match in hash map and return its value cloned.
+                                result = map.gget(arg).unwrap().clone();
+                            } else if map.contains_gkey(root) {
+                                // Dig into the root term to find the subterm by labels. 
+                                let root_term = map.gget(root).unwrap();
+                                result = Term::find_subterm(root_term.clone(), arg_borrowed).unwrap();
+                            } else {
+                                // No match and just return variable itself.
+                                result = arg.clone();
+                            }
+                            result
+                        },
+                        Term::Atom(a) => { arg.clone() }
+                    };
+
+                    arguments.push(new_arg);
+
                 }
 
-                composite.into()
+                let new_term = Composite {
+                    sort: composite.sort.clone(),
+                    arguments,
+                    alias: composite.alias.clone(),
+                }.into();
+
+                Some(Arc::new(new_term))
             },
-            Term::Variable(v) => {
-                let root = self.root();
-                if map.contains_gkey(self) {
-                    // Find an exact match in hash map and return its value cloned.
-                    map.gget(self).unwrap().borrow().clone()
-                } else if map.contains_gkey(root) {
-                    // Dig into the root term to find the subterm by labels. 
-                    let root_term = map.gget(root).unwrap().borrow();
-                    root_term.find_subterm(self).unwrap().clone()
-                } else {
-                    // No match and just return variable itself.
-                    self.clone()
-                }
-            },
-            Term::Atom(a) => {
-                self.clone().into()
-            }
+            // The function only applies to composite term.
+            Term::Variable(v) => { None },
+            Term::Atom(a) => { None }
         };
 
         new_term
     }
 
+    // Add alias to the term and its subterms recursively if a match is found in reversed map.
+    pub fn propagate_reverse_bindings<T: GenericMap<Arc<Term>, String>>(&self, reverse_map: &T) -> Option<Arc<Term>> {
+        match self {
+            Term::Composite(composite) => {
+                let mut new_arguments = vec![];
+                for arg in composite.arguments.iter() {
+                    let arg_ref: &Term = arg.borrow();
+                    let new_term = match arg_ref {
+                        Term::Composite(composite) => {
+                            arg.propagate_reverse_bindings(reverse_map).unwrap()
+                        },
+                        _ => { arg.clone() }
+                    };
+                    new_arguments.push(new_term);
+                }
+
+                // The new term does not contain alias but will change it later if a match is found in reverse alias map.
+                let mut new_composite_term: Term = Composite {
+                    sort: composite.sort.clone(),
+                    arguments: new_arguments,
+                    alias: None,
+                }.into();
+
+                // if the raw term is matched in reverse map with a string alias, add the alias to this composite term.
+                if reverse_map.contains_gkey(&new_composite_term) {
+                    let alias = reverse_map.gget(&new_composite_term).unwrap();
+                    let mut new_composite: Composite = new_composite_term.try_into().unwrap();
+                    new_composite.alias = Some(alias.clone());
+                    new_composite_term = new_composite.into();
+                }
+
+                Some(Arc::new(new_composite_term))
+
+            },
+            _ => {
+                None                
+            }
+
+        }
+
+    }
+
     /// Find the subterm of a composite term when given a variable term with fragments.
-    pub fn find_subterm<T>(&self, term: &T) -> Option<&Term> 
+    pub fn find_subterm<T>(composite_term: Arc<Term>, var_term: &T) -> Option<Arc<Term>> 
     where 
         T: Borrow<Term>,
     {
         // Only apply to composite term and param must be a variable term.
-        match self {
+        match composite_term.borrow() {
             Term::Composite(c) => {
-                match term.borrow() {
+                match var_term.borrow() {
                     Term::Variable(v) => {
-                        c.sort.find_subterm(self, &v.fragments)
+                        c.sort.find_subterm(&composite_term, &v.fragments)
                     },
                     _ => { None }
                 }

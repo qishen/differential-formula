@@ -182,11 +182,9 @@ impl ExprBehavior for BaseExpr {
         setcompres
     }
 
-    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
     where 
-        T: GenericMap<K, V>,
-        K: Borrow<Term>,
-        V: Borrow<Term>, 
+        T: GenericMap<Arc<Term>, Arc<Term>>,
     {
         match self {
             BaseExpr::Term(term) => {
@@ -205,24 +203,28 @@ impl ExprBehavior for BaseExpr {
                         let root_var = term.root();
                         let val_term = match root_var == term {
                             true => { 
-                                binding.gget(term).unwrap().borrow().clone() 
+                                binding.gget(term).unwrap().clone() 
                             },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
-                                let val_term = binding.gget(&root_var).unwrap().borrow();
-                                let val_subterm = val_term.find_subterm(term).unwrap().clone();
-                                //let val_subterm = val_term.get_subterm_by_labels(&variable.fragments).unwrap();
+                                let val_term = binding.gget(root_var).unwrap();
+                                let val_subterm = Term::find_subterm(val_term.clone(), term).unwrap().clone();
                                 val_subterm
                             }
                         };
 
                         // val_term must be an atom term for arithmetic evaluation.
-                        let atom: Atom = val_term.try_into().unwrap();
-                        match atom {
-                            Atom::Int(num) => { 
-                                return Some(num); 
+                        let val_term_ref: &Term = val_term.borrow();
+                        match val_term_ref {
+                            Term::Atom(atom) => {
+                                match atom {
+                                    Atom::Int(num) => {
+                                        return Some(num.clone())
+                                    },
+                                    _ => { None }
+                                }
                             },
-                            _ => { return None; },
+                            _ => { None }
                         }
                     },
                     _ => { return None; }
@@ -280,11 +282,9 @@ impl ExprBehavior for ArithExpr {
         list
     }
 
-    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
     where 
-        T: GenericMap<K, V>, 
-        K: Borrow<Term>,
-        V: Borrow<Term>,
+        T: GenericMap<Arc<Term>, Arc<Term>>, 
     {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
@@ -305,12 +305,10 @@ pub trait ExprBehavior {
     fn variables(&self) -> HashSet<Term>;
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
-    fn evaluate<T, K, V>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
     where 
-        T: GenericMap<K, V>,
-        K: Borrow<Term>,
-        V: Borrow<Term>,
-    ; 
+        T: GenericMap<Arc<Term>, Arc<Term>>,
+    ;
 }
 
 #[enum_dispatch]

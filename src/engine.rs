@@ -36,7 +36,7 @@ use crate::util::GenericMap;
 
 pub struct Session {
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
-    input: InputSession<i32, Term, isize>,
+    input: InputSession<i32, Arc<Term>, isize>,
     probe: timely::dataflow::ProbeHandle<i32>,
     env: Option<Env>,
     domain_name: String,
@@ -45,7 +45,7 @@ pub struct Session {
 }
 
 impl Session {
-    fn new(input: InputSession<i32, Term, isize>, 
+    fn new(input: InputSession<i32, Arc<Term>, isize>, 
             probe: timely::dataflow::ProbeHandle<i32>, 
             worker: timely::worker::Worker<timely::communication::allocator::Thread>,
             env: Option<Env>,
@@ -65,7 +65,7 @@ impl Session {
         }
     }
 
-    pub fn parse_term_str(&self, term_str: &str) -> Option<Term> {
+    pub fn parse_term_str(&self, term_str: &str) -> Option<Arc<Term>> {
         // Call function from parser.
         parse_into_term(&self.env, self.domain_name.clone(), self.model_name.clone(), term_str)
     }
@@ -79,24 +79,24 @@ impl Session {
         self.step_count += 1;
     }
 
-    pub fn add_term(&mut self, term: Term) {
+    pub fn add_term(&mut self, term: Arc<Term>) {
         self.input.insert(term);
         self._advance();
     }
 
-    pub fn add_terms(&mut self, terms: Vec<Term>) {
+    pub fn add_terms(&mut self, terms: Vec<Arc<Term>>) {
         for term in terms {
             self.input.insert(term);
         }
         self._advance();
     }
 
-    pub fn remove_term(&mut self, term: Term) {
+    pub fn remove_term(&mut self, term: Arc<Term>) {
         self.input.remove(term);
         self._advance();
     }
 
-    pub fn remove_terms(&mut self, terms: Vec<Term>) {
+    pub fn remove_terms(&mut self, terms: Vec<Arc<Term>>) {
         for term in terms {
             self.input.remove(term);
         }
@@ -104,6 +104,13 @@ impl Session {
     }
 
     pub fn load_model(&mut self, model: Model) {
+        /*let terms: Vec<Term> = model.models.into_iter()
+            .map(|x| {
+                let x_ref: &Term = x.borrow();
+                x_ref.clone()
+            })
+            .collect();
+            */
         self.add_terms(model.models);
     }
 }
@@ -178,30 +185,31 @@ impl DDEngine {
 
     pub fn dataflow_filtered_by_type<G>(
         &self,
-        terms: &Collection<G, Term>,
+        terms: &Collection<G, Arc<Term>>,
         pred_term: Term,
-    ) -> Collection<G, Term>
+    ) -> Collection<G, Arc<Term>>
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
     {
         let c: Composite = pred_term.try_into().unwrap();
         terms
-            .map(|term| {
-                let composite: Composite = term.try_into().unwrap();
-                composite
+            .filter(move |term| {
+                let term_ref: &Term = term.borrow();
+                match term_ref {
+                    Term::Composite(composite) => {
+                        if c.sort == composite.sort { true } 
+                        else { false }
+                    }
+                    _ => { false }
+                }
             })
-            .filter(move |composite| {
-                // Filter step to get all models with specific type.
-                c.sort == composite.sort
-            })
-            .map(|composite| composite.into())
     }
 
 
     pub fn dataflow_filtered_by_positive_predicate_constraint<G>(
         &self,
-        terms: &Collection<G, Term>, 
+        terms: &Collection<G, Arc<Term>>, 
         pos_pred_constraint: Constraint,
     ) -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>> 
     where 
@@ -213,8 +221,7 @@ impl DDEngine {
         let pred_term = predicate.term.clone();
 
         let binding_collection = self.dataflow_filtered_by_type(terms, pred_term.clone()) 
-            .map(move |term| {
-                let term_arc = Arc::new(term);
+            .map(move |term_arc| {
                 let binding_opt = pred_term.get_ordered_bindings(&term_arc);
                 (term_arc, binding_opt)
             })
@@ -317,7 +324,7 @@ impl DDEngine {
         unimplemented!()
     } */
 
-    pub fn dataflow_from_constraints<G>(&self, models: &Collection<G, Term>, constraints: &Vec<Constraint>) 
+    pub fn dataflow_from_constraints<G>(&self, models: &Collection<G, Arc<Term>>, constraints: &Vec<Constraint>) 
         -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
     where
         G: Scope,
@@ -400,9 +407,10 @@ impl DDEngine {
                     if var_ref != root_var && binding.contains_gkey(root_var) {
                         // TODO: too much clones here.
                         let root_value = binding.gget(root_var).unwrap().clone();
-                        let sub_value = root_value.find_subterm(var_ref).unwrap();
+                        let sub_value = Term::find_subterm(root_value, var_ref).unwrap();
                         let value: &Term = binding.get(var_ref).unwrap().borrow();
-                        if sub_value == value { 
+                        let sub_value_ref: &Term = sub_value.borrow();
+                        if sub_value_ref == value { 
                             return true; 
                         } 
                         else { 
@@ -472,7 +480,7 @@ impl DDEngine {
         &self,
         var: Term,
         ordered_outer_collection: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, // Binding collectionf from outer scope of set comprehension.
-        models: &Collection<G, Term>, // Existing model collection.
+        models: &Collection<G, Arc<Term>>, // Existing model collection.
         setcompre: &SetComprehension,
     ) -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
     where 
@@ -528,9 +536,17 @@ impl DDEngine {
                 // Collect all derived terms in set comprehension.
                 let mut terms = vec![];
                 for (binding, count) in input.iter() {
-                    for head_term in head_terms.clone() {
-                        // TODO: Deep clone may slow down performance.
-                        let term = head_term.propagate_bindings(&binding.clone().clone());
+                    for head_term in head_terms.iter() {
+                        let term = match head_term {
+                            Term::Composite(c) => {
+                                // Only handle composite term.
+                                head_term.propagate_bindings(*binding).unwrap()
+                            },
+                            Term::Variable(v) => {
+                                binding.gget(head_term).unwrap().clone()
+                            },
+                            Term::Atom(a) => { Arc::new(head_term.clone()) }
+                        };
                         terms.push((term, count));
                     }
                 }
@@ -546,33 +562,52 @@ impl DDEngine {
                     SetCompreOp::Sum => {
                         let mut sum = BigInt::from_i64(0).unwrap();
                         for (term, count) in terms {
-                            let atom: Atom = term.clone().clone().try_into().unwrap();
-                            match atom {
-                                Atom::Int(i) => { sum += i * count; },
-                                _ => {},
-                            };
+                            let term_ref: &Term = term.borrow();
+                            match term_ref {
+                                Term::Atom(atom) => {
+                                    match atom {
+                                        Atom::Int(i) => { 
+                                            sum += i.clone() * count;
+                                        },
+                                        _ => {}
+                                    }
+                                },
+                                _ => {}
+                            }
                         }
                         output.push((vec![sum], 1));
                     },
                     SetCompreOp::MaxAll => {
                         let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
                         for (term, count) in terms {
-                            let atom: Atom = term.clone().clone().try_into().unwrap();
-                            match atom {
-                                Atom::Int(i) => { if i > max { max = i; } },
-                                _ => {},
-                            };
+                            let term_ref: &Term = term.borrow();
+                            match term_ref {
+                                Term::Atom(atom) => {
+                                    match atom {
+                                        Atom::Int(i) => { if i > &max { max = i.clone(); } },
+                                        _ => {}
+                                    }
+                                },
+                                _ => {}
+                            }
                         }
                         output.push((vec![max], 1));
                     },
                     SetCompreOp::MinAll => {
                         let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                         for (term, count) in terms {
-                            let atom: Atom = term.clone().clone().try_into().unwrap();
-                            match atom {
-                                Atom::Int(i) => { if i < min { min = i; } },
-                                _ => {},
-                            };
+                            let term_ref: &Term = term.borrow();
+                            match term_ref {
+                                Term::Atom(atom) => {
+                                    match atom {
+                                        Atom::Int(i) => { 
+                                            if i < &min { min = i.clone(); } 
+                                        },
+                                        _ => {}
+                                    }
+                                },
+                                _ => {}
+                            }
                         }
                         output.push((vec![min], 1));
                     },
@@ -580,13 +615,18 @@ impl DDEngine {
                         let k = setcompre_default.clone();
                         let mut max_heap = BinaryHeap::new();
                         for (term, count) in terms {
-                            let atom: Atom = term.clone().clone().try_into().unwrap();
-                            match atom {
-                                Atom::Int(i) => { 
-                                    max_heap.push(i);
+                            let term_ref: &Term = term.borrow();
+                            match term_ref {
+                                Term::Atom(atom) => {
+                                    match atom {
+                                        Atom::Int(i) => { 
+                                            max_heap.push(i.clone());
+                                        },
+                                        _ => {}
+                                    }
                                 },
-                                _ => {},
-                            };
+                                _ => {}
+                            }
                         }
 
                         let mut topk = vec![];
@@ -602,13 +642,18 @@ impl DDEngine {
                         let k = setcompre_default.clone();
                         let mut min_heap = BinaryHeap::new();
                         for (term, count) in terms {
-                            let atom: Atom = term.clone().clone().try_into().unwrap();
-                            match atom {
-                                Atom::Int(i) => { 
-                                    min_heap.push(Reverse(i));
+                            let term_ref: &Term = term.borrow();
+                            match term_ref {
+                                Term::Atom(atom) => {
+                                    match atom {
+                                        Atom::Int(i) => { 
+                                            min_heap.push(Reverse(i.clone()));
+                                        },
+                                        _ => {}
+                                    }
                                 },
-                                _ => {},
-                            };
+                                _ => {}
+                            }
                         }
 
                         let mut bottomk = vec![];
@@ -655,7 +700,8 @@ impl DDEngine {
             //.inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
     }
 
-    pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, Term>, rule: &Rule) -> Collection<G, Term>
+    pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, Arc<Term>>, rule: &Rule) 
+    -> Collection<G, Arc<Term>>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -673,7 +719,7 @@ impl DDEngine {
             for term in head_terms.into_iter() {
                 let headterm_stream = binding_collection
                     .map(move |binding| {
-                        term.propagate_bindings(&binding)
+                        term.propagate_bindings(&binding).unwrap()
                     });
 
                 combined_models = combined_models.concat(&headterm_stream);
@@ -690,9 +736,10 @@ impl DDEngine {
         &mut self, 
         domain: &Domain, 
         worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>
-    ) -> (InputSession<i32, Term, isize>, timely::dataflow::ProbeHandle<i32>)
+    ) 
+    -> (InputSession<i32, Arc<Term>, isize>, timely::dataflow::ProbeHandle<i32>)
     {
-        let mut input = InputSession::<i32, Term, isize>::new();
+        let mut input = InputSession::<i32, Arc<Term>, isize>::new();
         let stratified_rules = domain.stratified_rules();
 
         let probe = worker.dataflow(|scope| {

@@ -11,6 +11,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::term::*;
 use crate::rule::*;
+use crate::util::*;
 
 
 #[enum_dispatch]
@@ -24,12 +25,11 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn find_subterm<'a, T>(&self, term: &'a T, labels: &Vec<String>) -> Option<&'a Term> 
-    where T: Borrow<Term>,
+    pub fn find_subterm(&self, term: &Arc<Term>, labels: &Vec<String>) -> Option<Arc<Term>> 
     {
         match self {
             Type::CompositeType(ctype) => {
-                let aggregated_term = labels.iter().fold(Some(term.borrow()), |subterm_opt, label| {
+                let aggregated_term = labels.iter().fold(Some(term.clone()), |subterm_opt, label| {
                     match subterm_opt {
                         Some(subterm) => {
                             // Find the first match or return None when none of them are matched.
@@ -37,11 +37,11 @@ impl Type {
                                 match l_opt {
                                     Some(l) => {
                                         if label == l {
-                                            match subterm {
+                                            match subterm.borrow() {
                                                 Term::Composite(cterm) => {
                                                     let cterm_arc = cterm.arguments.get(i).unwrap();
                                                     // Impl Borrow<Q> where Q is infered as Term for Arc<Term> exists. 
-                                                    Some(cterm_arc.borrow())
+                                                    Some(cterm_arc.clone())
                                                 },
                                                 _ => { None }
                                             }
@@ -172,32 +172,32 @@ impl Domain {
 pub struct Model {
     pub model_name: String,
     pub domain_name: String,
-    pub models: Vec<Term>,
+    pub models: Vec<Arc<Term>>,
     // variable term to composite term mapping.
-    pub alias_map: HashMap<Term, Term>, 
+    pub alias_map: HashMap<Arc<Term>, Arc<Term>>, 
     // composite term to string alias mapping and the composite can't have alias built in.
-    pub reverse_alias_map: HashMap<Term, String>, 
+    pub reverse_alias_map: HashMap<Arc<Term>, String>, 
 }
 
 impl Model {
     pub fn new(model_name: String, 
         domain_name: String, 
-        models: Vec<Term>, 
-        alias_map: HashMap<Term, Term>) -> Self 
+        models: Vec<Arc<Term>>, 
+        alias_map: HashMap<Arc<Term>, Arc<Term>>) -> Self
     {
         // Map alias-free term into its alias in string format.
         let mut reverse_alias_map = HashMap::new();
-        for key in alias_map.keys() {
-            let variable: Variable = key.clone().try_into().unwrap();
-            let var_str = variable.root; // Assume it shouldn't have fragments in variable term.
+        for key in alias_map.gkeys() {
+            let var: Variable = key.root().clone().try_into().unwrap();
+            let var_str = var.root; // Assume it shouldn't have fragments in variable term.
             
             /* 
             Clone each entry in the alias map to create reverse alias map mapping composite term to 
             alias in the format of string and the alias is removed for each key.
             */
-            let mut val_composite: Composite = alias_map.get(key).unwrap().clone().try_into().unwrap();
-            val_composite.alias = None;
-            reverse_alias_map.insert(val_composite.into(), var_str);
+            let val_term = alias_map.gget(key).unwrap();
+            // val_composite.alias = None;
+            reverse_alias_map.insert(val_term.clone(), var_str);
         }
 
         let model = Model {
