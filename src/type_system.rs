@@ -28,37 +28,41 @@ impl Type {
     pub fn find_subterm(&self, term: &Arc<Term>, labels: &Vec<String>) -> Option<Arc<Term>> 
     {
         match self {
-            Type::CompositeType(ctype) => {
+            Type::CompositeType(c) => {
+                let mut ctype = c;
                 let aggregated_term = labels.iter().fold(Some(term.clone()), |subterm_opt, label| {
-                    match subterm_opt {
-                        Some(subterm) => {
-                            // Find the first match or return None when none of them are matched.
-                            ctype.arguments.iter().enumerate().find_map(|(i, (l_opt, t))| {
-                                match l_opt {
-                                    Some(l) => {
-                                        if label == l {
-                                            match subterm.borrow() {
-                                                Term::Composite(cterm) => {
-                                                    let cterm_arc = cterm.arguments.get(i).unwrap();
-                                                    // Impl Borrow<Q> where Q is infered as Term for Arc<Term> exists. 
-                                                    Some(cterm_arc.clone())
-                                                },
-                                                _ => { None }
-                                            }
+                    subterm_opt.map(|subterm| {
+                        // Find the first match or return None when none of them are matched.
+                        ctype.arguments.iter().enumerate().find_map(|(i, (l_opt, t))| {
+                            match l_opt {
+                                Some(l) => {
+                                    if label == l {
+                                        match subterm.borrow() {
+                                            Term::Composite(cterm) => {
+                                                // Update the composite type for the next round.
+                                                match t {
+                                                    Type::CompositeType(tc) => {
+                                                        ctype = tc;
+                                                    },
+                                                    _ => {}
+                                                }
+                                                let cterm_arc = cterm.arguments.get(i).unwrap();
+                                                Some(cterm_arc.clone())
+                                            },
+                                            _ => { None }
                                         }
-                                        else { None }
-                                    },
-                                    None => { None },
-                                }
-                            })
-                        },
-                        None => { None }
-                    }
+                                    }
+                                    else { None }
+                                },
+                                _ => { None }
+                            }
+                        })
+                    }).unwrap()
                 });
-
+                
                 aggregated_term
             },
-            // Only apply to composite type.
+            // This function only applies to composite type.
             _ => { None }
         }
     }
