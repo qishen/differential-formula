@@ -488,5 +488,25 @@ impl Term {
             _ => { None }
         }
     }
+
+    /// Check if a variable term is the subterm of another variable term.
+    pub fn is_subterm(&self, term: &Term) -> Option<bool> {
+        match self {
+            Term::Variable(v1) => {
+                match term {
+                    Term::Variable(v2) => {
+                        if v1.root == v2.root && v2.fragments.starts_with(&v1.fragments){
+                            Some(true)
+                        }
+                        else {
+                            Some(false)
+                        }
+                    },
+                    _ => { None }
+                }
+            },
+            _ => { None }
+        }
+    }
     
 }

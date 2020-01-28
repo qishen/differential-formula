@@ -6,7 +6,6 @@ use differential_formula::term::{Term, Composite, Variable, Atom, TermBehavior};
 
 use std::borrow::Borrow;
 use std::sync::Arc;
-use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
@@ -21,6 +20,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 fn parse_program(program: &str, model_name: &str) -> Model {
     let mut engine = DDEngine::new();
     engine.inspect = true;
+
     let env = DDEngine::parse_string(program.to_string());
     //  println!("{:?}", env);
     engine.install(env);
@@ -127,4 +127,66 @@ fn test_term_bindings() {
     
     println!("{:?}", new_n1);
     println!("{:?}", new_e1);
+}
+
+#[test]
+fn test_subterm() {
+    let program = "
+        domain Graph {
+            Node ::= new (name: Integer).
+            Edge ::= new (src: Node, dst: Node).
+            TwoEdge ::= new (one: Edge, two: Edge).
+        }
+
+        model g of Graph {
+            n1 is Node(1).
+            n2 is Node(2).
+            n3 is Node(3).
+            x1 is Edge(n1, n2).
+            x2 is Edge(n2, n3).
+            te1 is TwoEdge(x1, x2).
+            te2 is TwoEdge(x2, x1).
+        }
+    ";
+
+    let model = parse_program(program, "g");
+    let n1 = model.get_term_by_name("n1");
+    let n2 = model.get_term_by_name("n2");
+    let x1 = model.get_term_by_name("x1");
+    let x2 = model.get_term_by_name("x2");
+
+    let te1 = model.get_term_by_name("te1");
+    let te2 = model.get_term_by_name("te2");
+    let v0: Term = Variable::new("x".to_string(), vec!["one".to_string()]).into();
+    let v0x: Term = Variable::new("x".to_string(), vec!["wrong".to_string()]).into();
+    let v1: Term = Variable::new("x".to_string(), vec!["one".to_string(), "src".to_string()]).into();
+    let v2: Term = Variable::new("y".to_string(), vec!["two".to_string(), "dst".to_string()]).into();
+    let v2x: Term = Variable::new("y".to_string(), vec!["two".to_string(), "dst".to_string(), "wrong".to_string()]).into();
+
+    let subterm1_arc = Term::find_subterm(Arc::new(te1.clone()), &v0).unwrap();
+    let subterm1: &Term = subterm1_arc.borrow();
+    assert_eq!(subterm1, x1);
+
+    let subterm2_arc = Term::find_subterm(Arc::new(te1.clone()), &v1).unwrap();
+    let subterm2: &Term = subterm2_arc.borrow();
+    assert_eq!(subterm2, n1);
+
+    let subterm3_arc = Term::find_subterm(Arc::new(te2.clone()), &v2).unwrap();
+    let subterm3: &Term = subterm3_arc.borrow();
+    assert_eq!(subterm3, n2);
+
+    // Given unmatched label at the beginning.
+    let subterm4_arc = Term::find_subterm(Arc::new(te1.clone()), &v0x);
+    assert_eq!(subterm4_arc, None);
+
+    // Given unmatched label at the end.
+    let subterm5_arc = Term::find_subterm(Arc::new(te1.clone()), &v2x);
+    assert_eq!(subterm5_arc, None);
+
+    assert_eq!(v0.is_subterm(&v1), Some(true));
+    assert_eq!(v1.is_subterm(&v0), Some(false));
+    assert_eq!(v0x.is_subterm(&v2x), Some(false));
+    // Only works on comparison between variable terms.
+    assert_eq!(v0.is_subterm(&n1), None);
+    assert_eq!(n1.is_subterm(&v0), None);
 }
