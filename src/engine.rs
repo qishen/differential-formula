@@ -217,7 +217,7 @@ impl DDEngine {
         G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
     {
         let predicate: Predicate = pos_pred_constraint.try_into().unwrap();
-        let pred_alias = predicate.alias;
+        let pred_alias_arc = predicate.alias.map(|x| { Arc::new(x) });
         let pred_term = predicate.term.clone();
 
         let binding_collection = self.dataflow_filtered_by_type(terms, pred_term.clone()) 
@@ -235,9 +235,9 @@ impl DDEngine {
                 // If predicate may have alias then add itself to existing binding.
                 // TODO: what if alias variable is already in existing variables.
                 let mut binding = binding_opt.unwrap();
-                if let Some(vterm) = &pred_alias {
+                if let Some(vterm_arc) = &pred_alias_arc {
                     //binding.insert(vterm, &term);
-                    binding.ginsert(Arc::new(vterm.clone()), term_arc);
+                    binding.ginsert(vterm_arc.clone(), term_arc);
                 }
 
                 binding
@@ -280,52 +280,98 @@ impl DDEngine {
             //.inspect(|x| { println!("Split binding {:?}", x); })
     }
 
-    /*pub fn join_bindings<G>(&self, 
+    /// Join two binding (OrdMap) collections by considering the same or related variable terms. Split each binding into
+    /// two bindings: One with the shared variables and the other with non-shared variable. Before the splitting we have to
+    /// do an extra step to extend the current binding with the variable subterms from the other collection of binding.
+    /// if binding1 has key `x.y` and binding2 has key `x.y.z` and `x`, then binding1 must have `x.y.z` as well but won't 
+    /// have `x` because you can't derive parent term from subterm backwards. On the other hand binding2 must have `x.y` too.
+    pub fn join_two_bindings<G>(&self, 
         prev_vars: OrdSet<Term>,
-        prev_binding: &Collection<G, OrdMap<Term, Term>>, 
+        prev_col: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, 
         new_vars: OrdSet<Term>,
-        new_binding: &Collection<G, OrdMap<Term, Term>>
+        new_col: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
     ) 
-    -> Collection<G, OrdMap<Term, Term>>
+    -> (OrdSet<Term>, Collection<G, OrdMap<Arc<Term>, Arc<Term>>>)
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        // if one binding has x and the other binding has x.y then update the first binding with x.y
-        let mut prev_vars_extension = prev_vars.clone();
-        let mut new_vars_extension = new_vars.clone();
+        let mut prev_vars_extra = OrdSet::new();
+        let mut new_vars_extra = OrdSet::new();
 
-        for var in prev_vars.iter() {
-            let root_var = var.root();
-            if new_vars.contains(&root_var) {
-                new_vars_extension.insert(var.clone());
+        // When binding one has `x.y` and binding two has `x.y.z` update binding one with `x.y.z` and vice versa.
+        for prev_var in prev_vars.iter() {
+            for new_var in new_vars.iter() {
+                if prev_var.has_subterm(new_var).unwrap() {
+                    prev_vars_extra.insert(Arc::new(new_var.clone()));
+                }
+                else if new_var.has_subterm(prev_var).unwrap() {
+                    new_vars_extra.insert(Arc::new(prev_var.clone()));
+                }
             }
         }
 
-        for var in new_vars.iter() {
-            let root_var = var.root();
-            if prev_vars.contains(&root_var) {
-                prev_vars_extension.insert(var.clone());
+        let prev_vars_extra_copy = prev_vars_extra.clone();
+        let updated_prev_col = prev_col.map(move |mut binding| {
+            for prev_var in prev_vars_extra_copy.iter() {
+                Term::update_binding(&prev_var.clone(), &mut binding);
             }
-        }
-
-        let (left, middle, right) = Term::two_sets_intersection(prev_vars, new_vars);
-
-        prev_binding.map(move |mut x| {
-            for var in prev_vars_extension.iter() {
-                
-            }
+            binding
         });
 
-        new_binding.map(|x| {
+        let new_vars_extra_copy = new_vars_extra.clone();
+        let updated_new_col = new_col.map(move |mut binding| {
+            for new_var in new_vars_extra_copy.iter() {
+                Term::update_binding(&new_var.clone(), &mut binding);
+            }
+            binding
+        });
 
-        })
+        let mut updated_prev_vars: OrdSet<Term> = OrdSet::new();
+        updated_prev_vars.extend(prev_vars);
+        updated_prev_vars.extend(prev_vars_extra.into_iter().map(|x| { 
+            let term: &Term = x.borrow();
+            term.clone() 
+        }));
+        
+        let mut updated_new_vars = OrdSet::new();
+        updated_new_vars.extend(new_vars);
+        updated_new_vars.extend(new_vars_extra.into_iter().map(|x| {
+            let term: &Term = x.borrow();
+            term.clone()
+        }));
 
-        unimplemented!()
-    } */
+        let mut all_vars = OrdSet::new();
+        all_vars.extend(updated_prev_vars.clone());
+        all_vars.extend(updated_new_vars.clone());
 
-    pub fn dataflow_from_constraints<G>(&self, models: &Collection<G, Arc<Term>>, constraints: &Vec<Constraint>) 
-        -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
+        let (lvars, mvars, rvars) = Term::two_sets_intersection(updated_prev_vars, updated_new_vars);
+
+        // Turn collection of [binding] into collection of [(middle, right)] for joins.
+        let m_r_col = self.dataflow_from_term_bindings_split(&updated_new_col, mvars.clone(), rvars.clone());
+
+        // Turn collection of [binding] into collection of [(middle, left)] for joins.
+        let m_l_col = self.dataflow_from_term_bindings_split(&updated_prev_col, mvars.clone(), lvars.clone());
+
+        let joint_collection = m_l_col
+                        .join(&m_r_col)
+            .map(move |(inter, (left, right))| {
+                let mut binding = OrdMap::new();
+                binding.extend(left);
+                binding.extend(right);
+                binding.extend(inter);
+                binding
+            });
+
+        (all_vars, joint_collection)
+    } 
+
+    pub fn dataflow_from_constraints<G>(
+        &self, 
+        models: &Collection<G, Arc<Term>>, 
+        constraints: &Vec<Constraint>
+    ) 
+    -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -333,98 +379,35 @@ impl DDEngine {
         // Construct a headless rule from a list of constraints.
         let temp_rule = Rule::new(vec![], constraints.clone());
         let pos_preds = temp_rule.pos_preds();
-        let mut pos_preds_iterator = pos_preds.into_iter();
 
-        // Rule execution needs at least one positive predicate to start with.
-        let initial_pred_constraint = pos_preds_iterator.next().unwrap();
-        let initial_pred: Predicate = initial_pred_constraint.clone().try_into().unwrap();
-        let initial_term = initial_pred.term.clone();
+        let default_vars: OrdSet<Term> = OrdSet::new();
+        // TODO: find a better way to create an empty collection.
+        let default_col = models.map(|x| {
+            let mut binding = OrdMap::new();
+            binding.insert(x.clone(), x.clone());
+            binding
+        });
 
-        // A list of binded variables.
-        let mut prev_vars: OrdSet<Term> = OrdSet::new();
-        prev_vars.extend(initial_term.variables().into_iter().map(|x| x.clone()));
+        // Join all positive predicate terms by their shared variables one by one in order.
+        let (vars, mut collection) = pos_preds.iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
+            let pred: Predicate = pred_constraint.clone().try_into().unwrap();
+            let term = pred.term.clone();
 
-        // Don't forget to add alias variable for the first predicate constraint.
-        if let Some(vterm) = initial_pred.alias {
-            prev_vars.insert(vterm);
-        }
-        
-        // Don't have to sort since it's an OrdSet.
-        //prev_vars.sort();
+            let mut vars: OrdSet<Term> = OrdSet::new();
+            vars.extend(term.variables().into_iter().map(|x| x.clone()));
 
-        // Filter models by its type to match the positive predicate term and the output of dataflow
-        // is not models but a collection of bindings mapping each variable to a ground term.
-        let mut prev_collection = self.dataflow_filtered_by_positive_predicate_constraint(
-            models, 
-            initial_pred_constraint,
-        );
-
-        while let Some(pos_constraint) = pos_preds_iterator.next() {
-            // Take constraint in default order and further extends existing bindings in the collection.
-            let pred: Predicate = pos_constraint.clone().try_into().unwrap();
-            let pred_term = pred.term.clone();
-            let pred_alias = pred.alias;
-
-            // A hash set contains all variables in the predicate term including alias.
-            let mut vars: OrdSet<Term> = pred_term.variables().into_iter().map(|x| x.clone()).collect();
-
-            // alias of positive predicate needs to be considered as a variable.
-            if let Some(alias) = pred_alias {
-                vars.insert(alias.clone());
+            // Don't forget to add alias variable for the predicate constraint.
+            if let Some(vterm) = pred.alias.clone() {
+                vars.insert(vterm);
             }
-
-            // After intersection return a tuple of (left, middle, right)
-            let (lvars, mvars, rvars) = Term::two_sets_intersection(prev_vars.clone(), vars);
             
-            let collection = self.dataflow_filtered_by_positive_predicate_constraint(
+            let mut col = self.dataflow_filtered_by_positive_predicate_constraint(
                 models, 
-                pos_constraint,
+                pred_constraint.clone(),
             );
 
-            // Turn collection of [binding] into collection of [(middle, right)] for joins.
-            let m_r_col = self.dataflow_from_term_bindings_split(&collection, mvars.clone(), rvars.clone());
-
-            // Turn collection of [binding] into collection of [(middle, left)] for joins.
-            let m_l_col = self.dataflow_from_term_bindings_split(&prev_collection, mvars, lvars);
-
-            prev_collection = m_l_col
-                       .join(&m_r_col)
-                .map(move |(inter, (left, right))| {
-                    let mut binding = OrdMap::new();
-                    binding.extend(left);
-                    binding.extend(right);
-                    binding.extend(inter);
-                    binding
-                });
-                    
-            // Filter out binding with conflict on variables with fragments like x.y.z
-            prev_collection = prev_collection.filter(|mut binding| {
-                for var_arc in binding.gkeys() {
-                    let root_var = var_arc.root();
-                    // Check if variable has fragments and root variable exists in binding.
-                    // Cannot directly use var.borrow() to compare with another term here.
-                    let var_ref: &Term = var_arc.borrow();
-                    if var_ref != root_var && binding.contains_gkey(root_var) {
-                        // TODO: too much clones here.
-                        let root_value = binding.gget(root_var).unwrap().clone();
-                        let sub_value = Term::find_subterm(root_value, var_ref).unwrap();
-                        let value: &Term = binding.get(var_ref).unwrap().borrow();
-                        let sub_value_ref: &Term = sub_value.borrow();
-                        if sub_value_ref == value { 
-                            return true; 
-                        } 
-                        else { 
-                            return false; 
-                        }
-                    }
-                }
-
-                true
-            });
-
-            // Refill variable after its value was moved and update existing binded variable list.
-            prev_vars.extend(rvars.clone());
-        } 
+            self.join_two_bindings(prev_vars, &prev_col, vars, &col)
+        });
 
         for bin_constraint in temp_rule.ordered_definition_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
@@ -435,29 +418,29 @@ impl DDEngine {
             // e.g. y = (x + x) * x.
             let left_base_expr: BaseExpr = binary.left.try_into().unwrap();
             let var_term: Term = left_base_expr.try_into().unwrap();
+            let var_term_arc = Arc::new(var_term.clone());
 
             match binary.right {
                 Expr::BaseExpr(right_base_expr) => {
                     match right_base_expr {
                         BaseExpr::SetComprehension(setcompre) => {
-                            prev_collection = self.dataflow_from_set_comprehension(
+                            collection = self.dataflow_from_set_comprehension(
                                 var_term.clone(),
-                                &prev_collection, 
+                                vars.clone(),
+                                &collection, 
                                 models, 
                                 &setcompre
-                            )
-                            //.inspect(|x| { println!("Check it here {:?}", x); })
-                            ;
+                            );
                         },
                         _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
                     }
                 },
                 Expr::ArithExpr(right_base_expr) => {
                     // Evaluate arithmetic expression to derive new term and add it to existing binding.
-                    prev_collection = prev_collection.map(move |mut binding| {
+                    collection = collection.map(move |mut binding| {
                         let num = right_base_expr.evaluate(&binding).unwrap();
                         let atom_term: Term = Atom::Int(num).into();
-                        binding.insert(Arc::new(var_term.clone()), Arc::new(atom_term));
+                        binding.insert(var_term_arc.clone(), Arc::new(atom_term));
                         binding
                     });
                 }
@@ -467,19 +450,20 @@ impl DDEngine {
         // Since there are no derived terms then directly evaluate the expression to filter binding collection.
         for bin_constraint in temp_rule.pure_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
-            prev_collection = prev_collection.filter(move |binding| {
+            collection = collection.filter(move |binding| {
                 binary.evaluate(binding).unwrap()
             });
         }
 
-        prev_collection
+        collection
     }
 
     
     pub fn dataflow_from_set_comprehension<G>(
         &self,
         var: Term,
-        ordered_outer_collection: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, // Binding collectionf from outer scope of set comprehension.
+        outer_vars: OrdSet<Term>,
+        ordered_outer_collection: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, // Binding collection from outer scope of set comprehension.
         models: &Collection<G, Arc<Term>>, // Existing model collection.
         setcompre: &SetComprehension,
     ) -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
@@ -517,6 +501,8 @@ impl DDEngine {
         let production_stream = ordered_outer_collection.map(|x| (true, x))
             .join(&ordered_collection.map(|x| (true, x)))
             .map(move |(_, (outer, inner))| { (outer, inner) });
+
+        //ordered_collection
         
         setcompre_var = var.clone();
         setcompre_default = setcompre.default.clone();
