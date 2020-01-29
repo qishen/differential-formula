@@ -489,8 +489,20 @@ impl Term {
         }
     }
 
-    /// Check if a variable term is the subterm of another variable term.
-    pub fn is_subterm(&self, term: &Term) -> Option<bool> {
+    /// A shortcut for find_subterm() method with only labels as the argument.
+    /// 
+    pub fn find_subterm_by_labels(composite_term: Arc<Term>, labels: &Vec<String>) -> Option<Arc<Term>> {
+        match composite_term.borrow() {
+            Term::Composite(c) => {
+                c.sort.find_subterm(&composite_term, labels)
+            },
+            _ => { None }
+        }
+    }
+
+    /// Check if a variable term is the subterm of another variable term. 
+    /// Variable with longer fragments is the subterm of variable with shorter fragments.
+    pub fn has_subterm(&self, term: &Term) -> Option<bool> {
         match self {
             Term::Variable(v1) => {
                 match term {
@@ -506,6 +518,72 @@ impl Term {
                 }
             },
             _ => { None }
+        }
+    }
+
+    /// If one variable term starts with another variable term, then return their difference in the fragments.
+    pub fn fragments_difference(&self, term: &Term) -> Option<Vec<String>> {
+        match self {
+            Term::Variable(v1) => {
+                let len1 = v1.fragments.len();
+                match term {
+                    Term::Variable(v2) => {
+                        let len2 = v2.fragments.len();
+                        if v1.fragments.starts_with(&v2.fragments) {
+                            let mut labels = vec![];
+                            for i in len2 .. len1 {
+                                labels.push(v1.fragments.get(i).unwrap().clone());
+                            } 
+                            Some(labels)
+                        }
+                        else if v2.fragments.starts_with(&v1.fragments) {
+                            let mut labels = vec![];
+                            for i in len1 .. len2 {
+                                labels.push(v2.fragments.get(i).unwrap().clone());
+                            }
+                            Some(labels)
+                        }
+                        else { None }
+                    },
+                    _ => { None }
+                }  
+            },
+            _ => { None }
+        }
+    }
+
+    /// Update the binidng if a variable term is the subterm of one of the variable terms in the binding,
+    /// e.g. `x.y.z` wants to update binding with variable `x.y` as key in the binding, then derive the value
+    /// for the subterm and add `x.y.z` to the binding too. Retrun true if binding is successfully updated with
+    /// new derived subterm as the key.
+    pub fn update_binding<T>(var: &Arc<Term>, binding: &mut T) -> bool
+    where T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        let var_ref: &Term = var.borrow();
+        match var_ref {
+            Term::Variable(_) => {
+                /*
+                Let's say `var` is `x.y.z` and the binding does not have root term of `x` as key 
+                but has some subterms of root term like `x.y` as key, then we only need to find
+                the subterm from `x.y` by looking up label `z`. Traverse the keys and find the 
+                first one that `var` is its subterm.
+                */ 
+                for key_arc in binding.gkeys() {
+                    let key: &Term = key_arc.borrow();
+                    if key.has_subterm(var_ref).unwrap() {
+                        let value = binding.gget(key).unwrap();
+                        // find the fragments difference between `var` and `key`.
+                        let labels = key.fragments_difference(var_ref).unwrap();
+                        let sub_value = Term::find_subterm_by_labels(value.clone(), &labels).unwrap();
+                        binding.ginsert(var.clone(), sub_value);
+                        return true;
+                    }
+                }
+                return false;
+            },
+            _ => { 
+                return false; 
+            }
         }
     }
     
