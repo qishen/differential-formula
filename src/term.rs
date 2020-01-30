@@ -229,6 +229,27 @@ impl Term {
         set
     }
 
+    /// Compare two lists of variable terms and return true if some terms in one list
+    /// are subterms of the terms in another list. 
+    pub fn has_deep_intersection<'a, I>(a: I, b: I) -> bool 
+    where I: Iterator<Item=&'a Term>
+    {
+        let mut b_cloned = vec![];
+        for v in b {
+            b_cloned.push(v);
+        }
+
+        for v1 in a {
+            for v2 in b_cloned.iter() {
+                if v1.has_subterm(&v2).unwrap() || v2.has_subterm(v1).unwrap() {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// A static function that computes the intersection of two ordered sets.
     pub fn two_sets_intersection(a: OrdSet<Term>, b: OrdSet<Term>) 
     -> (OrdSet<Term>, OrdSet<Term>, OrdSet<Term>)
@@ -274,10 +295,8 @@ impl Term {
             }
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
             else if outer.contains_gkey(key_root) {
-                //let labels = Variable::fragments_diff(&key_root, inner_key.borrow()).unwrap();
                 let outer_val = outer.gget(key_root).unwrap();
                 let outer_sub_val = Term::find_subterm(outer_val.clone(), inner_key).unwrap();
-                //let outer_sub_val = outer_val.get_subterm_by_labels(&labels).unwrap();
                 if inner_val != &outer_sub_val {
                     return true;
                 }

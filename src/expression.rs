@@ -63,6 +63,129 @@ impl Display for SetCompreOp {
     }
 }
 
+impl SetCompreOp {
+    pub fn aggregate(&self, terms: Vec<(Arc<Term>, &isize)>) -> BigInt {
+        match self {
+            SetCompreOp::Count => {
+                let mut num = BigInt::from_i64(0 as i64).unwrap();
+                for (term, count) in terms {
+                    num += count.clone() as i64;
+                }                        
+                num
+            },
+            SetCompreOp::Sum => {
+                let mut sum = BigInt::from_i64(0).unwrap();
+                for (term, count) in terms {
+                    let term_ref: &Term = term.borrow();
+                    match term_ref {
+                        Term::Atom(atom) => {
+                            match atom {
+                                Atom::Int(i) => { 
+                                    sum += i.clone() * count;
+                                },
+                                _ => {}
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+                sum
+            },
+            SetCompreOp::MaxAll => {
+                let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
+                for (term, count) in terms {
+                    let term_ref: &Term = term.borrow();
+                    match term_ref {
+                        Term::Atom(atom) => {
+                            match atom {
+                                Atom::Int(i) => { if i > &max { max = i.clone(); } },
+                                _ => {}
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+                max
+            },
+            //SetCompreOp::MinAll => {
+            _ => {
+                let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
+                for (term, count) in terms {
+                    let term_ref: &Term = term.borrow();
+                    match term_ref {
+                        Term::Atom(atom) => {
+                            match atom {
+                                Atom::Int(i) => { 
+                                    if i < &min { min = i.clone(); } 
+                                },
+                                _ => {}
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+                min
+            },
+            /*
+            SetCompreOp::TopK => {
+                let k = setcompre_default.clone();
+                let mut max_heap = BinaryHeap::new();
+                for (term, count) in terms {
+                    let term_ref: &Term = term.borrow();
+                    match term_ref {
+                        Term::Atom(atom) => {
+                            match atom {
+                                Atom::Int(i) => { 
+                                    max_heap.push(i.clone());
+                                },
+                                _ => {}
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+
+                let mut topk = vec![];
+                for i in num_iter::range(BigInt::zero(), k) {
+                    if !max_heap.is_empty() {
+                        topk.push(max_heap.pop().unwrap());
+                    }
+                }
+                topk
+            },
+            _ => {
+                let k = setcompre_default.clone();
+                let mut min_heap = BinaryHeap::new();
+                for (term, count) in terms {
+                    let term_ref: &Term = term.borrow();
+                    match term_ref {
+                        Term::Atom(atom) => {
+                            match atom {
+                                Atom::Int(i) => { 
+                                    min_heap.push(Reverse(i.clone()));
+                                },
+                                _ => {}
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+
+                let mut bottomk = vec![];
+                for i in num_iter::range(BigInt::zero(), k) {
+                    if !min_heap.is_empty() {
+                        let r = min_heap.pop().unwrap().0;
+                        bottomk.push(r);
+                    }
+                }
+                bottomk
+            }
+            */
+        }
+    }
+}
+
+
 impl Display for SetComprehension {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headterm_strs: Vec<String> = self.vars.iter().map(|x| {

@@ -247,7 +247,7 @@ impl DDEngine {
         binding_collection
     }
 
-    pub fn dataflow_from_term_bindings_split<G>(
+    pub fn split_binding<G>(
         &self,
         bindings: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, 
         left_keys:  OrdSet<Term>,
@@ -277,7 +277,6 @@ impl DDEngine {
         });
 
         map_tuple_collection
-            //.inspect(|x| { println!("Split binding {:?}", x); })
     }
 
     /// Join two binding (OrdMap) collections by considering the same or related variable terms. Split each binding into
@@ -302,10 +301,10 @@ impl DDEngine {
         // When binding one has `x.y` and binding two has `x.y.z` update binding one with `x.y.z` and vice versa.
         for prev_var in prev_vars.iter() {
             for new_var in new_vars.iter() {
-                if prev_var.has_subterm(new_var).unwrap() {
+                if prev_var.has_subterm(new_var).unwrap() && prev_var != new_var {
                     prev_vars_extra.insert(Arc::new(new_var.clone()));
                 }
-                else if new_var.has_subterm(prev_var).unwrap() {
+                else if new_var.has_subterm(prev_var).unwrap() && new_var != prev_var {
                     new_vars_extra.insert(Arc::new(prev_var.clone()));
                 }
             }
@@ -348,10 +347,10 @@ impl DDEngine {
         let (lvars, mvars, rvars) = Term::two_sets_intersection(updated_prev_vars, updated_new_vars);
 
         // Turn collection of [binding] into collection of [(middle, right)] for joins.
-        let m_r_col = self.dataflow_from_term_bindings_split(&updated_new_col, mvars.clone(), rvars.clone());
+        let m_r_col = self.split_binding(&updated_new_col, mvars.clone(), rvars.clone());
 
         // Turn collection of [binding] into collection of [(middle, left)] for joins.
-        let m_l_col = self.dataflow_from_term_bindings_split(&updated_prev_col, mvars.clone(), lvars.clone());
+        let m_l_col = self.split_binding(&updated_prev_col, mvars.clone(), lvars.clone());
 
         let joint_collection = m_l_col
                         .join(&m_r_col)
@@ -371,7 +370,7 @@ impl DDEngine {
         models: &Collection<G, Arc<Term>>, 
         constraints: &Vec<Constraint>
     ) 
-    -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
+    -> (OrdSet<Term>, Collection<G, OrdMap<Arc<Term>, Arc<Term>>>)
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -389,10 +388,9 @@ impl DDEngine {
         });
 
         // Join all positive predicate terms by their shared variables one by one in order.
-        let (vars, mut collection) = pos_preds.iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
+        let (mut vars, mut collection) = pos_preds.iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
             let pred: Predicate = pred_constraint.clone().try_into().unwrap();
             let term = pred.term.clone();
-
             let mut vars: OrdSet<Term> = OrdSet::new();
             vars.extend(term.variables().into_iter().map(|x| x.clone()));
 
@@ -401,12 +399,18 @@ impl DDEngine {
                 vars.insert(vterm);
             }
             
-            let mut col = self.dataflow_filtered_by_positive_predicate_constraint(
+            let col = self.dataflow_filtered_by_positive_predicate_constraint(
                 models, 
                 pred_constraint.clone(),
             );
 
-            self.join_two_bindings(prev_vars, &prev_col, vars, &col)
+            if prev_vars.len() != 0 {
+                return self.join_two_bindings(prev_vars, &prev_col, vars, &col);
+            }
+            else {
+                return (vars, col);
+            }
+
         });
 
         for bin_constraint in temp_rule.ordered_definition_constraints().into_iter() {
@@ -419,6 +423,9 @@ impl DDEngine {
             let left_base_expr: BaseExpr = binary.left.try_into().unwrap();
             let var_term: Term = left_base_expr.try_into().unwrap();
             let var_term_arc = Arc::new(var_term.clone());
+
+            // Add the definition term into the list of all variable terms in current rule.
+            vars.insert(var_term.clone());
 
             match binary.right {
                 Expr::BaseExpr(right_base_expr) => {
@@ -455,7 +462,7 @@ impl DDEngine {
             });
         }
 
-        collection
+        (vars, collection)
     }
 
     
@@ -478,212 +485,100 @@ impl DDEngine {
         let setcompre_op = setcompre.op.clone();
         let mut setcompre_default = setcompre.default.clone();
         let constraints = &setcompre.condition;
-        let mut setcompre_var = var.clone();
+        let mut setcompre_var = Arc::new(var.clone());
         
         // Evaluate constraints in set comprehension and return ordered binding collection.
-        let mut ordered_collection = self.dataflow_from_constraints(models, constraints);
+        let (inner_vars, ordered_inner_collection) = self.dataflow_from_constraints(models, constraints);
 
-        /*
-        In case the production (outer, inner) could be empty set if inner binding collection is empty,
-        directly add default set comprehension value to the outer binding and concatenate the new stream into
-        production stream later on.
-        */
-        let ordered_outer_collection_plus_default = ordered_outer_collection.map(move |mut outer| {
-            let num_term: Term = Atom::Int(setcompre_default.clone()).into();
-            outer.insert(Arc::new(setcompre_var.clone()), Arc::new(num_term));
-            outer
-        });
-
-        setcompre_var = var.clone();
-        setcompre_default = setcompre.default.clone();
-        // Make a production of inner binding and outer binding collection but it could be empty.
-        // TODO: this operation may be too expensive, the production of inner and outer could be huge.
-        let production_stream = ordered_outer_collection.map(|x| (true, x))
-            .join(&ordered_collection.map(|x| (true, x)))
-            .map(move |(_, (outer, inner))| { (outer, inner) });
-
-        //ordered_collection
-        
-        setcompre_var = var.clone();
-        setcompre_default = setcompre.default.clone();
-        let binding_and_aggregation_stream = production_stream 
-            .filter(|(outer, inner)| {
-                /*
-                If outer and inner binding does not have variable confilct on keys then do a reduce operation to 
-                group binding tuples by its first element outer binding.
-                e.g. rule :- Path(a, b), dc0 = count({dc | Path(u, u)}), dc0 = 0. 
-                (Path(1, 2), Path(0, 0)), (Path(1, 2), Path(1, 1)) reduces to Path(1, 2) -> [Path(0, 0), Path(1, 1)]
-                Finally aggregate over the list of bindings that belong to the outer binding.
-                */
-                let has_conflit = Term::has_conflit(outer, inner);
-                !has_conflit
-            })
-            .reduce(move |key, input, output| {
-                // Collect all derived terms in set comprehension.
-                let mut terms = vec![];
-                for (binding, count) in input.iter() {
-                    for head_term in head_terms.iter() {
-                        let term = match head_term {
-                            Term::Composite(c) => {
-                                // Only handle composite term.
-                                head_term.propagate_bindings(*binding).unwrap()
-                            },
-                            Term::Variable(v) => {
-                                binding.gget(head_term).unwrap().clone()
-                            },
-                            Term::Atom(a) => { Arc::new(head_term.clone()) }
-                        };
-                        terms.push((term, count));
-                    }
-                }
-
-                match setcompre_op {
-                    SetCompreOp::Count => {
-                        let mut num = BigInt::from_i64(0 as i64).unwrap();
-                        for (term, count) in terms {
-                            num += count.clone() as i64;
-                        }                        
-                        output.push((vec![num], 1));
-                    },
-                    SetCompreOp::Sum => {
-                        let mut sum = BigInt::from_i64(0).unwrap();
-                        for (term, count) in terms {
-                            let term_ref: &Term = term.borrow();
-                            match term_ref {
-                                Term::Atom(atom) => {
-                                    match atom {
-                                        Atom::Int(i) => { 
-                                            sum += i.clone() * count;
-                                        },
-                                        _ => {}
-                                    }
-                                },
-                                _ => {}
-                            }
-                        }
-                        output.push((vec![sum], 1));
-                    },
-                    SetCompreOp::MaxAll => {
-                        let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
-                        for (term, count) in terms {
-                            let term_ref: &Term = term.borrow();
-                            match term_ref {
-                                Term::Atom(atom) => {
-                                    match atom {
-                                        Atom::Int(i) => { if i > &max { max = i.clone(); } },
-                                        _ => {}
-                                    }
-                                },
-                                _ => {}
-                            }
-                        }
-                        output.push((vec![max], 1));
-                    },
-                    SetCompreOp::MinAll => {
-                        let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
-                        for (term, count) in terms {
-                            let term_ref: &Term = term.borrow();
-                            match term_ref {
-                                Term::Atom(atom) => {
-                                    match atom {
-                                        Atom::Int(i) => { 
-                                            if i < &min { min = i.clone(); } 
-                                        },
-                                        _ => {}
-                                    }
-                                },
-                                _ => {}
-                            }
-                        }
-                        output.push((vec![min], 1));
-                    },
-                    SetCompreOp::TopK => {
-                        let k = setcompre_default.clone();
-                        let mut max_heap = BinaryHeap::new();
-                        for (term, count) in terms {
-                            let term_ref: &Term = term.borrow();
-                            match term_ref {
-                                Term::Atom(atom) => {
-                                    match atom {
-                                        Atom::Int(i) => { 
-                                            max_heap.push(i.clone());
-                                        },
-                                        _ => {}
-                                    }
-                                },
-                                _ => {}
+        // If inner scope and outer scope don't have shared variables then it means they can be handled separately.
+        match Term::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
+            false => {
+                let aggregation_stream = ordered_inner_collection
+                    .map(|x| { ((), x) })
+                    .reduce(move |key, input, output| {
+                        let mut terms = vec![];
+                        for (binding, count) in input.iter() {
+                            for head_term in head_terms.iter() {
+                                let term = match head_term {
+                                    Term::Composite(c) => { head_term.propagate_bindings(*binding).unwrap() },
+                                    Term::Variable(v) => { binding.gget(head_term).unwrap().clone() },
+                                    Term::Atom(a) => { Arc::new(head_term.clone()) }
+                                };
+                                terms.push((term, count));
                             }
                         }
 
-                        let mut topk = vec![];
-                        for i in num_iter::range(BigInt::zero(), k) {
-                            if !max_heap.is_empty() {
-                                topk.push(max_heap.pop().unwrap());
+                        let aggregated_result = setcompre_op.aggregate(terms);
+                        output.push((vec![aggregated_result], 1));
+                    });
+
+                ordered_outer_collection
+                    .map(|x| { ((), x) })
+                    .join(&aggregation_stream)
+                    .map(move |(_, (mut binding, nums))| {
+                        // Take the first element in num list when operator is count, sum, maxAll, minAll.
+                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
+                        binding.insert(setcompre_var.clone(), Arc::new(num_term));
+                        binding
+                    })
+            },
+            true => {
+                setcompre_var = Arc::new(var.clone());
+                setcompre_default = setcompre.default.clone();
+
+                let (all_vars, join_stream) = self.join_two_bindings(
+                    outer_vars.clone(), 
+                    ordered_outer_collection, 
+                    inner_vars.clone(), 
+                    &ordered_inner_collection
+                );
+
+                // Take binding in the outer scope as key and bindings in inner scope are grouped by the key.
+                let binding_and_aggregation_stream = self.split_binding(&join_stream, outer_vars.clone(), inner_vars.clone())
+                    .reduce(move |key, input, output| {
+                        let mut terms = vec![];
+                        for (binding, count) in input.iter() {
+                            for head_term in head_terms.iter() {
+                                let term = match head_term {
+                                    Term::Composite(c) => { head_term.propagate_bindings(*binding).unwrap() },
+                                    Term::Variable(v) => { binding.gget(head_term).unwrap().clone() },
+                                    Term::Atom(a) => { Arc::new(head_term.clone()) }
+                                };
+                                terms.push((term, count));
                             }
                         }
 
-                        output.push((topk, 1));
-                    },
-                    _ => {
-                        let k = setcompre_default.clone();
-                        let mut min_heap = BinaryHeap::new();
-                        for (term, count) in terms {
-                            let term_ref: &Term = term.borrow();
-                            match term_ref {
-                                Term::Atom(atom) => {
-                                    match atom {
-                                        Atom::Int(i) => { 
-                                            min_heap.push(Reverse(i.clone()));
-                                        },
-                                        _ => {}
-                                    }
-                                },
-                                _ => {}
-                            }
-                        }
+                        let aggregated_result = setcompre_op.aggregate(terms);
+                        output.push((vec![aggregated_result], 1));
+                    });
 
-                        let mut bottomk = vec![];
-                        for i in num_iter::range(BigInt::zero(), k) {
-                            if !min_heap.is_empty() {
-                                let r = min_heap.pop().unwrap().0;
-                                bottomk.push(r);
-                            }
-                        }
+                let binding_with_aggregation_stream = binding_and_aggregation_stream
+                    .map(move |(mut binding, nums)| {
+                        // Take the first element in num list when operator is count, sum, maxAll, minAll.
+                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
+                        binding.insert(setcompre_var.clone(), Arc::new(num_term));
+                        binding
 
-                        output.push((bottomk, 1));
-                    }
-                };
+                        // When operator is topk or bottomk.
+                        // TODO: return a list of numeric values but how?
+                    });
 
-            });
-        
-        // The stream of bindings that does contribution to the aggregation result.
-        let remained_binding_after_aggregation = binding_and_aggregation_stream.map(|(x, aggregation)| { x });
-        let binding_with_aggregation_stream = binding_and_aggregation_stream
-            .map(move |(mut binding, nums)| {
-                // Take the first element in num list when operator is count, sum, maxAll, minAll.
-                let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
-                binding.insert(Arc::new(setcompre_var.clone()), Arc::new(num_term));
-                binding
+                setcompre_var = Arc::new(var.clone());
+                setcompre_default = setcompre.default.clone();
+                // Find the stream of binding in outer scope that does no contribution to the aggregation result
+                // Then simply add default aggregation value into the binding.
+                let binding_with_default_stream = ordered_outer_collection.map(|x| (x, true))
+                    .antijoin(&binding_and_aggregation_stream.map(|(x, aggregation)| { x }))
+                    .map(move |(mut outer, _)| {
+                        // Add default value of set comprehension to each binding.
+                        let num_term: Term = Atom::Int(setcompre_default.clone()).into();
+                        outer.insert(setcompre_var.clone(), Arc::new(num_term));
+                        outer 
+                    });
 
-                // When operator is topk or bottomk.
-                // TODO: return a list of numeric values but how?
-            });
-
-        setcompre_var = var.clone();
-        setcompre_default = setcompre.default.clone();
-        let binding_with_default_stream = ordered_outer_collection.map(|x| (x, true))
-            .antijoin(&remained_binding_after_aggregation)
-            .map(move |(mut outer, _)| {
-                // Add default value of set comprehension to each binding.
-                let num_term: Term = Atom::Int(setcompre_default.clone()).into();
-                outer.insert(Arc::new(setcompre_var.clone()), Arc::new(num_term));
-                outer 
-            });
-
-        let final_binding_stream = binding_with_aggregation_stream.concat(&binding_with_default_stream);
-
-        final_binding_stream
-            //.inspect(|x| { println!("Aggregation result added into binding {:?}", x); })
+                binding_with_aggregation_stream.concat(&binding_with_default_stream)
+            }
+        }
     }
 
     pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, Arc<Term>>, rule: &Rule) 
@@ -699,7 +594,7 @@ impl DDEngine {
         //.inspect(|x| { println!("Beginning check out {:?}", x)})
         .iterate(|transitive_models| {
             let constraints = rule.get_body();
-            let binding_collection = self.dataflow_from_constraints(&transitive_models, &constraints);
+            let (_, binding_collection) = self.dataflow_from_constraints(&transitive_models, &constraints);
 
             let mut combined_models = transitive_models.map(|x| x);
             for term in head_terms.into_iter() {
