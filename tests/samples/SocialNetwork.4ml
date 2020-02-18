@@ -32,7 +32,7 @@ domain SocialNetwork
   // The total score of a post based on 10x number of its comments + the total number of likes those comments have
   PostTotalScore ::= (id: Integer, value: Integer).
 
-  Test ::= new (val: Integer).
+  TopPostScore ::= new (rank: Integer, post: Integer).
 
   //// Most Influential Comment (MIC)
  
@@ -64,6 +64,8 @@ domain SocialNetwork
   // MCP 4. For each Post, compute its total score by adding its PostCommentScore and PostLikeScore.
   PostTotalScore(pcs.id, val) :- pcs is PostCommentScore(_, _), pls is PostLikeScore(pcs.id, _), val = pcs.value + pls.value.
 
+  TopPostScore(rank, pid) :- x is PostTotalScore(pid, val), i = toOrdinal(val, -1, { s | PostTotalScore(_, s) }),
+                             rank = n - (i + 1), n = count({ p | p is Posts(_, _, _, _) }).
 }
 
 
