@@ -18,10 +18,12 @@ use num_iter::range;
 
 use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
+use timely::order::Product;
 
 use differential_dataflow::{Collection, ExchangeData};
 use differential_dataflow::input::{Input, InputSession};
 use differential_dataflow::operators::join::{Join, JoinCore};
+use differential_dataflow::operators::iterate::Variable as TimelyVariable;
 use differential_dataflow::operators::*;
 
 use crate::constraint::*;
@@ -59,7 +61,6 @@ impl Session {
             probe,
             env,
             domain_name,
-            
             model_name,
             step_count: 1,
         }
@@ -104,13 +105,6 @@ impl Session {
     }
 
     pub fn load_model(&mut self, model: Model) {
-        /*let terms: Vec<Term> = model.models.into_iter()
-            .map(|x| {
-                let x_ref: &Term = x.borrow();
-                x_ref.clone()
-            })
-            .collect();
-            */
         self.add_terms(model.models);
     }
 }
@@ -204,6 +198,11 @@ impl DDEngine {
                     _ => { false }
                 }
             })
+    }
+
+
+    pub fn dataflow_filtered_by_pattern() {
+
     }
 
 
@@ -381,11 +380,11 @@ impl DDEngine {
 
         let default_vars: OrdSet<Term> = OrdSet::new();
         // TODO: find a better way to create an empty collection.
-        let default_col = models.map(|x| {
-            let mut binding = OrdMap::new();
-            binding.insert(x.clone(), x.clone());
-            binding
-        });
+        let default_col = models
+            .filter(|x| false)
+            .map(|x| {
+                OrdMap::new()
+            });
 
         // Join all positive predicate terms by their shared variables one by one in order.
         let (mut vars, mut collection) = pos_preds.iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
@@ -588,30 +587,26 @@ impl DDEngine {
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
         let head_terms = rule.get_head();
+        let constraints = rule.get_body();
 
-        // Iteratively add new derived models to dataflow until fix point is reached.
-        let models_after_rule_execution = models
-        //.inspect(|x| { println!("Beginning check out {:?}", x)})
-        .iterate(|transitive_models| {
-            let constraints = rule.get_body();
-            let (_, binding_collection) = self.dataflow_from_constraints(&transitive_models, &constraints);
-
-            let mut combined_models = transitive_models.map(|x| x);
-            for term in head_terms.into_iter() {
-                let headterm_stream = binding_collection
+        models
+            .iterate(|inner| {
+                //let models = models.enter(&inner.scope());
+                let (_, binding_collection) = self.dataflow_from_constraints(&inner, &constraints);
+                let derived_terms = binding_collection
                     .map(move |binding| {
-                        term.propagate_bindings(&binding).unwrap()
-                    });
+                        let mut new_terms: Vec<Arc<Term>> = vec![];
+                        for head_term in head_terms.iter() {
+                            let mut new_term = head_term.propagate_bindings(&binding).unwrap();
+                            new_terms.push(new_term);
+                        }
+                        new_terms
+                    })
+                    .flat_map(|x| x);
 
-                combined_models = combined_models.concat(&headterm_stream);
-            }
-
-            combined_models.distinct()
-        });
-
-        models_after_rule_execution
+                inner.concat(&derived_terms).distinct()
+            })
     }
-
 
     pub fn create_dataflow(
         &mut self, 

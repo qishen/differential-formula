@@ -1,21 +1,13 @@
 extern crate differential_formula;
 
-use differential_formula::constraint::*;
-use differential_formula::expression::*;
-use differential_formula::term::*;
 use differential_formula::engine::*;
 use differential_formula::type_system::*;
-use differential_formula::rule::*;
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use std::rc::Rc;
-use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
 
 
-static model1: &str = "
+static MODEL1: &str = "
 model m of Graph {
     n0 is Node(0).
     n1 is Node(1).
@@ -78,7 +70,7 @@ fn test_ddengine_1() {
         //Path(a, c) :- Path(a, b), Path(b, c).
     ";
 
-    let (domain, mut session) = create_session(rules1, model1);
+    let (domain, mut session) = create_session(rules1, MODEL1);
 }
 
 #[test]
@@ -87,7 +79,7 @@ fn test_ddengine_2() {
         Edge(a, c) :- Edge(a, b), Edge(b, c).
     ";
     
-    let (domain, mut session) = create_session(rules2, model1);
+    let (domain, mut session) = create_session(rules2, MODEL1);
     
     let edge45 = session.parse_term_str("Edge(Node(4), Node(5))").unwrap();
     let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
@@ -101,7 +93,7 @@ fn test_ddengine_3() {
         Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
     ";
 
-    let (domain, mut session) = create_session(rules3, model1);
+    let (domain, mut session) = create_session(rules3, MODEL1);
 }
 
 #[test]
@@ -112,7 +104,7 @@ fn test_ddengine_4() {
         Nocycle(u) :- u is Node(_), no Path(u, u).
     ";
 
-    let (domain, mut session) = create_session(rules4, model1);
+    let (domain, mut session) = create_session(rules4, MODEL1);
 
     let edge00 = session.parse_term_str("Edge(Node(0), Node(0))").unwrap();
     let edge22 = session.parse_term_str("Edge(Node(2), Node(2))").unwrap();
@@ -132,7 +124,7 @@ fn test_ddengine_5() {
         Line(a, b, c, d) :- Edge(a, b), Edge(c, d).
     ";
 
-    let (domain, mut session) = create_session(rules5, model1);
+    let (domain, mut session) = create_session(rules5, MODEL1);
 }
 
 
@@ -142,7 +134,7 @@ fn test_ddengine_6() {
         TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
     ";
 
-    let (domain, mut session) = create_session(rules6, model1);
+    let (domain, mut session) = create_session(rules6, MODEL1);
 }
 
 #[test]
@@ -151,7 +143,7 @@ fn test_ddengine_6x() {
         TwoEdge(x, y) :- x is Edge(_, _), y is Edge(_, _).
     ";
 
-    let (domain, mut session) = create_session(rules6x, model1);
+    let (domain, mut session) = create_session(rules6x, MODEL1);
 }
 
 #[test]
@@ -162,7 +154,7 @@ fn test_ddengine_7() {
                                  square = aggr * aggr, aggr * 2 = 20 .
     ";
 
-    let (domain, mut session) = create_session(rules7, model1);
+    let (domain, mut session) = create_session(rules7, MODEL1);
 
     let edge45 = session.parse_term_str("Edge(Node(4), Node(5))").unwrap();
     let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
@@ -176,7 +168,7 @@ fn test_ddengine_7x() {
         Node(num) :- x is Node(_), num = aggr + 100, aggr = maxAll(1000, { k | Edge(_, Node(k)) }).
     ";
 
-    let (domain, mut session) = create_session(rules7x, model1);
+    let (domain, mut session) = create_session(rules7x, MODEL1);
 
     let edge34 = session.parse_term_str("Edge(Node(3), Node(4))").unwrap();
     let edge56 = session.parse_term_str("Edge(Node(5), Node(6))").unwrap();
@@ -192,7 +184,7 @@ fn test_ddengine_8() {
         Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).
     ";
 
-    let (domain, mut session) = create_session(rules8, model1);
+    let (domain, mut session) = create_session(rules8, MODEL1);
 }
 
 #[test]
@@ -201,10 +193,10 @@ fn test_ddengine_8x() {
         Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).
     ";
 
-    let (domain, mut session) = create_session(rules8x, model1);
+    let (domain, mut session) = create_session(rules8x, MODEL1);
 }
 
-//#[test]
+#[test]
 // TODO: Fix the constraint classification in rule.
 fn test_ddengine_9() {
     // Let's try a nested aggregation.
@@ -212,7 +204,7 @@ fn test_ddengine_9() {
     TwoEdge(x, x, num) :- x is Edge(c, d), aggr1 = count({ n | n is Node(_), aggr2 = count({ x | x is Edge(a, b) }) }), num = aggr1 * 100 .
     ";
 
-    let (domain, mut session) = create_session(rules9, model1);
+    let (domain, mut session) = create_session(rules9, MODEL1);
 }
 
 
@@ -222,7 +214,7 @@ fn test_ddengine_10() {
     Node(num) :- num = aggr * 1000, aggr = count({Edge(a, a), b | Edge(a, b)}).
     ";
 
-    let (domain, mut session) = create_session(rules10, model1);
+    let (domain, mut session) = create_session(rules10, MODEL1);
 }
 
 
