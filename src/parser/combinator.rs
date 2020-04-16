@@ -1,153 +1,23 @@
-extern crate num;
-
+use crate::parser::ast::*;
 use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
-use crate::rule::*;
 use crate::util::*;
 
+use std::fs;
+use std::path::Path;
 use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::collections::*;
+
 use nom::character::*;
 use nom::character::complete::*;
 use nom::number::complete::*;
+
 use num::*;
-use enum_dispatch::enum_dispatch;
-use im::OrdMap;
 
-
-#[enum_dispatch(TermAst)]
-trait TermAstBehavior {}
-
-impl TermAstBehavior for CompositeTermAst {}
-impl TermAstBehavior for Term {}
-
-#[enum_dispatch]
-#[derive(Debug, Clone)]
-enum TermAst {
-    CompositeTermAst,
-    Term, // It only represents Atom or Variable.
-}
-
-impl TermAst {
-    fn to_term(&self, domain: &Domain) -> Term {
-        match self {
-            TermAst::CompositeTermAst(cterm_ast) => {
-                let mut term_arguments = vec![];
-                for argument in cterm_ast.arguments.clone() {
-                    let term = argument.to_term(domain);
-                    term_arguments.push(Arc::new(term));
-                }
-
-                let sort = domain.get_type(&cterm_ast.name);
-
-                Composite {
-                    sort,
-                    arguments: term_arguments,
-                    alias: cterm_ast.alias.clone(),
-                }.into()
-            },
-            TermAst::Term(term) => {
-                term.clone()
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct CompositeTermAst {
-    name: String,
-    arguments: Vec<Box<TermAst>>,
-    alias: Option<String>
-}
-
-
-#[enum_dispatch(TypeDefAst)]
-trait TypeDefAstBehavior {
-    fn name(&self) -> Option<String>;
-}
-
-#[enum_dispatch]
-#[derive(Debug, Clone)]
-enum TypeDefAst {
-    AliasTypeDefAst,
-    CompositeTypeDefAst,
-    UnionTypeDefAst,
-    RangeTypeDefAst,
-    EnumTypeDefAst,
-}
-
-
-#[derive(Debug, Clone)]
-struct AliasTypeDefAst {
-    name: String,
-}
-
-impl TypeDefAstBehavior for AliasTypeDefAst {
-    fn name(&self) -> Option<String> {
-        Some(self.name.clone())
-    }
-}
-
-
-// e.g. Edge ::= new(src: Node, dst: Node).
-#[derive(Debug, Clone)]
-struct CompositeTypeDefAst {
-    name: String,
-    args: Vec<(String, Box<TypeDefAst>)>,
-}
-
-impl TypeDefAstBehavior for CompositeTypeDefAst {
-    fn name(&self) -> Option<String> {
-        Some(self.name.clone())
-    }
-}
-
-
-// X ::= A + B + C.
-#[derive(Debug, Clone)]
-struct UnionTypeDefAst {
-    name: Option<String>,
-    subtypes: Vec<Box<TypeDefAst>>,
-}
-
-impl TypeDefAstBehavior for UnionTypeDefAst {
-    fn name(&self) -> Option<String> {
-        self.name.clone()
-    }
-}
-
-
-// Range ::= {0..100}.
-#[derive(Debug, Clone)]
-struct RangeTypeDefAst {
-    name: Option<String>,
-    low: String,
-    high: String,
-}
-
-impl TypeDefAstBehavior for RangeTypeDefAst {
-    fn name(&self) -> Option<String> {
-        self.name.clone()
-    }
-}
-
-
-// Enum ::= {"HELLO", "WORLD", 2, 1.23}
-#[derive(Debug, Clone)]
-struct EnumTypeDefAst {
-    name: Option<String>,
-    enums: Vec<String>,
-}
-
-impl TypeDefAstBehavior for EnumTypeDefAst {
-    fn name(&self) -> Option<String> {
-        self.name.clone()
-    }
-}
 
 // Start with '//' and end with '\n'
 named!(comment<&str, &str>, 
@@ -156,40 +26,46 @@ named!(comment<&str, &str>,
     )
 );
 
-// It can be either comment or white space, extend multispace with comment.
-named!(blank<&str, &str>, 
+// Skip is multiples of comment, tab, new line or white space.
+named!(skip<&str, &str>,
     recognize!(
         many0!(alt!(comment | multispace1))
     )
 );
 
+// The first letter has to be alpha and the rest be alphanumeric.
 named!(id<&str, String>,
     map!(recognize!(tuple!(alpha1, alphanumeric0)), |x| { x.to_string() })
 );
 
-// The first letter has to be alpha and the rest be alphanumeric.
+// Same pattern as `id` but return ast instead of string.
+// Two types of typename: 
+// 1. Native type e.g. Node or Edge.
+// 2. Chained renamed type alias e.g. left.Node or right.x.y.z.Node
 named!(typename<&str, TypeDefAst>,
-    map!(tuple!(alpha1, alphanumeric0), |(x, y)| { 
-        let name = x.to_string() + y;
-        AliasTypeDefAst { name: name }.into() 
+    map!(separated_list!(tag!("."), id), |mut names| {
+        let name = names.remove(names.len()-1);
+        AliasTypeDefAst {
+            chained_scopes: names,
+            name,
+        }.into()
     })
 );
 
-named!(tagged_typename<&str, (String, TypeDefAst)>,
+// Two types of typename: 1. Node ::= new (id: String). 2. Node ::= new (String).
+named!(tagged_typename<&str, (Option<String>, TypeDefAst)>,
     alt!(
         map!(
             tuple!(id, delimited!(space0, tag!(":"), space0), typename),
             |(id_str, sep, t)| {
-                (id_str.to_string(), t)
+                (Some(id_str.to_string()), t)
             } 
         ) |
         map!(typename, |t| { 
-            ("".to_string(), t) 
+            (None, t) 
         })
     )
 );
-
-
 
 named!(composite_typedef<&str, (String, TypeDefAst)>,
     do_parse!(
@@ -197,16 +73,16 @@ named!(composite_typedef<&str, (String, TypeDefAst)>,
         delimited!(space0, tag!("::="), space0) >>
         opt!(delimited!(space0, tag!("new"), space0)) >>
         args: delimited!(
-            tag!("("), 
-            separated_list!(tag!(","), delimited!(space0, tagged_typename, space0)),    
-            tag!(").")
+            delimited!(space0, tag!("("), space0), 
+            separated_list!(delimited!(space0, tag!(","), space0), tagged_typename),    
+            delimited!(space0, tag!(")"), space0)
         ) >>
-
+        dot: tag!(".") >>
         ((t.clone(), parse_composite_typedef(t, args)))
     )
 );
 
-fn parse_composite_typedef(t: String, args: Vec<(String, TypeDefAst)>) -> TypeDefAst {
+fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -> TypeDefAst {
     let mut boxed_args = vec![];
     for (id, typedef) in args {
         boxed_args.push((id, Box::new(typedef)));
@@ -217,8 +93,6 @@ fn parse_composite_typedef(t: String, args: Vec<(String, TypeDefAst)>) -> TypeDe
         args: boxed_args,
     }.into()
 }
-
-
 
 named!(union_typedef<&str, (String, TypeDefAst)>,
     do_parse!(
@@ -247,246 +121,242 @@ named!(atom_typedef,
     alt!(tag!("String") | tag!("Integer") | tag!("Boolean"))
 );
 
+named!(conformance<&str, RuleAst>,
+    do_parse!(
+        tag!("conforms") >>
+        body: separated_list!(
+            delimited!(skip, tag!(","), skip),
+            constraint
+        ) >>
+        terminated!(skip, tag!(".")) >>
+        (parse_rule(vec![], body))
+    )
+);
+
+// Comments are allowed between constraints in both head and body.
+named!(rule<&str, RuleAst>,
+    do_parse!(
+        head: separated_list!(
+            delimited!(skip, tag!(","), skip), 
+            alt!(composite | variable_ast)
+        ) >>
+        delimited!(skip, tag!(":-"), skip) >>
+        body: separated_list!(
+            delimited!(skip, tag!(","), skip),
+            constraint
+        ) >>
+        terminated!(skip, tag!(".")) >>
+        (parse_rule(head, body))
+    )
+);
+
+fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
+    RuleAst {
+        head,
+        body,
+    }
+}
 
 named!(domain_rules<&str, Vec<RuleAst>>,
-    many0!(
-        delimited!(
-            blank,
-            terminated!(rule, tag!(".")), 
-            blank
-        )
-    )
+    separated_list!(skip, rule)
 );
 
-
-named!(domain_types<&str, HashMap<String, Type>>,
+named!(domain_types<&str, Vec<(String, TypeDefAst)>>,
     do_parse!(
-        typedefs: many0!(
-            delimited!(
-                blank,
-                alt!(composite_typedef | union_typedef), 
-                blank
-            )
+        typedefs: separated_list!(
+            skip,
+            alt!(composite_typedef | union_typedef) 
         ) >>
-        (parse_domain_types(typedefs))
+        (typedefs)
     )
 );
 
-fn parse_domain_types(typedefs: Vec<(String, TypeDefAst)>) -> HashMap<String, Type>{
-    let mut ast_map = HashMap::new();
-    let mut type_map = HashMap::new();
-    type_map.insert("String".to_string(), BaseType::String.into());
-    type_map.insert("Integer".to_string(), BaseType::Integer.into());
-    type_map.insert("Boolean".to_string(), BaseType::Boolean.into());
-    
-    // Put all typedef AST into a hash map.
-    for (t, typedef) in typedefs {
-        ast_map.insert(t, typedef);
-    }
-
-    // Recursively create all types found in AST.
-    for k in ast_map.keys() {
-        let t = create_type(k.clone(), &ast_map, &mut type_map);
-    }
-
-    type_map
-}
-
-fn create_type(
-    t: String, 
-    ast_map: &HashMap<String, TypeDefAst>, 
-    type_map: &mut HashMap<String, Type>
-) -> Option<Type> 
-{
-    if !type_map.contains_key(&t) {
-        let v = ast_map.get(&t).unwrap();
-        let new_type = match v {
-            TypeDefAst::AliasTypeDefAst(atypedef) => {
-                let alias = atypedef.name.clone();
-                create_type(alias, ast_map, type_map)
-            },
-
-            TypeDefAst::CompositeTypeDefAst(ctypedef) => {
-                let mut args = vec![];
-                let typename = ctypedef.name().unwrap();
-                for (id, arg_ast) in ctypedef.args.iter() {
-                    let name = arg_ast.name().unwrap();
-                    let subtype_opt = type_map.get(&name);
-                    let subtype = match subtype_opt {
-                        Some(t) => { t.clone() },
-                        None => { 
-                            create_type(name, ast_map, type_map).unwrap() 
-                        }
-                    };
-                    let mut id_opt = None;
-                    if id != "" {
-                        id_opt = Some(id.clone());
-                    }
-                    args.push((id_opt, subtype));
-                }
-
-                let ctype: Type = CompositeType {
-                    name: typename,
-                    arguments: args,
-                }.into();
-
-                Some(ctype)
-            },
-
-            TypeDefAst::UnionTypeDefAst(utypedef) => {
-                let mut subtypes = vec![];
-                let typename = utypedef.name().unwrap();
-                for subtype_ast in utypedef.subtypes.iter() {
-                    let name = subtype_ast.name().unwrap();
-                    let subtype_opt = type_map.get(&name);
-                    let subtype = match subtype_opt {
-                        Some(t) => { t.clone() },
-                        None => { create_type(name, ast_map, type_map).unwrap() }
-                    };
-                    subtypes.push(subtype);
-                }
-
-                let utype: Type = UnionType {
-                    name: typename,
-                    subtypes: subtypes,
-                }.into();
-
-                Some(utype)
-            },
-            _ => { None }
-        };
-
-        // Add new type to the type map.
-        type_map.insert(t, new_type.clone().unwrap());
-
-        return new_type;
-
-    } else {
-        let type_in_map = type_map.get(&t).unwrap();
-        return Some(type_in_map.clone());
-    }
-}
-
-#[derive(Clone, Debug)]
-enum ProgramAst {
-    Domain(DomainAst),
-    Model(ModelAst),
-}
-
-#[derive(Clone, Debug)]
-struct DomainAst {
-    name: String,
-    type_map: HashMap<String, Type>,
-    rules: Vec<RuleAst>,
-}
-
-#[derive(Clone, Debug)]
-struct ModelAst {
-    model_name: String,
-    domain_name: String,
-    models: Vec<TermAst>,
-}
-
+// Two types of inheritances:
+// 1. domain X extends Y, Z {}. 
+// 2. domain Y extends left:: Y, right:: Y {}.
+named!(subdomain<&str, (Option<String>, String)>,
+    alt!(
+        map!(
+            tuple!(id, delimited!(space0, tag!("::"), space0), id), 
+            |(scope, sep, domain)| { (Some(scope), domain) } 
+        ) |
+        map!(id, |t| { (None, t) })
+    )
+);
 
 named!(
-    domain<&str, ProgramAst>, 
+    domain<&str, ModuleAst>, 
     do_parse!(
         tag!("domain") >>
         domain_name: delimited!(multispace0, id, multispace0) >>
+        subdomains_data: opt!(tuple!(
+            map!(
+                delimited!(
+                    space0,
+                    alt!(tag!("includes") | tag!("extends")),
+                    space0
+                ), 
+                |x| { x.to_string() }
+            ),
+            separated_list!(delimited!(space0, tag!(","), space0), subdomain)
+        )) >>
+        multispace0 >>
         tag!("{") >>
-        typedefs: delimited!(multispace0, domain_types, multispace0) >> 
-        rules: delimited!(multispace0, domain_rules, multispace0) >>
+        skip >>
+        typedefs: domain_types >> 
+        skip >>
+        rules: domain_rules >>
+        skip >>
         tag!("}") >>
-        (ProgramAst::Domain(
-            DomainAst {
-                name: domain_name,
-                type_map: typedefs,
-                rules,
-            }
-        ))
+        (parse_domain(domain_name, typedefs, rules, subdomains_data))
     )
 );
 
+fn parse_domain(
+    domain_name: String, 
+    typedefs: Vec<(String, TypeDefAst)>, 
+    rules: Vec<RuleAst>,
+    subdomains_opt: Option<(String, Vec<(Option<String>, String)>)>
+) -> ModuleAst {
+    let mut inherit_type = "None".to_string();
+    let mut subdomains = vec![];
+    let mut renamed_subdomains = HashMap::new();
 
-named!(model<&str, ProgramAst>, 
+    if let Some(subs) = subdomains_opt {
+        inherit_type = subs.0;
+        for (scope_opt, name) in subs.1 {
+            if let Some(scope) = scope_opt {
+                renamed_subdomains.insert(scope, name);
+            } else {
+                subdomains.push(name);
+            }
+        }
+    };
+
+    let domain_ast = DomainAst {
+        name: domain_name,
+        types: typedefs,
+        rules: rules,
+        inherit_type,
+        subdomains,
+        renamed_subdomains,
+    };
+
+    ModuleAst::Domain(domain_ast)
+}
+
+named!(model<&str, ModuleAst>, 
     do_parse!(
         tag!("model") >>
         model_name: delimited!(multispace0, id, multispace0) >>
+        submodels_data: opt!(tuple!(
+            map!(
+                delimited!(
+                    space0,
+                    alt!(tag!("includes") | tag!("extends")),
+                    space0
+                ), 
+                |x| { x.to_string() }
+            ),
+            // Use `subdomain` to parse inheritance because the syntax is the same as domain inheritance.
+            separated_list!(delimited!(space0, tag!(","), space0), subdomain)
+        )) >>
         tag!("of") >>
         domain_name: delimited!(multispace0, id, multispace0) >>
         models: delimited!(
             tag!("{"),
             many0!(
                 delimited!(
-                    blank,
+                    skip,
                     terminated!(composite, delimited!(multispace0, tag!("."), multispace0)), 
-                    blank
+                    skip
                 )
             ),
             tag!("}")
         ) >>
-        (ProgramAst::Model(
-            ModelAst {
-                model_name,
-                domain_name,
-                models
-            }
-        ))
+        (parse_model(model_name, domain_name, models, submodels_data))
     )
 );
+
+fn parse_model(
+    model_name: String, domain_name: String,
+    models: Vec<TermAst>,
+    submodels_opt: Option<(String, Vec<(Option<String>, String)>)>
+) -> ModuleAst 
+{
+    let mut inherit_type = "None".to_string();
+    let mut submodels = vec![];
+    let mut renamed_submodels = HashMap::new();
+
+    if let Some(subs) = submodels_opt {
+        inherit_type = subs.0;
+        for (scope_opt, name) in subs.1 {
+            if let Some(scope) = scope_opt {
+                renamed_submodels.insert(scope, name);
+            } else {
+                submodels.push(name);
+            }
+        }
+    };
+
+    let model_ast = ModelAst {
+        model_name,
+        domain_name,
+        models,
+        inherit_type,
+        submodels,
+        renamed_submodels,
+    };
+
+    ModuleAst::Model(model_ast)
+}
 
 
 // Export this function to parse FORMULA file in string format.
 pub fn parse_str(content: String) -> Env {
     let result = program(&content[..]).unwrap();
     //println!("{:?}", result.0);
-    result.1
+    let program_ast = result.1;
+    program_ast.build_env()
+    //unimplemented!()
 }
 
+named!(program<&str, ProgramAst>,
+    map!(many0!(
+        delimited!(skip, alt!(domain | model), skip)
+    ), |modules| {
+        let mut domain_ast_map = HashMap::new();
+        let mut model_asts = HashMap::new();
+
+        for module in modules {
+            match module {
+                ModuleAst::Domain(domain_ast) => {
+                    domain_ast_map.insert(domain_ast.name.clone(), domain_ast);
+                },
+                ModuleAst::Model(model_ast) => {
+                    model_asts.insert(model_ast.model_name.clone(), model_ast);
+                }
+            }
+        }
+
+        ProgramAst {
+            domain_ast_map: domain_ast_map,
+            model_ast_map: model_asts,
+        }
+    })
+);
+
 // Return a domain map and a model map at the end of parsing.
-named!(program<&str, Env>,
+/*named!(program_old<&str, Env>,
     map!(
         many0!(
             preceded!(multispace0, alt!(domain | model))
         ),
         |list| {
         // filter them into domain, model and transformation categories.
-        let mut domain_asts = vec![];
+        let mut domain_ast_map = HashMap::new();
         let mut model_asts = vec![];
-        for x in list {
-            match x {
-                ProgramAst::Domain(domain_ast) => {
-                    domain_asts.push(domain_ast);
-                },
-                
-                ProgramAst::Model(model_ast) => {
-                    model_asts.push(model_ast);
-                }
-            }
-        }
 
-        let mut domain_map = HashMap::new();
-        for domain_ast in domain_asts {
-            let mut arc_type_map = HashMap::new(); 
-            let domain_name = domain_ast.name;
-
-            for (id, t) in domain_ast.type_map {
-                arc_type_map.insert(id, Arc::new(t));
-            }
-
-            let mut domain = Domain {
-                name: domain_name.clone(),
-                type_map: arc_type_map,
-                rules: vec![],
-            };
-
-            // Add rules into domain.
-            for rule_ast in domain_ast.rules {
-                domain.add_rule(rule_ast.to_rule(&domain));
-            }
-
-            domain_map.insert(domain_name, domain);
-        }
 
         let mut model_map = HashMap::new();
         for model_ast in model_asts {
@@ -549,7 +419,7 @@ named!(program<&str, Env>,
             model_map,
         }
     })
-);
+);*/
 
 fn propagate_alias_map<T>(
     var: &Term, 
@@ -569,176 +439,6 @@ fn propagate_alias_map<T>(
     let new_term = raw_term.propagate_bindings(alias_map).unwrap();
     alias_map.ginsert(Arc::new(var.clone()), new_term);
 }
-
-
-#[enum_dispatch(ExprAst)]
-trait ExprAstBehavior {
-    fn to_expr(&self, domain: &Domain) -> Expr;
-}
-
-#[enum_dispatch]
-#[derive(Clone, Debug)]
-enum ExprAst {
-    BaseExprAst,
-    ArithExprAst,
-}
-
-
-#[enum_dispatch(BaseExprAst)]
-trait BaseExprAstBehavior {
-    fn to_base_expr(&self, domain: &Domain) -> BaseExpr;
-}
-
-#[enum_dispatch]
-#[derive(Clone, Debug)]
-enum BaseExprAst {
-    SetComprehensionAst,
-    TermAst,
-}
-
-impl ExprAstBehavior for BaseExprAst {
-    fn to_expr(&self, domain: &Domain) -> Expr {
-        let base_expr = self.to_base_expr(domain);
-        base_expr.into()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct SetComprehensionAst {
-    vars: Vec<TermAst>,
-    condition: Vec<ConstraintAst>,
-    op: SetCompreOp,
-    default: Option<BigInt>,
-}
-
-impl BaseExprAstBehavior for SetComprehensionAst {
-    fn to_base_expr(&self, domain: &Domain) -> BaseExpr {
-        let mut vars = vec![];
-        let mut condition = vec![];
-        for term_ast in self.vars.clone() {
-            vars.push(term_ast.to_term(domain));
-        }
-
-        for constraint_ast in self.condition.clone() {
-            condition.push(constraint_ast.to_constraint(domain));
-        }
-        
-        // Count and Sum operator does not have explicit default value but let's set it to 0.
-        let default = match self.default.clone() {
-            None => { BigInt::from_i64(0 as i64).unwrap() },
-            Some(val) => { val },
-        };
-
-        SetComprehension::new( 
-            vars,
-            condition,
-            self.op.clone(),
-            default,
-        ).into()
-    }
-}
-
-impl BaseExprAstBehavior for TermAst {
-    fn to_base_expr(&self, domain: &Domain) -> BaseExpr {
-        let term = self.to_term(domain);
-        term.into()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct ArithExprAst {
-    op: ArithmeticOp,
-    left: Box<ExprAst>,
-    right: Box<ExprAst>,
-}
-
-impl ExprAstBehavior for ArithExprAst {
-    fn to_expr(&self, domain: &Domain) -> Expr {
-        let left = self.left.to_expr(domain);
-        let right = self.right.to_expr(domain);
-        ArithExpr {
-            op: self.op.clone(),
-            left: Arc::new(left),
-            right: Arc::new(right),
-        }.into()
-    }
-}
-
-
-#[enum_dispatch(ConstraintAst)]
-trait ConstraintAstBehavior {
-    fn to_constraint(&self, domain: &Domain) -> Constraint;
-}
-
-#[enum_dispatch]
-#[derive(Clone, Debug)]
-enum ConstraintAst {
-    PredicateAst,
-    BinaryAst,
-    TypeConstraintAst,
-}
-
-#[derive(Clone, Debug)]
-struct TypeConstraintAst {
-    var: TermAst,
-    sort: TypeDefAst,
-}
-
-impl ConstraintAstBehavior for TypeConstraintAst {
-    fn to_constraint(&self, domain: &Domain) -> Constraint {
-        let typename = self.sort.name().unwrap();
-        let sort = domain.type_map.get(&typename).unwrap().clone();
-
-        TypeConstraint {
-            var: self.var.to_term(domain),
-            sort,
-        }.into()
-    }
-}
-
-
-#[derive(Clone, Debug)]
-struct PredicateAst {
-    negated: bool,
-    term: TermAst,
-    alias: Option<String>,
-}
-
-impl ConstraintAstBehavior for PredicateAst {
-    fn to_constraint(&self, domain: &Domain) -> Constraint {
-        let alias = match self.alias.clone() {
-            None => None,
-            Some(a) => {
-                let term: Term = Variable::new(a, vec![]).into();
-                Some(term)
-            }
-        };
-
-        Predicate {
-            negated: self.negated,
-            term: self.term.to_term(domain),
-            alias,
-        }.into()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct BinaryAst {
-    op: BinOp,
-    left: ExprAst,
-    right: ExprAst,
-}
-
-impl ConstraintAstBehavior for BinaryAst {
-    fn to_constraint(&self, domain: &Domain) -> Constraint {
-        Binary {
-            op: self.op.clone(),
-            left: self.left.to_expr(domain),
-            right: self.right.to_expr(domain),
-        }.into()
-    }
-}
-
 
 
 named!(bin_op<&str, BinOp>,
@@ -766,7 +466,9 @@ named!(arith_op<&str, ArithmeticOp>,
 );
 
 named!(setcompre_op<&str, SetCompreOp>,
-    map!(alt!(tag!("count") | tag!("sum") | tag!("minAll") | tag!("maxAll") | tag!("topK") | tag!("bottomK")), |x| {
+    map!(alt!(
+        tag!("count") | tag!("sum") | tag!("minAll") | 
+        tag!("maxAll") | tag!("topK") | tag!("bottomK")), |x| {
         match x {
             "count" => SetCompreOp::Count,
             "sum" => SetCompreOp::Sum,
@@ -889,7 +591,12 @@ named!(setcompre<&str, SetComprehensionAst>,
     )
 );
 
-fn parse_setcompre(vars: Vec<TermAst>, condition: Vec<ConstraintAst>, op: SetCompreOp, default: Option<Term>) -> SetComprehensionAst {
+fn parse_setcompre(
+    vars: Vec<TermAst>, 
+    condition: Vec<ConstraintAst>, 
+    op: SetCompreOp, 
+    default: Option<Term>
+) -> SetComprehensionAst {
     let default_value = match default {
         None => None,
         Some(term) => {
@@ -979,48 +686,6 @@ fn parse_predicate(neg: Option<&str>, alias: Option<String>, term: TermAst) -> P
         alias,
     }
 }
-
-#[derive(Clone, Debug)]
-struct RuleAst {
-    head: Vec<TermAst>,
-    body: Vec<ConstraintAst>,
-}
-
-impl RuleAst {
-    fn to_rule(&self, domain: &Domain) -> Rule {
-        let mut head = vec![];
-        for term_ast in self.head.clone() {
-            head.push(term_ast.to_term(domain));
-        }
-
-        let mut body = vec![];
-        for constraint_ast in self.body.clone() {
-            body.push(constraint_ast.to_constraint(domain));
-        }
-
-        Rule::new(head, body)
-    }
-}
-
-
-named!(rule<&str, RuleAst>,
-    do_parse!(
-        head: separated_list!(tag!(","), alt!(composite | variable_ast)) >>
-        delimited!(space0, tag!(":-"), space0) >>
-        body: separated_list!(tag!(","), 
-            delimited!(multispace0, constraint, multispace0)
-        ) >>
-        (parse_rule(head, body))
-    )
-);
-
-fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
-    RuleAst {
-        head,
-        body,
-    }
-}
-
 
 pub fn parse_into_term(
     env_opt: &Option<Env>, 
@@ -1191,10 +856,15 @@ named!(atom_bool<&str, Term>,
     )
 );
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_blank() {
+        assert_eq!(comment("// comment \n\n").unwrap().0, "\n");
+        assert_eq!(skip("// comment \t\n  \n .").unwrap().0, ".");
+    }
+
     #[test]
     fn test_components() {
         assert_eq!(id("xxx").unwrap().0, "");
@@ -1202,10 +872,12 @@ mod tests {
         assert_eq!(varname("xx22' ").unwrap().0, " ");
         assert_eq!(varname("yy22'' ").unwrap().0, " ");
         assert_eq!(varname("_").unwrap().0, "");
-        assert_eq!(typename("yyy").unwrap().0, "");
-        assert_eq!(typename("b3aab2c").unwrap().0, "");
-        assert_eq!(tagged_typename("id : Hello").unwrap().0, "");
-        assert_eq!(comment("// Don't care \n").unwrap().0, "");
+        // typename matching won't terminate until it hits char that is not alphanumerical or dot.
+        assert_eq!(typename("yyy ").unwrap().0, " ");
+        assert_eq!(typename("b3aab2c ").unwrap().0, " ");
+        assert_eq!(typename("left.Node ").unwrap().0, " ");
+        assert_eq!(tagged_typename("id : Hello ").unwrap().0, " ");
+        assert_eq!(tagged_typename("id : right.Hello ").unwrap().0, " ");
     }
 
     #[test]
@@ -1228,13 +900,16 @@ mod tests {
     #[test]
     fn test_typedef() {
         assert_eq!(composite_typedef("Edge ::= new(src: Node, dst : Node ).").unwrap().0, "");
+        assert_eq!(composite_typedef("Edge ::= new(src: Left.Node, dst: Node).").unwrap().0, "");
         union_typedef("X  ::= A + B + C+  D  .");
     }
 
     #[test]
     fn test_expr() {
         assert_eq!(base_expr("x ").unwrap().0, " ");
-        assert_eq!(base_expr("count({a , udge(a, b) | X(m, 11.11),odge(a, a), Edge(b, Node(\"hello\")) })").unwrap().0, "");
+        assert_eq!(
+            base_expr("count({a , udge(a, b) | X(m, 11.11),odge(a, a), Edge(b, Node(\"hello\")) })").unwrap().0, 
+            "");
         assert_eq!(base_expr("minAll( 1 , {c, d | c is Node(a), d is Node(b)})").unwrap().0, "");
         assert_eq!(expr("a+b*c ,").unwrap().0, " ,");
         assert_eq!(expr("(a+b)*c ,").unwrap().0, " ,");
@@ -1247,12 +922,56 @@ mod tests {
         let binary1_str = &format!("(b + {}) / x = d + e .", setcompre_str)[..];
         assert_eq!(binary(binary1_str).unwrap().0, " .");
         assert_eq!(binary("aggr * 2 = 20 .").unwrap().0, " .");
-        
-        let rule_str = "Edge(a, b) :- Edge(b, c), Edge(c, a).";
-        assert_eq!(rule(rule_str).unwrap().0, ".");
     }
 
     #[test]
+    fn test_parse_rules() {
+        let path = Path::new("./tests/testcase/rules.txt");
+        let content = fs::read_to_string(path).unwrap();
+        let rules = content.split("\n--------\n");
+        for formula_rule in rules {
+            println!("{:?}", formula_rule);
+            assert_eq!(rule(&formula_rule[..]).unwrap().0, "");
+        }
+    }
+
+    #[test]
+    fn test_parse_domains() {
+        let path = Path::new("./tests/testcase/domains.txt");
+        let content = fs::read_to_string(path).unwrap();
+        let domains = content.split("\n--------\n");
+        for formula_domain in domains {
+            println!("{:?}", formula_domain);
+            assert_eq!(domain(&formula_domain[..]).unwrap().0, "");
+        }
+    }
+
+    #[test]
+    fn test_parse_models() {
+
+    }
+
+    #[test]
+    fn test_parse_transformation() {
+
+    }
+
+    #[test]
+    fn test_parse_programs() {
+        let path = Path::new("./tests/testcase/programs.txt");
+        let content = fs::read_to_string(path).unwrap();
+        let programs = content.split("\n--------\n");
+        for formula_program in programs {
+            println!("{:?}", formula_program);
+            let result = program(&formula_program[..]).unwrap();
+            assert_eq!(result.0, "EOF");
+            let program_ast = result.1;
+            let env = program_ast.build_env();
+            println!("{:#?}", env);
+        }
+    }
+
+    //#[test]
     fn test_program() {
         let graph_domain =  
             "domain Graph { 
@@ -1295,18 +1014,18 @@ mod tests {
             Line ::= new(a: Node, b: Node, c: Node, d: Node).
             Nocycle ::= new(node: Node).
             TwoEdge ::= new(first: Edge, second: Edge).
-    
+
             TwoEdge(x, x, square) :- x is Edge(c, d), 
             aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr * aggr, agg.hi * 2 = 20 .
         }
-    
+
         model m of Graph {
             n0 is Node(0).
             n1 is Node(1).
             n2 is Node(2).
             n3 is Node(3).
             n4 is Node(4).
-    
+
             Edge(n0, n0).
             Edge(n0, n1).
             Edge(n1, n2).
@@ -1321,4 +1040,3 @@ mod tests {
     }
 
 }
-

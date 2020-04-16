@@ -4,12 +4,10 @@ extern crate differential_dataflow;
 extern crate abomonation_derive;
 extern crate abomonation;
 
-use std::borrow::Borrow;
 use std::sync::Arc;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
+use std::collections::*;
 use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 
 use enum_dispatch::enum_dispatch;
 use num::*;

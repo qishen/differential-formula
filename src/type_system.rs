@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
 use std::convert::TryInto;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::*;
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
@@ -20,6 +20,7 @@ pub enum Type {
     BaseType,
     CompositeType,
     RangeType,
+    RenamedType,
     UnionType,
     Undefined
 }
@@ -40,7 +41,7 @@ impl Type {
                                         match subterm.borrow() {
                                             Term::Composite(cterm) => {
                                                 // Update the composite type for the next round.
-                                                match t {
+                                                match t.as_ref() {
                                                     Type::CompositeType(tc) => {
                                                         ctype = tc;
                                                     },
@@ -66,11 +67,31 @@ impl Type {
             _ => { None }
         }
     }
+
+    pub fn rename_type(&self, scope: String) -> Type {
+        let base = self.clone();
+        RenamedType {
+            scope,
+            base: Arc::new(base),
+        }.into()
+    }
 }
 
 #[enum_dispatch(Type)]
 pub trait TypeBehavior {
     fn name(&self) -> String;
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct RenamedType {
+    pub scope: String,
+    pub base: Arc<Type>,
+}
+
+impl TypeBehavior for RenamedType {
+    fn name(&self) -> String {
+        return format!("{}.{}", self.scope, self.base.name());
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -115,7 +136,7 @@ impl TypeBehavior for BaseType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
     pub name: String,
-    pub arguments: Vec<(Option<String>, Type)>
+    pub arguments: Vec<(Option<String>, Arc<Type>)>
 }
 
 impl TypeBehavior for CompositeType {
@@ -128,7 +149,7 @@ impl TypeBehavior for CompositeType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
     pub name: String,
-    pub subtypes: Vec<Type>,
+    pub subtypes: Vec<Arc<Type>>,
 }
 
 impl TypeBehavior for UnionType {

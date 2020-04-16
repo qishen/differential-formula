@@ -5,9 +5,6 @@ extern crate abomonation_derive;
 extern crate abomonation;
 
 use std::iter::*;
-use std::any::Any;
-use std::rc::Rc;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
@@ -60,16 +57,13 @@ impl Rule {
         rule
     }
 
-
     pub fn get_head(&self) -> Vec<Term> {
         self.head.clone()
     }
 
-
     pub fn get_body(&self) -> Vec<Constraint> {
         self.body.clone()
     }
-
 
     fn convert_negative_predicate(&mut self) {
         let mut constraints = vec![];
@@ -99,7 +93,6 @@ impl Rule {
         self.body = constraints;
     }
 
-
     // Return all existing variables in the body of a rule.
     pub fn variables(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
@@ -122,7 +115,6 @@ impl Rule {
         var_set
     }
 
-
     // Return derived variables by simply deducting matched variables from all variables.
     pub fn derived_variables(&self) -> HashSet<Term> {
         /*
@@ -142,7 +134,6 @@ impl Rule {
 
         diff_vars
     }
-
 
     pub fn matched_variables(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
@@ -173,7 +164,6 @@ impl Rule {
         var_set
     }
 
-
     pub fn pos_preds(&self) -> Vec<Constraint> {
         let preds: Vec<Constraint> = self.body.iter().filter(|x| {
             match x {
@@ -187,7 +177,6 @@ impl Rule {
 
         preds
     }
-
 
     /* 
     Simply check if the left side is a single variable term in the list of derived variables.
@@ -294,7 +283,6 @@ impl Rule {
         ordered_definition_constraints
     }
 
-
     /*
     Return all binary constraints in which the left side is the specified variable.
     e.g. result = [a = count({...}), a = b + c, a = 1]
@@ -324,7 +312,6 @@ impl Rule {
 
         matched_constraints
     }
-
    
     // Return all binary constraints.
     pub fn binary_constraints(&self) -> Vec<&Constraint> {

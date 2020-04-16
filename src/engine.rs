@@ -7,23 +7,17 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 use std::iter::*;
 use std::vec::Vec;
-use std::collections::*;
 use std::convert::TryInto;
 use std::string::String;
-use std::cmp::Reverse;
 
-use num::*;
 use im::{OrdMap, OrdSet};
-use num_iter::range;
 
 use timely::dataflow::Scope;
 use timely::dataflow::operators::*;
-use timely::order::Product;
 
 use differential_dataflow::{Collection, ExchangeData};
 use differential_dataflow::input::{Input, InputSession};
 use differential_dataflow::operators::join::{Join, JoinCore};
-use differential_dataflow::operators::iterate::Variable as TimelyVariable;
 use differential_dataflow::operators::*;
 
 use crate::constraint::*;
@@ -31,7 +25,7 @@ use crate::term::*;
 use crate::expression::*;
 use crate::rule::*;
 use crate::type_system::*;
-use crate::parser::*;
+use crate::parser::combinator::*;
 use crate::util::GenericMap;
 
 
