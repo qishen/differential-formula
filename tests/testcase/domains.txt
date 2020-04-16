@@ -1,0 +1,16 @@
+domain Hello extends hi :: Hi  , hii :: Nihao
+{
+   Hi ::= new (id: Integer).
+   Hi2 ::= new (id2: hi.Integer, hii.hiii.Hi).
+   Hi(b) :- Hi(a) , b = a + 1  .
+}
+--------
+domain Graph 
+{ 
+    Node ::= new(id: String). 
+    Edge ::= new(src:Node, dst: Node). 
+    Item ::= Node + Edge.
+    
+    // Add some rules
+    Edge(a, c) :- Edge(a, b), Edge(b, c).
+}

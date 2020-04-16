@@ -1,0 +1,30 @@
+domain Hello 
+{
+   Hi ::= new (id: Integer).
+   Hi(b) :- Hi(a), b = a + 1, b < 10 .
+}
+
+domain Digraphs extends Hello
+{
+   V ::= new (lbl: Integer).
+   E ::= new (src: V, dst: V).
+   Thing ::= V + E.
+}
+
+domain DAGs extends Digraphs
+{
+   //SomeEnum ::= { 1..3 }.
+   //path ::= new (V + SomeEnum, V).
+   //path(u, w) :- E(u, w); E(u, v), path(v, w).  
+   //conforms no path(u, u).
+}
+
+domain TwoDAGs extends left:: DAGs, right:: DAGs {
+   CrossThing ::= left.Thing + right.Thing.
+   CrossE ::= new (src: left.V, dst: right.V).
+   //SomeEnumWrapper ::= new (content: left.SomeEnum + right.SomeEnum).
+
+   //CrossE(a, d), CrossE(b, c) :- left.E(a, b), right.E(c, d).
+   
+}
+EOF

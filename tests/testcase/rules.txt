@@ -1,0 +1,9 @@
+Edge(a, c) :- Edge(a, b), Edge(b, c) .
+--------
+Edge(a, b),
+    Edge(x, y)                
+        :- 
+            // split with a comment 
+            Edge(b, c), 
+            // split with a comment
+            Edge(c, a).
