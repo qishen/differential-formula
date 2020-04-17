@@ -9,6 +9,7 @@ use crate::type_system::*;
 use crate::expression::*;
 use crate::rule::*;
 use crate::constraint::*;
+use crate::util::*;
 
 #[enum_dispatch(TermAst)]
 trait TermAstBehavior {}
@@ -32,7 +33,8 @@ impl TermAst {
                     let term = argument.to_term(domain);
                     term_arguments.push(Arc::new(term));
                 }
-                let sort = domain.get_type(&cterm_ast.name);
+                let sort_name = cterm_ast.sort.name().unwrap();
+                let sort = domain.get_type(&sort_name);
                 Composite {
                     sort,
                     arguments: term_arguments,
@@ -48,7 +50,7 @@ impl TermAst {
 
 #[derive(Debug, Clone)]
 pub struct CompositeTermAst {
-    pub name: String,
+    pub sort: TypeDefAst,
     pub arguments: Vec<Box<TermAst>>,
     pub alias: Option<String>
 }
@@ -92,12 +94,6 @@ pub struct CompositeTypeDefAst {
 impl TypeDefAstBehavior for CompositeTypeDefAst {
     fn name(&self) -> Option<String> {
         Some(self.name.clone())
-    }
-}
-
-impl CompositeTypeDefAst {
-    pub fn to_type(&self, type_ast_map: &HashMap<String, TypeDefAst>, domain_ast_map: &HashMap<String, DomainAst>) {
-
     }
 }
 
@@ -146,6 +142,34 @@ impl TypeDefAstBehavior for EnumTypeDefAst {
 pub enum ModuleAst {
     Domain(DomainAst),
     Model(ModelAst),
+    Transform(TransformAst),
+}
+
+#[derive(Clone, Debug)]
+pub struct TaggedDomainAst {
+    pub tag: String,
+    pub domain: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct TaggedTypeAst {
+    pub tag: String,
+    pub formula_type: TypeDefAst,
+}
+
+#[derive(Clone, Debug)]
+pub enum TransformParamAst {
+    TaggedDomain(TaggedDomainAst),
+    TaggedType(TaggedTypeAst)
+}
+
+#[derive(Clone, Debug)]
+pub struct TransformAst {
+    pub transform_name: String, 
+    pub inputs: Vec<TransformParamAst>,
+    pub output: TaggedDomainAst, 
+    pub typedefs: Vec<(String, TypeDefAst)>,
+    pub rules: Vec<RuleAst>,
 }
 
 #[derive(Clone, Debug)]
@@ -158,7 +182,6 @@ pub struct DomainAst {
     pub subdomains: Vec<String>,
     pub renamed_subdomains: HashMap<String, String>,
 }
-
 
 #[derive(Clone, Debug)]
 pub struct ModelAst {
@@ -175,6 +198,7 @@ pub struct ModelAst {
 pub struct ProgramAst {
     pub domain_ast_map: HashMap<String, DomainAst>,
     pub model_ast_map: HashMap<String, ModelAst>,
+    pub transform_ast_map: HashMap<String, TransformAst>,
 }
 
 /*
@@ -185,28 +209,27 @@ BUILTIN_TYPES_MAP.insert("Boolean".to_string(), Arc::new(BaseType::Boolean.into(
 */
 
 impl ProgramAst {
-    pub fn to_program(&self) {
-        let mut domain_map = HashMap::new();
-        for domain_name in self.domain_ast_map.keys() {
-            self.create_domain(domain_name.clone(), &mut domain_map);
-        }
-    }
-
     pub fn build_env(&self) -> Env {
         let mut domain_map = HashMap::new();
         let mut model_map = HashMap::new();
+        let mut transform_map = HashMap::new();
 
         for domain_name in self.domain_ast_map.keys() {
             self.create_domain(domain_name.clone(), &mut domain_map);
         }
 
         for model_name in self.model_ast_map.keys() {
+            self.create_model(model_name.clone(), &mut model_map, &domain_map);
+        }
 
+        for transform_name in self.transform_ast_map.keys() {
+            self.create_transformation(transform_name.clone(), &mut transform_map, &mut domain_map);
         }
 
         Env {
             domain_map,
             model_map,
+            transform_map,
         }
     }
 
@@ -293,6 +316,93 @@ impl ProgramAst {
         type_map.insert("Boolean".to_string(), Arc::new(BaseType::Boolean.into()));
     }
 
+    pub fn create_transformation(
+        &self, transform_name: String, 
+        transform_map: &mut HashMap<String, Transform>,
+        domain_map: &mut HashMap<String, Domain>,
+    ) -> Transform 
+    {
+        if transform_map.contains_key(&transform_name) {
+            return transform_map.get(&transform_name).unwrap().clone();
+        }
+
+        let transform_ast = self.transform_ast_map.get(&transform_name).unwrap();
+
+        let mut input_type_ast_map = HashMap::new();
+        let mut tagged_domains = vec![];
+        tagged_domains.push(transform_ast.output.clone());
+        for input in transform_ast.inputs.clone() {
+            match input {
+                TransformParamAst::TaggedDomain(tagged_domain) => {
+                    tagged_domains.push(tagged_domain);
+                },
+                TransformParamAst::TaggedType(tagged_type) => {
+                    //let type_ast = tagged_type.formula_type;
+                    input_type_ast_map.insert(tagged_type.tag.clone(), tagged_type.formula_type.clone());
+                }
+            }
+        }
+
+        // Include all types from inputs, output and ones defined in transformation.
+        let mut type_map = HashMap::new();
+        self.import_builtin_types(&mut type_map);
+
+        for tagged_domain in tagged_domains.iter() {
+            let scope = tagged_domain.tag.clone();
+            let domain_name = tagged_domain.domain.clone();
+            let domain = self.create_domain(domain_name, domain_map);
+
+            for (type_name, formula_type_arc) in domain.type_map.iter() {
+                let formula_type: Type = formula_type_arc.as_ref().clone();
+                match formula_type {
+                    Type::BaseType(_) => {},
+                    _ => {
+                        let renamed_type = formula_type.rename_type(scope.clone());
+                        type_map.insert(renamed_type.name(), Arc::new(renamed_type));
+                    }
+                }
+            }
+        }
+
+        let mut type_ast_map = HashMap::new();
+        for (typename, type_ast) in transform_ast.typedefs.iter() {
+            type_ast_map.insert(typename.clone(), type_ast.clone());
+        } 
+
+        for type_name in type_ast_map.keys() {
+            self.create_type(type_name.clone(), &type_ast_map, &mut type_map);
+        }
+
+        let transform_domain = Domain {
+            name: transform_name.clone(),
+            type_map: type_map.clone(),
+            rules: vec![],
+        };
+
+        // Add rules into domain and converting rule ASTs need type information in domain.
+        // TODO: add conformance rules.
+        let mut rules = vec![];
+        for rule_ast in transform_ast.rules.iter() {
+            rules.push(rule_ast.to_rule(&transform_domain));
+        }
+
+        // Some parameters that are known types in `type_map`
+        let mut input_type_map = HashMap::new();
+        for (_, type_ast) in input_type_ast_map {
+            let input_type = type_map.get(&type_ast.name().unwrap()).unwrap();
+        }
+
+        let mut transform = Transform {
+            name: transform_name.clone(),
+            type_map,
+            rules,
+            input_type_map
+        };
+
+        transform_map.insert(transform_name.clone(), transform.clone());
+        transform
+    }
+
     pub fn create_domain(&self, domain_name: String, domain_map: &mut HashMap<String, Domain>) -> Domain {
         if domain_map.contains_key(&domain_name) { 
             return domain_map.get(&domain_name).unwrap().clone(); 
@@ -356,23 +466,27 @@ impl ProgramAst {
         domain
     }
 
-    pub fn create_terms(
+    /// It won't return a model because deep copy of large amounts of data
+    /// is too expensive and all models are stored in `model_map`.
+    pub fn create_model(
         &self, 
         model_name: String,
         model_map: &mut HashMap<String, Model>, 
-        domain_map: &mut HashMap<String, Domain>) 
-    -> Model
+        domain_map: &HashMap<String, Domain>
+    ) 
     {
+        if model_map.contains_key(&model_name) { return; }
+        
         let model_ast = self.model_ast_map.get(&model_name).unwrap();
         let domain = domain_map.get(&model_ast.domain_name).unwrap();
-        
+
         let mut raw_alias_map = HashMap::new();
         let mut alias_map: HashMap<Arc<Term>, Arc<Term>> = HashMap::new();
         let mut model_store = vec![];
         let mut untouched_models = vec![];
-
-        for term_ast in model_ast.models {
-            // Convert AST into term according to its type.
+        
+        // TODO: deep clone is not really necessary for keeping all ASTs.
+        for term_ast in model_ast.models.clone() {
             let term = term_ast.to_term(domain);
             match &term {
                 Term::Composite(c) => {
@@ -399,7 +513,7 @@ impl ProgramAst {
         prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
         */
         for key in raw_alias_map.keys() {
-            propagate_alias_map(key, &raw_alias_map, &mut alias_map);
+            self.propagate_alias_map(key, &raw_alias_map, &mut alias_map);
         }
 
         for (key, term) in alias_map.iter() {
@@ -412,12 +526,56 @@ impl ProgramAst {
             model_store.push(new_term.unwrap());
         }
 
-        let model = Model::new(model_name.clone(), model_ast.domain_name, model_store, alias_map);
-
-        model_map.insert(model_name, model);
+        // TODO: Need to check if they are duplicates from sub-models.
+        // Import sub-models into `model_store` with a copy of Arc<Term>.
+        for submodel_name in model_ast.submodels.iter() {
+            self.create_model(submodel_name.clone(), model_map, domain_map);
+            let submodel = model_map.get(submodel_name).unwrap();
+            for term_arc in submodel.models.iter() {
+                model_store.push(term_arc.clone());
+            }
         }
+
+        // Import renamed sub-models with the type changed.
+        for scope in model_ast.renamed_submodels.keys() {
+            let submodel_name = model_ast.renamed_submodels.get(scope).unwrap();
+            self.create_model(submodel_name.clone(), model_map, domain_map);
+            let submodel = model_map.get(submodel_name).unwrap();
+            for term_arc in submodel.models.iter() {
+                let term: Term = term_arc.as_ref().clone();
+                let renamed_term = term.rename(scope.clone());
+                model_store.push(Arc::new(renamed_term));
+            }
+        }
+
+        let model = Model::new(
+            model_name.clone(), 
+            model_ast.domain_name.clone(), 
+            model_store, 
+            alias_map
+        );
+
+        model_map.insert(model_name.clone(), model);
     }
 
+    fn propagate_alias_map<T>(
+        &self, var: &Term, 
+        raw_alias_map: &T, 
+        alias_map: &mut T
+    ) where T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        let raw_term = raw_alias_map.gget(var).unwrap();
+        // if current term has variables inside then propagate binding to them first.
+        let raw_term_vars = raw_term.variables();
+        for raw_term_var in raw_term_vars {
+            if raw_alias_map.contains_gkey(raw_term_var) {
+                self.propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
+            }
+        }
+    
+        let new_term = raw_term.propagate_bindings(alias_map).unwrap();
+        alias_map.ginsert(Arc::new(var.clone()), new_term);
+    }
 }
 
 #[enum_dispatch(ExprAst)]

@@ -172,6 +172,29 @@ impl Debug for Term {
 }
 
 impl Term {
+    // TODO: it works but has too many copies on its sort.
+    pub fn rename(&self, scope: String) -> Term {
+        let new_term: Term = match self {
+            Term::Composite(c) => {
+                let t = c.sort.as_ref().clone();
+                let new_t = t.rename_type(scope.clone());
+                let mut new_args = vec![];
+                // Recursively rename each one in the arguments.
+                for arg_arc in c.arguments.iter() {
+                    let arg: Term = arg_arc.as_ref().clone();
+                    new_args.push(Arc::new(arg.rename(scope.clone())));
+                }
+                let mut c_copy = c.clone();
+                c_copy.sort = Arc::new(new_t);
+                c_copy.arguments = new_args;
+                c_copy.into()
+            },
+            _ => { self.clone() }
+        };
+
+        new_term
+    }
+
     pub fn is_groundterm(&self) -> bool {
         match self {
             Term::Composite(composite) => {
@@ -182,8 +205,8 @@ impl Term {
                 }
                 true
             },
-            Term::Variable(variable) => { false },
-            Term::Atom(atom) => { true },
+            Term::Variable(_variable) => { false },
+            Term::Atom(_atom) => { true },
         }
     }
 

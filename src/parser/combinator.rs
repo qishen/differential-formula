@@ -3,7 +3,6 @@ use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
-use crate::util::*;
 
 use std::fs;
 use std::path::Path;
@@ -43,7 +42,7 @@ named!(id<&str, String>,
 // 1. Native type e.g. Node or Edge.
 // 2. Chained renamed type alias e.g. left.Node or right.x.y.z.Node
 named!(typename<&str, TypeDefAst>,
-    map!(separated_list!(tag!("."), id), |mut names| {
+    map!(separated_nonempty_list!(tag!("."), id), |mut names| {
         let name = names.remove(names.len()-1);
         AliasTypeDefAst {
             chained_scopes: names,
@@ -200,7 +199,7 @@ named!(
             ),
             separated_list!(delimited!(space0, tag!(","), space0), subdomain)
         )) >>
-        multispace0 >>
+        skip >>
         tag!("{") >>
         skip >>
         typedefs: domain_types >> 
@@ -249,6 +248,9 @@ named!(model<&str, ModuleAst>,
     do_parse!(
         tag!("model") >>
         model_name: delimited!(multispace0, id, multispace0) >>
+        tag!("of") >>
+        domain_name: delimited!(multispace0, id, multispace0) >>
+        skip >>
         submodels_data: opt!(tuple!(
             map!(
                 delimited!(
@@ -261,16 +263,19 @@ named!(model<&str, ModuleAst>,
             // Use `subdomain` to parse inheritance because the syntax is the same as domain inheritance.
             separated_list!(delimited!(space0, tag!(","), space0), subdomain)
         )) >>
-        tag!("of") >>
-        domain_name: delimited!(multispace0, id, multispace0) >>
+        skip >>
         models: delimited!(
             tag!("{"),
-            many0!(
-                delimited!(
-                    skip,
-                    terminated!(composite, delimited!(multispace0, tag!("."), multispace0)), 
-                    skip
-                )
+            delimited!(
+                skip,
+                many0!(
+                    delimited!(
+                        skip,
+                        terminated!(composite, delimited!(multispace0, tag!("."), multispace0)), 
+                        skip
+                    )
+                ),
+                skip
             ),
             tag!("}")
         ) >>
@@ -311,6 +316,74 @@ fn parse_model(
     ModuleAst::Model(model_ast)
 }
 
+named!(tagged_domain<&str, TaggedDomainAst>,
+    do_parse!(
+        tag: id >>
+        delimited!(space0, tag!("::"), space0) >>
+        domain: id >>
+        (TaggedDomainAst { tag, domain })
+    )
+);
+
+named!(transform_param<&str, TransformParamAst>,
+    alt!(
+        map!(tagged_domain, |x| { 
+            TransformParamAst::TaggedDomain(x) 
+        }) | 
+        map!(tagged_typename, |x| {
+            let tag = x.0.unwrap(); // tag cannot be none here.
+            let formula_type = x.1;
+            TransformParamAst::TaggedType(
+                TaggedTypeAst { tag, formula_type }
+            ) 
+        })
+    )
+);
+
+named!(transform<&str, ModuleAst>, 
+    do_parse!(
+        tag!("transform") >>
+        transform_name: delimited!(multispace0, id, multispace0) >>
+        tag!("(") >>
+        inputs: separated_list!(delimited!(space0, tag!(","), space0), transform_param) >>
+        tag!(")") >>
+        skip >>
+        tag!("returns") >>
+        skip >>
+        output: delimited!(
+            tag!("("), 
+            delimited!(space0, tagged_domain, space0),
+            tag!(")")
+        ) >>
+        skip >>
+        tag!("{") >>
+        skip >>
+        typedefs: domain_types >> 
+        skip >>
+        rules: domain_rules >>
+        skip >>
+        tag!("}") >>
+        (parse_transform(transform_name, inputs, output, typedefs, rules))
+    )
+);
+
+fn parse_transform(
+    transform_name: String, 
+    inputs: Vec<TransformParamAst>,
+    output: TaggedDomainAst, 
+    typedefs: Vec<(String, TypeDefAst)>,
+    rules: Vec<RuleAst>) -> ModuleAst
+{
+    let transform_ast = TransformAst {
+        transform_name,
+        inputs,
+        output,
+        typedefs,
+        rules,
+    };
+
+    ModuleAst::Transform(transform_ast)
+}
 
 // Export this function to parse FORMULA file in string format.
 pub fn parse_str(content: String) -> Env {
@@ -323,10 +396,11 @@ pub fn parse_str(content: String) -> Env {
 
 named!(program<&str, ProgramAst>,
     map!(many0!(
-        delimited!(skip, alt!(domain | model), skip)
+        delimited!(skip, alt!(domain | model | transform), skip)
     ), |modules| {
         let mut domain_ast_map = HashMap::new();
-        let mut model_asts = HashMap::new();
+        let mut model_ast_map = HashMap::new();
+        let mut transform_ast_map = HashMap::new();
 
         for module in modules {
             match module {
@@ -334,112 +408,21 @@ named!(program<&str, ProgramAst>,
                     domain_ast_map.insert(domain_ast.name.clone(), domain_ast);
                 },
                 ModuleAst::Model(model_ast) => {
-                    model_asts.insert(model_ast.model_name.clone(), model_ast);
+                    model_ast_map.insert(model_ast.model_name.clone(), model_ast);
+                },
+                ModuleAst::Transform(transform_ast) => {
+                    transform_ast_map.insert(transform_ast.transform_name.clone(), transform_ast);
                 }
             }
         }
 
         ProgramAst {
-            domain_ast_map: domain_ast_map,
-            model_ast_map: model_asts,
+            domain_ast_map,
+            model_ast_map,
+            transform_ast_map,
         }
     })
 );
-
-// Return a domain map and a model map at the end of parsing.
-/*named!(program_old<&str, Env>,
-    map!(
-        many0!(
-            preceded!(multispace0, alt!(domain | model))
-        ),
-        |list| {
-        // filter them into domain, model and transformation categories.
-        let mut domain_ast_map = HashMap::new();
-        let mut model_asts = vec![];
-
-
-        let mut model_map = HashMap::new();
-        for model_ast in model_asts {
-            // Get the domain that current model requires.
-            let domain = domain_map.get(&model_ast.domain_name).unwrap();
-            let model_name = model_ast.model_name;
-            let mut raw_alias_map = HashMap::new();
-            let mut alias_map: HashMap<Arc<Term>, Arc<Term>> = HashMap::new();
-            let mut model_store = vec![];
-            let mut untouched_models = vec![];
-
-            for term_ast in model_ast.models {
-                // Convert AST into term according to its type.
-                let term = term_ast.to_term(domain);
-                match &term {
-                    Term::Composite(c) => {
-                        match &c.alias {
-                            None => {
-                                // if term does not have alias, add it to model store.
-                                untouched_models.push(term);
-                            },
-                            Some(alias) => {
-                                // alias here shouldn't have fragments and add term to model store later.
-                                let vterm: Term = Variable::new(alias.clone(), vec![]).into();
-                                raw_alias_map.insert(Arc::new(vterm), Arc::new(term));
-                            }
-                        }
-                    },
-                    _ => {},
-                }
-
-            }
-
-            /* 
-            Alias in the raw term is treated as variables and needs to be replaced with the real term.
-            Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
-            prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
-            */
-            for key in raw_alias_map.keys() {
-                propagate_alias_map(key, &raw_alias_map, &mut alias_map);
-            }
-
-            for (key, term) in alias_map.iter() {
-                model_store.push(term.clone());
-            }
-
-            // Hanle composite terms that don't have alias associated with them.
-            for term in untouched_models {
-                let new_term = term.propagate_bindings(&alias_map);
-                model_store.push(new_term.unwrap());
-            }
-
-            let model = Model::new(model_name.clone(), model_ast.domain_name, model_store, alias_map);
-
-            model_map.insert(model_name, model);
-        }
-
-        Env {
-            domain_map,
-            model_map,
-        }
-    })
-);*/
-
-fn propagate_alias_map<T>(
-    var: &Term, 
-    raw_alias_map: &T, 
-    alias_map: &mut T
-) where T: GenericMap<Arc<Term>, Arc<Term>>
-{
-    let raw_term = raw_alias_map.gget(var).unwrap();
-    // if current term has variables inside then propagate binding to them first.
-    let raw_term_vars = raw_term.variables();
-    for raw_term_var in raw_term_vars {
-        if raw_alias_map.contains_gkey(raw_term_var) {
-            propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
-        }
-    }
-
-    let new_term = raw_term.propagate_bindings(alias_map).unwrap();
-    alias_map.ginsert(Arc::new(var.clone()), new_term);
-}
-
 
 named!(bin_op<&str, BinOp>,
     map!(alt!(tag!("=") | tag!("!=") | tag!(">") | tag!(">=") | tag!("<") | tag!("<=")), |x| {
@@ -480,7 +463,6 @@ named!(setcompre_op<&str, SetCompreOp>,
     })
 );
 
-
 named!(base_expr<&str, ExprAst>,
     alt!(
         map!(setcompre, |x| { 
@@ -495,7 +477,6 @@ named!(base_expr<&str, ExprAst>,
         parens_arith_expr
     )
 );
-
 
 named!(parens_arith_expr<&str, ExprAst>,
     do_parse!(
@@ -548,7 +529,6 @@ named!(arith_expr_low<&str, ExprAst>,
     )
 );
 
-
 fn parse_arith_expr(base: ExprAst, remain: Vec<(ArithmeticOp, ExprAst)>) -> ExprAst {
     let mut left = base;
     for (op, right) in remain {
@@ -562,13 +542,11 @@ fn parse_arith_expr(base: ExprAst, remain: Vec<(ArithmeticOp, ExprAst)>) -> Expr
     left
 }
 
-
 named!(expr<&str, ExprAst>,
     // Must put base_expr matching after arith_expr matching, otherwise since arith_expr contains 
     // base_expr, parser will stop after finding the first match of base expression.
     alt!(arith_expr_low | base_expr)
 );
-
 
 named!(setcompre<&str, SetComprehensionAst>, 
     do_parse!(
@@ -726,7 +704,7 @@ pub fn parse_into_term(
 named!(composite<&str, TermAst>, 
     do_parse!(
         alias: opt!(terminated!(id, delimited!(multispace0, tag!("is"), multispace0))) >>
-        t: id >>
+        t: typename >>
         args: delimited!(
             char!('('), 
             separated_list!(
@@ -747,9 +725,9 @@ named!(composite<&str, TermAst>,
     )
 );
 
-fn parse_composite(alias: Option<String>, sort: String, args: Vec<TermAst>) -> TermAst {
+fn parse_composite(alias: Option<String>, sort: TypeDefAst, args: Vec<TermAst>) -> TermAst {
     CompositeTermAst {
-        name: sort.to_string(),
+        sort,
         arguments: args.into_iter().map(|x| Box::new(x)).collect(),
         alias,
     }.into()
@@ -901,7 +879,7 @@ mod tests {
     fn test_typedef() {
         assert_eq!(composite_typedef("Edge ::= new(src: Node, dst : Node ).").unwrap().0, "");
         assert_eq!(composite_typedef("Edge ::= new(src: Left.Node, dst: Node).").unwrap().0, "");
-        union_typedef("X  ::= A + B + C+  D  .");
+        assert_eq!(union_typedef("X  ::= A + B + C+  D  .").unwrap().0, "");
     }
 
     #[test]
@@ -948,12 +926,24 @@ mod tests {
 
     #[test]
     fn test_parse_models() {
-
+        let path = Path::new("./tests/testcase/models.txt");
+        let content = fs::read_to_string(path).unwrap();
+        let models = content.split("\n--------\n");
+        for formula_model in models {
+            println!("{:?}", formula_model);
+            assert_eq!(model(&formula_model[..]).unwrap().0, "");
+        }
     }
 
     #[test]
     fn test_parse_transformation() {
-
+        let path = Path::new("./tests/testcase/transformations.txt");
+        let content = fs::read_to_string(path).unwrap();
+        let trans = content.split("\n--------\n");
+        for formula_tran in trans {
+            println!("{:?}", formula_tran);
+            assert_eq!(model(&formula_tran[..]).unwrap().0, "");
+        }
     }
 
     #[test]
@@ -967,76 +957,10 @@ mod tests {
             assert_eq!(result.0, "EOF");
             let program_ast = result.1;
             let env = program_ast.build_env();
-            println!("{:#?}", env);
+            //println!("{:#?}", env);
+            //println!("{:#?}", env.model_map);
+            println!("{:#?}", env.transform_map);
         }
-    }
-
-    //#[test]
-    fn test_program() {
-        let graph_domain =  
-            "domain Graph { 
-                Node ::= new(id: String). 
-                Edge ::= new(src:Node, dst: Node). 
-                Item ::= Node + Edge.
-
-                Edge(a, c) :- Edge(a, b), Edge(b, c).
-            }";
-
-        let graph_model1 = 
-            "model m of Graph {
-                Node(\"helloworld\") .
-                Edge(Node(\"hello\"), Node(\"world\")).
-            }";
-
-        let graph_model2 = 
-            "model m of Graph {
-                n1 is Node(\"helloworld\") .
-                e1 is Edge(n1, n1).
-            }";
-
-        assert_eq!(domain(graph_domain).unwrap().0, "");
-        assert_eq!(model(graph_model1).unwrap().0, "");
-        assert_eq!(model(graph_model2).unwrap().0, "");
-        
-        let program1_str = &format!("{}EOF", graph_domain)[..];
-        assert_eq!(program(program1_str).unwrap().0, "EOF");
-        
-        let program2_str = &format!("{} {}EOF", graph_domain, graph_model1)[..];
-        assert_eq!(program(program2_str).unwrap().0, "EOF");
-
-        let program3_str = &format!("{} {}EOF", graph_domain, graph_model2)[..];
-        assert_eq!(program(program3_str).unwrap().0, "EOF");
-        
-        let program4_str = "domain Graph {
-            Node ::= new(name: Integer).
-            Edge ::= new(src: Node, dst: Node).
-            Path ::= new(src: Node, dst: Node).
-            Line ::= new(a: Node, b: Node, c: Node, d: Node).
-            Nocycle ::= new(node: Node).
-            TwoEdge ::= new(first: Edge, second: Edge).
-
-            TwoEdge(x, x, square) :- x is Edge(c, d), 
-            aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr * aggr, agg.hi * 2 = 20 .
-        }
-
-        model m of Graph {
-            n0 is Node(0).
-            n1 is Node(1).
-            n2 is Node(2).
-            n3 is Node(3).
-            n4 is Node(4).
-
-            Edge(n0, n0).
-            Edge(n0, n1).
-            Edge(n1, n2).
-            Edge(n2, n3).
-            Edge(n3, n4).
-        }
-
-        EOF";
-
-        let output = program(program4_str);
-        //println!("{:?}", output);
     }
 
 }

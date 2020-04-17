@@ -165,8 +165,19 @@ impl TypeBehavior for UnionType {
 pub enum Program {
     Domain,
     Model,
+    Transform,
 }
 
+#[derive(Debug, Clone)]
+pub struct Transform {
+    pub name: String,
+    // Includes all types from inputs, output and ones defined in transformation.
+    pub type_map: HashMap<String, Arc<Type>>,
+    // Rules defined in transformation.
+    pub rules: Vec<Rule>,
+    // Some parameters in transformation are terms.
+    pub input_type_map: HashMap<String, Arc<Type>>
+}
 
 #[derive(Debug, Clone)]
 pub struct Domain {
@@ -246,6 +257,7 @@ impl Model {
 pub struct Env {
     pub domain_map: HashMap<String, Domain>,
     pub model_map: HashMap<String, Model>,
+    pub transform_map: HashMap<String, Transform>,
 }
 
 
