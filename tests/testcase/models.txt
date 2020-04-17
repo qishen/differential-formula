@@ -1,0 +1,22 @@
+model m of Graph {
+    v1 is V(1).
+    v2 is V(2).
+    e1 is E(v1, v2).
+    E(v2, v1).
+}
+--------
+model m2 of Digraph includes m {
+    v3 is V(3).
+}
+--------
+model m3 of Digraph includes left:: m, right:: m 
+{
+
+}
+--------
+model m4 of Digraph includes left:: m, right:: m3 
+{
+    vx is V(1).
+    
+    left.V(3).
+}
