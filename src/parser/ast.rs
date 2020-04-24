@@ -167,7 +167,7 @@ pub enum TransformParamAst {
 pub struct TransformAst {
     pub transform_name: String, 
     pub inputs: Vec<TransformParamAst>,
-    pub output: TaggedDomainAst, 
+    pub output: Vec<TaggedDomainAst>, 
     pub typedefs: Vec<(String, TypeDefAst)>,
     pub rules: Vec<RuleAst>,
 }
@@ -223,7 +223,7 @@ impl ProgramAst {
         }
 
         for transform_name in self.transform_ast_map.keys() {
-            self.create_transformation(transform_name.clone(), &mut transform_map, &mut domain_map);
+            self.create_transform(transform_name.clone(), &mut transform_map, &mut domain_map);
         }
 
         Env {
@@ -316,7 +316,7 @@ impl ProgramAst {
         type_map.insert("Boolean".to_string(), Arc::new(BaseType::Boolean.into()));
     }
 
-    pub fn create_transformation(
+    pub fn create_transform(
         &self, transform_name: String, 
         transform_map: &mut HashMap<String, Transform>,
         domain_map: &mut HashMap<String, Domain>,
@@ -326,15 +326,32 @@ impl ProgramAst {
             return transform_map.get(&transform_name).unwrap().clone();
         }
 
-        let transform_ast = self.transform_ast_map.get(&transform_name).unwrap();
+        // Those are the params and returns for transform(x1, x2 ... x3) -> (y1, y2, y3)
+        let mut input_type_map = HashMap::new();
+        let mut input_domain_map = HashMap::new();
+        let mut output_domain_map = HashMap::new();
 
+        let transform_ast = self.transform_ast_map.get(&transform_name).unwrap();
         let mut input_type_ast_map = HashMap::new();
-        let mut tagged_domains = vec![];
-        tagged_domains.push(transform_ast.output.clone());
+        let mut tagged_domain_asts = vec![];
+
+        for output_tagged_domain_ast in transform_ast.output.clone() {
+            // Find the domain and add it as one of the params for transform's output.
+            let tag = output_tagged_domain_ast.tag.clone();
+            let domain_name = output_tagged_domain_ast.domain.clone();
+            let domain = self.create_domain(domain_name.clone(), domain_map);
+            output_domain_map.insert(domain_name, domain);
+            tagged_domain_asts.push(output_tagged_domain_ast);
+        }
+
         for input in transform_ast.inputs.clone() {
             match input {
-                TransformParamAst::TaggedDomain(tagged_domain) => {
-                    tagged_domains.push(tagged_domain);
+                TransformParamAst::TaggedDomain(input_tagged_domain_ast) => {
+                    let tag = input_tagged_domain_ast.tag.clone();
+                    let domain_name = input_tagged_domain_ast.domain.clone();
+                    let domain = self.create_domain(domain_name.clone(), domain_map);
+                    input_domain_map.insert(domain_name, domain);
+                    tagged_domain_asts.push(input_tagged_domain_ast);
                 },
                 TransformParamAst::TaggedType(tagged_type) => {
                     //let type_ast = tagged_type.formula_type;
@@ -347,9 +364,10 @@ impl ProgramAst {
         let mut type_map = HashMap::new();
         self.import_builtin_types(&mut type_map);
 
-        for tagged_domain in tagged_domains.iter() {
-            let scope = tagged_domain.tag.clone();
-            let domain_name = tagged_domain.domain.clone();
+        // Get all type maps from each domain and merge them together with renamed types.
+        for tagged_domain_ast in tagged_domain_asts.iter() {
+            let tag = tagged_domain_ast.tag.clone();
+            let domain_name = tagged_domain_ast.domain.clone();
             let domain = self.create_domain(domain_name, domain_map);
 
             for (type_name, formula_type_arc) in domain.type_map.iter() {
@@ -357,13 +375,14 @@ impl ProgramAst {
                 match formula_type {
                     Type::BaseType(_) => {},
                     _ => {
-                        let renamed_type = formula_type.rename_type(scope.clone());
+                        let renamed_type = formula_type.rename_type(tag.clone());
                         type_map.insert(renamed_type.name(), Arc::new(renamed_type));
                     }
                 }
             }
         }
 
+        // Add types that are defined in transform.
         let mut type_ast_map = HashMap::new();
         for (typename, type_ast) in transform_ast.typedefs.iter() {
             type_ast_map.insert(typename.clone(), type_ast.clone());
@@ -373,6 +392,7 @@ impl ProgramAst {
             self.create_type(type_name.clone(), &type_ast_map, &mut type_map);
         }
 
+        // A fake domain for transform
         let transform_domain = Domain {
             name: transform_name.clone(),
             type_map: type_map.clone(),
@@ -387,7 +407,6 @@ impl ProgramAst {
         }
 
         // Some parameters that are known types in `type_map`
-        let mut input_type_map = HashMap::new();
         for (_, type_ast) in input_type_ast_map {
             let input_type = type_map.get(&type_ast.name().unwrap()).unwrap();
         }
@@ -396,7 +415,9 @@ impl ProgramAst {
             name: transform_name.clone(),
             type_map,
             rules,
-            input_type_map
+            input_type_map,
+            input_domain_map,
+            output_domain_map,
         };
 
         transform_map.insert(transform_name.clone(), transform.clone());
@@ -531,7 +552,7 @@ impl ProgramAst {
         for submodel_name in model_ast.submodels.iter() {
             self.create_model(submodel_name.clone(), model_map, domain_map);
             let submodel = model_map.get(submodel_name).unwrap();
-            for term_arc in submodel.models.iter() {
+            for term_arc in submodel.terms.iter() {
                 model_store.push(term_arc.clone());
             }
         }
@@ -541,7 +562,7 @@ impl ProgramAst {
             let submodel_name = model_ast.renamed_submodels.get(scope).unwrap();
             self.create_model(submodel_name.clone(), model_map, domain_map);
             let submodel = model_map.get(submodel_name).unwrap();
-            for term_arc in submodel.models.iter() {
+            for term_arc in submodel.terms.iter() {
                 let term: Term = term_arc.as_ref().clone();
                 let renamed_term = term.rename(scope.clone());
                 model_store.push(Arc::new(renamed_term));
@@ -550,7 +571,7 @@ impl ProgramAst {
 
         let model = Model::new(
             model_name.clone(), 
-            model_ast.domain_name.clone(), 
+            domain.clone(), 
             model_store, 
             alias_map
         );

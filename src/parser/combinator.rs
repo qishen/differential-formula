@@ -18,6 +18,14 @@ use nom::number::complete::*;
 use num::*;
 
 
+// Export this function to parse FORMULA file in string format.
+pub fn load_program(content: String) -> Env {
+    let result = program(&content[..]).unwrap();
+    //println!("{:?}", result.0);
+    let program_ast = result.1;
+    program_ast.build_env()
+}
+
 // Start with '//' and end with '\n'
 named!(comment<&str, &str>, 
     recognize!(
@@ -352,7 +360,7 @@ named!(transform<&str, ModuleAst>,
         skip >>
         output: delimited!(
             tag!("("), 
-            delimited!(space0, tagged_domain, space0),
+            separated_list!(delimited!(space0, tag!(","), space0), tagged_domain),
             tag!(")")
         ) >>
         skip >>
@@ -370,7 +378,7 @@ named!(transform<&str, ModuleAst>,
 fn parse_transform(
     transform_name: String, 
     inputs: Vec<TransformParamAst>,
-    output: TaggedDomainAst, 
+    output: Vec<TaggedDomainAst>, 
     typedefs: Vec<(String, TypeDefAst)>,
     rules: Vec<RuleAst>) -> ModuleAst
 {
@@ -383,15 +391,6 @@ fn parse_transform(
     };
 
     ModuleAst::Transform(transform_ast)
-}
-
-// Export this function to parse FORMULA file in string format.
-pub fn parse_str(content: String) -> Env {
-    let result = program(&content[..]).unwrap();
-    //println!("{:?}", result.0);
-    let program_ast = result.1;
-    program_ast.build_env()
-    //unimplemented!()
 }
 
 named!(program<&str, ProgramAst>,
@@ -674,14 +673,14 @@ pub fn parse_into_term(
 {
     match env_opt {
         Some(env) => {
-            let domain = env.get_domain_by_name(domain_name).unwrap();
+            let domain = env.get_domain_by_name(&domain_name).unwrap();
             let term_ast = composite(s).unwrap().1;
             let mut term = term_ast.to_term(domain);
             
             // if model is not none replace variable in the new term by propagating alias map.
             let result_term = match model_name {
                 Some(name) => {
-                    let model = env.get_model_by_name(name).unwrap();
+                    let model = env.get_model_by_name(&name).unwrap();
                     /* 
                     1. Replace variable in the new term by propagating alias map.
                     2. Update its alias and argument's alias recursively by propagating reverse alias map.
@@ -942,7 +941,7 @@ mod tests {
         let trans = content.split("\n--------\n");
         for formula_tran in trans {
             println!("{:?}", formula_tran);
-            assert_eq!(model(&formula_tran[..]).unwrap().0, "");
+            assert_eq!(transform(&formula_tran[..]).unwrap().0, "");
         }
     }
 

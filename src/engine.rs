@@ -30,39 +30,34 @@ use crate::util::GenericMap;
 
 
 
-pub struct Session {
+pub struct Session<FM: FormulaModule> {
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
     input: InputSession<i32, Arc<Term>, isize>,
     probe: timely::dataflow::ProbeHandle<i32>,
-    env: Option<Env>,
-    domain_name: String,
-    model_name: Option<String>,
+    module: FM,
     step_count: i32,
 }
 
-impl Session {
-    fn new(input: InputSession<i32, Arc<Term>, isize>, 
-            probe: timely::dataflow::ProbeHandle<i32>, 
-            worker: timely::worker::Worker<timely::communication::allocator::Thread>,
-            env: Option<Env>,
-            domain_name: String,
-            model_name: Option<String>,
-        ) -> Self {
+impl<FM: FormulaModule> Session<FM> {
+    pub fn new(module: FM, engine: &DDEngine) -> Self {
+        // Create a single thread worker.
+        let allocator = timely::communication::allocator::Thread::new();
+        let mut worker = timely::worker::Worker::new(allocator);
+        let (mut input, probe) = engine.create_dataflow(&module, &mut worker);
 
         Session {
             worker,
             input,
             probe,
-            env,
-            domain_name,
-            model_name,
+            module,
             step_count: 1,
         }
     }
 
     pub fn parse_term_str(&self, term_str: &str) -> Option<Arc<Term>> {
         // Call function from parser.
-        parse_into_term(&self.env, self.domain_name.clone(), self.model_name.clone(), term_str)
+        // parse_into_term(&self.env, self.domain_name.clone(), self.model_name.clone(), term_str)
+        unimplemented!()
     }
 
     fn _advance(&mut self) {
@@ -98,77 +93,30 @@ impl Session {
         self._advance();
     }
 
-    pub fn load_model(&mut self, model: Model) {
-        self.add_terms(model.models);
+    pub fn load(&mut self) {
+        let terms = self.module.terms();
+        self.add_terms(terms);
     }
 }
 
 
 pub struct DDEngine {
-    pub env: Option<Env>,
+    pub env: Env,
     pub inspect: bool,
 }
 
 impl DDEngine {
     pub fn new() -> Self {
-        let engine = DDEngine {
-            env: None,
+        DDEngine {
+            env: Env::new(),
             inspect: false,
-        };
-
-        engine
+        }
     }
 
-    pub fn install(&mut self, env: Env) {
-        self.env = Some(env);
-    }
-
-    pub fn parse_string(content: String) -> Env {
-        let content_eof = format!("{} {}", content, " EOF");
-        let env = parse_str(content_eof);
-        env
-    }
-
-
-    pub fn parse_file() {
-
-    }
-
-    pub fn get_domain(&self, name: String) -> Option<&Domain> {
-        let domain = match &self.env {
-            None => None,
-            Some(env) => env.get_domain_by_name(name),
-        };
-
-        domain
-    }
-
-    pub fn get_model(&self, name: String) -> Option<&Model> {
-        let model = match &self.env {
-            None => None,
-            Some(env) => env.get_model_by_name(name),
-        };
-
-        model
-    }
-
-    pub fn create_session(&mut self, domain_name: &str, model_name: Option<&str>) -> Session {
-        // Create a single thread worker.
-        let allocator = timely::communication::allocator::Thread::new();
-        let mut worker = timely::worker::Worker::new(allocator);
-
-        let domain = self.get_domain(domain_name.to_string()).unwrap();
-        let (mut input, probe) = self.create_dataflow(&domain.clone(), &mut worker);
-
-        // TODO: Need to remove deep clone by adding lifetime to field with reference in Session.
-        Session::new(
-            input, 
-            probe, 
-            worker, 
-            self.env.clone(), 
-            domain_name.to_string(), 
-            model_name.map(|x| { x.to_string() }),
-        )
+    // TODO: Enable installation of multiple programs and detect conflicts between programs.
+    pub fn install(&mut self, program_text: String) {
+        let env = load_program(program_text + " EOF");
+        self.env = env;
     }
 
     pub fn dataflow_filtered_by_type<G>(
@@ -602,15 +550,15 @@ impl DDEngine {
             })
     }
 
-    pub fn create_dataflow(
-        &mut self, 
-        domain: &Domain, 
+    pub fn create_dataflow<FM: FormulaModule>(
+        &self, 
+        module: &FM, 
         worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>
     ) 
     -> (InputSession<i32, Arc<Term>, isize>, timely::dataflow::ProbeHandle<i32>)
     {
         let mut input = InputSession::<i32, Arc<Term>, isize>::new();
-        let stratified_rules = domain.stratified_rules();
+        let stratified_rules = module.stratified_rules();
 
         let probe = worker.dataflow(|scope| {
             // models are updated after execution of rules from each stratum.
