@@ -57,6 +57,10 @@ impl Rule {
         rule
     }
 
+    pub fn is_conformance_rule(&self) -> bool {
+        self.head.len() == 0
+    }
+
     pub fn get_head(&self) -> Vec<Term> {
         self.head.clone()
     }

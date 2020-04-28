@@ -14,6 +14,7 @@ use num::*;
 use serde::{Serialize, Deserialize};
 
 use crate::type_system::*;
+use crate::expression::*;
 use crate::util::GenericMap;
 
 
@@ -125,7 +126,6 @@ pub enum Atom {
     Float(BigRational),
 }
 
-
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let atomStr = match self {
@@ -137,7 +137,6 @@ impl Display for Atom {
         write!(f, "{}", atomStr)
     }
 }
-
 
 #[enum_dispatch]
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -168,6 +167,41 @@ impl Debug for Term {
             Term::Atom(a) => format!("{}", a),
         };
         write!(f, "{}", term_str)
+    }
+}
+
+impl FormulaExpr for Term {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        // Do it here because after self is borrowed it can be used as immutable.
+        let matched = self.match_with(pattern);
+        match self {
+            Term::Composite(c) => {
+                if let Term::Composite(pc) = pattern {
+                    // Match a composite term pattern to another composite term or its arguments. 
+                    // If they have same type and recursively matched then make the replacement.
+                    if matched { 
+                        *self = replacement.clone();
+                    } else {
+                        // Try to match the composite pattern in all arguments.
+                        for argument_arc in c.arguments.iter_mut() {
+                            let argument: &mut Term = Arc::make_mut(argument_arc);
+                            argument.replace(pattern, replacement);
+                        }
+                    }
+                } else {
+                    // If pattern is a variable or atom then recursively find it in every argument of the 
+                    // composite term and replace it with another term.
+                    for argument_arc in c.arguments.iter_mut() {
+                        let argument: &mut Term = Arc::make_mut(argument_arc);
+                        argument.replace(pattern, replacement);
+                    }
+                }
+            },
+            _ => {
+                // Replace directly when the self term is variable or atom that matches the pattern.
+                if self == pattern { *self = replacement.clone(); }
+            },
+        };
     }
 }
 
@@ -413,7 +447,28 @@ impl Term {
             },
         }
         
-    } 
+    }
+    
+    /// Recursively check if two terms have the same structure.
+    pub fn match_with(&self, term: &Term) -> bool {
+        if let Term::Atom(a) = self {
+            return self == term;
+        } else if let Term::Composite(c) = self {
+            // Recursively compare every pair of arguments.
+            if let Term::Composite(tc) = term {
+                if c.sort != tc.sort { return false; }
+                for i in 0 .. c.arguments.len() {
+                    let arg1 = c.arguments.get(i).unwrap();
+                    let arg2 = tc.arguments.get(i).unwrap();
+                    if !arg1.match_with(arg2) { return false; }
+                }
+                true
+            } else { return false; } // Composite won't match atom or variable.
+        } else { 
+            // Variable matches all terms.
+            return true; 
+        }
+    }
 
     /// Propagate the binding to a term (only works for composite term) and return a new term. 
     /// The map must implement GenericMap with the type of both key and value restricted to Arc<Term>.

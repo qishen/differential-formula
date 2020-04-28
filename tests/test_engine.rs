@@ -5,6 +5,7 @@ use differential_formula::type_system::*;
 
 use std::fs;
 use std::path::Path;
+use std::collections::HashMap;
 
 
 static MODEL1: &str = "
@@ -43,6 +44,7 @@ fn generate_graph_program(rules: &str, model: &str) -> String {
     program
 }
 
+/*
 fn create_session(rules: &str, model: &str) -> (Domain, Session) {
     let program = generate_graph_program(rules, model);
     println!("{}", program);
@@ -216,7 +218,7 @@ fn test_ddengine_10() {
 
     let (domain, mut session) = create_session(rules10, MODEL1);
 }
-
+*/
 
 #[test]
 fn test_ddengine_on_social_network() {
@@ -226,15 +228,43 @@ fn test_ddengine_on_social_network() {
 
     let mut engine = DDEngine::new();
     engine.inspect = true;
+    engine.install(content);
 
-    // Parse string and install program in the engine.
-    let env = DDEngine::parse_string(content);
-    // println!("{:?}", env);
-    engine.install(env);
+    // The domain of model `example` is `SocialNetwork`.
+    let model = engine.env.get_model_by_name("example").unwrap().clone();
+    let mut session = Session::new(model, &engine);
+    session.load();
+}
 
-    let domain = engine.get_domain("SocialNetwork".to_string()).unwrap().clone();
-    let model = engine.get_model("example".to_string()).unwrap().clone();
 
-    let mut session = engine.create_session("SocialNetwork", Some("example"));
-    session.load_model(model);
+#[test]
+fn test_ddengine_transformation() {
+    let path = Path::new("./tests/testcase/p1.4ml");
+    let content = fs::read_to_string(path).unwrap();
+    
+    let mut engine = DDEngine::new();
+    engine.inspect = true;
+    engine.install(content);
+
+    let model_g2 = engine.env.get_model_by_name("LittleCycle").unwrap().clone();
+    let model_g2_renamed = model_g2.rename("GraphIn".to_string());
+
+    println!("{:#?}", model_g2_renamed.terms());
+    //println!("{:#?}", model_g2_renamed.domain);
+
+    let copy_transform = engine.env.get_transform_by_name("Complete").unwrap().clone();
+
+    let mut input_model_map = HashMap::new();
+    input_model_map.insert("GraphIn".to_string(), model_g2);
+
+    let copy_transformation = Transformation {
+        transform: copy_transform,
+        input_term_map: HashMap::new(),
+        input_model_map,
+    };
+
+    let mut session = Session::new(copy_transformation, &engine);
+    session.load();
+    //let mut session = engine.create_session("SocialNetwork", Some("example"));
+    //session.load_model(model);
 }

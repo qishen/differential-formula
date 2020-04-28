@@ -25,6 +25,13 @@ pub struct Predicate {
     pub alias: Option<Term>, // Must be a variable term.
 }
 
+impl FormulaExpr for Predicate {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.term.replace(pattern, replacement);
+        FormulaExpr::replace(&mut self.alias, pattern, replacement);
+    }
+}
+
 impl Display for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut term_str = format!("{}", self.term);
@@ -139,6 +146,13 @@ pub struct Binary {
     pub right: Expr,
 }
 
+impl FormulaExpr for Binary {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.left.replace(pattern, replacement);
+        self.right.replace(pattern, replacement);
+    }
+}
+
 impl Display for Binary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.left, self.op, self.right)
@@ -192,6 +206,12 @@ pub struct TypeConstraint {
     pub sort: Arc<Type>,
 }
 
+impl FormulaExpr for TypeConstraint {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.var.replace(pattern, replacement);
+    }
+}
+
 impl Display for TypeConstraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} : {}", self.var, self.sort.name())
@@ -219,6 +239,16 @@ pub enum Constraint {
     Predicate,
     Binary,
     TypeConstraint,
+}
+
+impl FormulaExpr for Constraint {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        match self {
+            Constraint::Predicate(p) => p.replace(pattern, replacement),
+            Constraint::Binary(b) => b.replace(pattern, replacement),
+            Constraint::TypeConstraint(t) => t.replace(pattern, replacement),
+        };
+    }
 }
 
 impl Display for Constraint {

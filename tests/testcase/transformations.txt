@@ -1,15 +1,20 @@
 transform SimpleCopy (id: Integer, GraphIn:: DAGs) returns (GraphOut:: DAGs) {
-   GraphOut.V(y) :- GraphIn.V(x), y = x + %id.
+   GraphOut.V(y) :- GraphIn.V(x). 
    GraphOut.E(x, y) :- GraphIn.E(x, y).
 }
 --------
 transform SpecialCopy (v: GraphIn.V, GraphIn:: DAGs) returns (GraphOut:: DAGs) {
-   GraphOut.V(x) :- GraphIn.V(x), x = v.
+   GraphOut.V(x) :- GraphIn.V(x).
    GraphOut.E(x, y) :- GraphIn.E(x, y).
 }
 --------
 transform SpecialCopy (v: GraphIn.V, GraphIn:: DAGs) returns (GraphOut:: DAGs) {
    Product ::= new (one: GraphIn.E, two: Graph.E).
-   GraphOut.V(x) :- GraphIn.V(x), x = v.
+   GraphOut.V(x) :- GraphIn.V(x), x = v .
+   GraphOut.E(x, y) :- GraphIn.E(x, y).
+}
+--------
+transform SimpleCopy (id: Integer, GraphIn:: DAGs) returns (GraphOut:: DAGs, GraphOut2:: DAGs) {
+   GraphOut.V(y) :- GraphIn.V(x). 
    GraphOut.E(x, y) :- GraphIn.E(x, y).
 }

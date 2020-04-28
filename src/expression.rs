@@ -8,9 +8,8 @@ use std::iter::*;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
 use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
@@ -21,6 +20,30 @@ use crate::rule::*;
 use crate::constraint::*;
 use crate::util::GenericMap;
 
+
+pub trait FormulaExpr {
+    fn replace(&mut self, pattern: &Term, replacement: &Term);
+}
+
+impl<T: FormulaExpr> FormulaExpr for Option<T> {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        match self {
+            Some(expr) => {
+                expr.replace(pattern, replacement);
+            },
+            None => {},
+        };
+    }
+}
+
+impl<T: FormulaExpr> FormulaExpr for Vec<T> {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        for element in self.iter_mut() {
+            element.replace(pattern, replacement);
+        }
+    }
+}
+
 #[readonly::make]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SetComprehension {
@@ -28,6 +51,13 @@ pub struct SetComprehension {
     pub condition: Vec<Constraint>,
     pub op: SetCompreOp,
     pub default: BigInt,
+}
+
+impl FormulaExpr for SetComprehension {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.vars.replace(pattern, replacement);
+        self.condition.replace(pattern, replacement);
+    }
 }
 
 // Turn SetComprehension into a headless rule.
@@ -368,12 +398,28 @@ impl Display for BaseExpr {
     }
 }
 
+impl FormulaExpr for BaseExpr {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        match self {
+            BaseExpr::SetComprehension(s) => s.replace(pattern, replacement),
+            BaseExpr::Term(t) => t.replace(pattern, replacement),
+        };
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArithExpr {
     pub op: ArithmeticOp,
     pub left: Arc<Expr>,
     pub right: Arc<Expr>,
+}
+
+impl FormulaExpr for ArithExpr {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        Arc::make_mut(&mut self.left).replace(pattern, replacement);
+        Arc::make_mut(&mut self.right).replace(pattern, replacement);
+    }
 }
 
 impl Display for ArithExpr {
@@ -439,6 +485,15 @@ pub trait ExprBehavior {
 pub enum Expr {
     BaseExpr,
     ArithExpr,
+}
+
+impl FormulaExpr for Expr {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        match self {
+            Expr::BaseExpr(b) => b.replace(pattern, replacement),
+            Expr::ArithExpr(a) => a.replace(pattern, replacement),
+        }
+    }
 }
 
 impl Display for Expr {

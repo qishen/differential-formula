@@ -233,6 +233,22 @@ impl FormulaModule for Transformation {
     }
 }
 
+impl Transformation {
+    fn new(transform: Transform, input_term_map: HashMap<String, Term>, input_model_map: HashMap<String, Model>) 
+    -> Transformation 
+    {
+        Transformation {
+            transform,
+            input_term_map,
+            input_model_map,
+        }
+    }
+
+    fn compute(&self) {
+
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Domain {

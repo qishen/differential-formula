@@ -45,6 +45,16 @@ named!(id<&str, String>,
     map!(recognize!(tuple!(alpha1, alphanumeric0)), |x| { x.to_string() })
 );
 
+// Just treat it like a variable term despite the % sign.
+// In model transformation it will be replaced with another term.
+named!(param_id<&str, Term>,
+    do_parse!(
+        tag!("%") >>
+        pid: id >>
+        (Variable::new(pid, vec![]).into())
+    )
+);
+
 // Same pattern as `id` but return ast instead of string.
 // Two types of typename: 
 // 1. Native type e.g. Node or Edge.
@@ -128,9 +138,11 @@ named!(atom_typedef,
     alt!(tag!("String") | tag!("Integer") | tag!("Boolean"))
 );
 
+// The conformance rule is treated as a headless rule.
 named!(conformance<&str, RuleAst>,
     do_parse!(
         tag!("conforms") >>
+        skip >>
         body: separated_list!(
             delimited!(skip, tag!(","), skip),
             constraint
@@ -165,7 +177,7 @@ fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
 }
 
 named!(domain_rules<&str, Vec<RuleAst>>,
-    separated_list!(skip, rule)
+    separated_list!(skip, alt!(rule | conformance))
 );
 
 named!(domain_types<&str, Vec<(String, TypeDefAst)>>,
@@ -348,6 +360,13 @@ named!(transform_param<&str, TransformParamAst>,
     )
 );
 
+// Parse model transformation command in cmd e.g. r = SimpleCopy(V(1), m1)
+/*named!(transformation<&str, String>,
+    do_parse!(
+
+    )
+)*/
+
 named!(transform<&str, ModuleAst>, 
     do_parse!(
         tag!("transform") >>
@@ -469,8 +488,9 @@ named!(base_expr<&str, ExprAst>,
             base_expr.into()
         }) |
         // Can only be either atom of numeric value or variable that represent numeric value.
-        map!(alt!(variable_ast | atom_ast), |x| { 
-            let base_expr: BaseExprAst = x.into();
+        map!(alt!(param_id | variable | atom), |term| { 
+            let term_ast: TermAst = term.into();
+            let base_expr: BaseExprAst = term_ast.into();
             base_expr.into()
         }) | 
         parens_arith_expr
@@ -699,7 +719,6 @@ pub fn parse_into_term(
     
 }
 
-
 named!(composite<&str, TermAst>, 
     do_parse!(
         alias: opt!(terminated!(id, delimited!(multispace0, tag!("is"), multispace0))) >>
@@ -713,7 +732,9 @@ named!(composite<&str, TermAst>,
                     alt!(
                         composite | 
                         map!(atom, |x| { x.into() }) |
-                        map!(variable, |x| { x.into() })
+                        map!(variable, |x| { x.into() }) |
+                        // Handle some weird expression like %id only in model transformation.
+                        map!(param_id, |x| { x.into() }) 
                     ), 
                     space0
                 )
@@ -903,12 +924,13 @@ mod tests {
 
     #[test]
     fn test_parse_rules() {
+        // rules.txt contains both normal rules and conformance rules.
         let path = Path::new("./tests/testcase/rules.txt");
         let content = fs::read_to_string(path).unwrap();
         let rules = content.split("\n--------\n");
         for formula_rule in rules {
             println!("{:?}", formula_rule);
-            assert_eq!(rule(&formula_rule[..]).unwrap().0, "");
+            assert_eq!(domain_rules(&formula_rule[..]).unwrap().0, "\n--EOF--");
         }
     }
 

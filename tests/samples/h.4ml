@@ -33,9 +33,13 @@ domain TwoDAGs extends left:: DAGs, right:: DAGs {
    
 }
 
-transform SpecialCopy (GraphIn:: DAGs) returns (GraphOut:: DAGs) {
-   GraphOut.V(x) :- GraphIn.V(x).
-   GraphOut.E(x, y) :- GraphIn.E(x, y).
+transform SpecialCopy (v: GraphIn.V, GraphIn2:: DAGs, GraphIn:: DAGs) returns (GraphOut:: DAGs) {
+    Foo ::= (id: GraphOut.V + GraphIn2.V).
+    Foo(x) :- GraphIn.E(x, y).
+    
+    GraphOut.V(x) :- GraphIn.V(x).
+    GraphOut.E(x, y) :- GraphIn.E(x, y).
+   // E(V(1), V(2))
    // x -> GrapOut.V  x -> GraphIn.V
 }
 
@@ -64,31 +68,3 @@ model g4 of TwoDAGs extends left:: g2, right:: g2 {
     l100 is left.V(100).
     r100 is right.V(100).
 }
-EOF
---------
-domain Graph {
-    Node ::= new(name: Integer).
-    Edge ::= new(src: Node, dst: Node).
-    Path ::= new(src: Node, dst: Node).
-    Line ::= new(a: Node, b: Node, c: Node, d: Node).
-    Nocycle ::= new(node: Node).
-    TwoEdge ::= new(first: Edge, second: Edge).
-
-    TwoEdge(x, x, square) :- x is Edge(c, d), 
-    aggr = count({Edge(a, a), b | Edge(a, b)}), square = aggr * aggr, agg.hi * 2 = 20 .
-}
-
-model m of Graph {
-    n0 is Node(0).
-    n1 is Node(1).
-    n2 is Node(2).
-    n3 is Node(3).
-    n4 is Node(4).
-
-    Edge(n0, n0).
-    Edge(n0, n1).
-    Edge(n1, n2).
-    Edge(n2, n3).
-    Edge(n3, n4).
-}
-EOF

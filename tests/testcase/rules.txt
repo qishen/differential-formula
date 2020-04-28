@@ -1,4 +1,5 @@
 Edge(a, c) :- Edge(a, b), Edge(b, c) .
+--EOF--
 --------
 Edge(a, b),
     Edge(x, y)                
@@ -7,3 +8,7 @@ Edge(a, b),
             Edge(b, c), 
             // split with a comment
             Edge(c, a).
+--EOF--
+--------
+conforms Edge(a, a).
+--EOF--
