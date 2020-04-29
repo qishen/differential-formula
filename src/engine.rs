@@ -23,6 +23,7 @@ use differential_dataflow::operators::*;
 use crate::constraint::*;
 use crate::term::*;
 use crate::expression::*;
+use crate::module::*;
 use crate::rule::*;
 use crate::type_system::*;
 use crate::parser::combinator::*;

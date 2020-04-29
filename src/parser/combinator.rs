@@ -1,5 +1,6 @@
 use crate::parser::ast::*;
 use crate::constraint::*;
+use crate::module::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;

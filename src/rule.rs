@@ -19,11 +19,19 @@ use crate::term::*;
 use crate::expression::*;
 use crate::constraint::*;
 
+
 #[derive(Clone, Debug)]
 pub struct Rule {
     head: Vec<Term>,
     body: Vec<Constraint>,
     dc_var_counter: i64,
+}
+
+impl FormulaExpr for Rule {
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.head.replace(pattern, replacement);
+        self.body.replace(pattern, replacement);
+    }
 }
 
 impl Display for Rule {

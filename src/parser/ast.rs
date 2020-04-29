@@ -9,6 +9,7 @@ use crate::type_system::*;
 use crate::expression::*;
 use crate::rule::*;
 use crate::constraint::*;
+use crate::module::*;
 use crate::util::*;
 
 #[enum_dispatch(TermAst)]
