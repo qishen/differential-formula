@@ -1,6 +1,8 @@
 extern crate differential_formula;
 
+use differential_formula::term::*;
 use differential_formula::engine::*;
+use differential_formula::module::*;
 use differential_formula::type_system::*;
 
 use std::fs;
@@ -236,35 +238,71 @@ fn test_ddengine_on_social_network() {
     session.load();
 }
 
-
-#[test]
-fn test_ddengine_transformation() {
+fn load_program() -> DDEngine {
     let path = Path::new("./tests/testcase/p1.4ml");
     let content = fs::read_to_string(path).unwrap();
     
     let mut engine = DDEngine::new();
     engine.inspect = true;
     engine.install(content);
+    return engine;
+}
 
-    let model_g2 = engine.env.get_model_by_name("LittleCycle").unwrap().clone();
-    let model_g2_renamed = model_g2.rename("GraphIn".to_string());
 
-    println!("{:#?}", model_g2_renamed.terms());
-    //println!("{:#?}", model_g2_renamed.domain);
+#[test]
+fn test_print_modules() {
+    let engine = load_program();
 
-    let copy_transform = engine.env.get_transform_by_name("Complete").unwrap().clone();
+    let dag = engine.env.get_domain_by_name("DAGs");
+    println!("domain DAGs is {:?}", dag);
 
-    let mut input_model_map = HashMap::new();
-    input_model_map.insert("GraphIn".to_string(), model_g2);
+    let iso_dag = engine.env.get_domain_by_name("IsoDAGs");
+    println!("domain IsoDAGs is {:#?}", iso_dag);
 
-    let copy_transformation = Transformation {
-        transform: copy_transform,
-        input_term_map: HashMap::new(),
-        input_model_map,
-    };
+    let little_cycle = engine.env.get_model_by_name("LittleCycle").unwrap().clone();
 
-    let mut session = Session::new(copy_transformation, &engine);
+    let pair = engine.env.get_model_by_name("Pair").unwrap().clone();
+    println!("alias_map of model Pair is {:#?}", pair.alias_map);
+    println!("model Pair is {:#?}", pair.terms());
+
+    let del_transform = engine.env.get_transform_by_name("Del").unwrap().clone();
+    for rule in del_transform.rules.iter() {
+        println!("Original Rule: {}", rule);
+    }
+}
+
+
+#[test]
+fn test_transform_del() {
+    let mut engine = load_program();
+    let transformation = engine.create_model_transformation("r = Del(1, LittleCycle)");
+    let mut session = Session::new(transformation, &engine);
     session.load();
-    //let mut session = engine.create_session("SocialNetwork", Some("example"));
-    //session.load_model(model);
+
+    let v4 = session.create_term("GraphIn.V(4)").unwrap();
+    session.add_term(v4)
+}
+
+#[test]
+fn test_transform_complete() {
+    let mut engine = load_program();
+    let transformation = engine.create_model_transformation("r = Complete(LittleCycle)");
+    let mut session = Session::new(transformation, &engine);
+    session.load();
+}
+
+#[test]
+fn test_transform_uglycopy() {
+    let mut engine = load_program();
+    let transformation = engine.create_model_transformation("r = UglyCopy(LittleCycle)");
+    let mut session = Session::new(transformation, &engine);
+    session.load();
+}
+
+#[test]
+fn test_transform_prettycopy() {
+    let mut engine = load_program();
+    let transformation = engine.create_model_transformation("r = PrettyCopy(LittleCycle)");
+    let mut session = Session::new(transformation, &engine);
+    session.load();
 }
