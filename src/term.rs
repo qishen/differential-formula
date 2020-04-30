@@ -19,7 +19,7 @@ use crate::util::GenericMap;
 
 
 #[enum_dispatch(Term)]
-pub trait TermBehavior {}
+pub trait FormulaTerm {}
 
 
 // Ignore alias field when calculate hash and compare equality.
@@ -72,7 +72,7 @@ impl Composite {
 }
 
 
-impl TermBehavior for Composite {}
+impl FormulaTerm for Composite {}
 
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -114,7 +114,7 @@ impl Variable {
 }
 
 
-impl TermBehavior for Variable {}
+impl FormulaTerm for Variable {}
 
 
 #[enum_dispatch]
@@ -128,13 +128,13 @@ pub enum Atom {
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let atomStr = match self {
+        let atom_str = match self {
             Atom::Int(i) => format!("{}", i),
             Atom::Bool(b) => format!("{:?}", b),
             Atom::Str(s) => format!("{:?}", s),
             Atom::Float(f) => format!("{}", f),
         };
-        write!(f, "{}", atomStr)
+        write!(f, "{}", atom_str)
     }
 }
 
@@ -146,7 +146,7 @@ pub enum Term {
     Atom
 }
 
-impl TermBehavior for Atom {}
+impl FormulaTerm for Atom {}
 
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -172,36 +172,10 @@ impl Debug for Term {
 
 impl FormulaExpr for Term {
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
-        // Do it here because after self is borrowed it can be used as immutable.
-        let matched = self.match_with(pattern);
-        match self {
-            Term::Composite(c) => {
-                if let Term::Composite(pc) = pattern {
-                    // Match a composite term pattern to another composite term or its arguments. 
-                    // If they have same type and recursively matched then make the replacement.
-                    if matched { 
-                        *self = replacement.clone();
-                    } else {
-                        // Try to match the composite pattern in all arguments.
-                        for argument_arc in c.arguments.iter_mut() {
-                            let argument: &mut Term = Arc::make_mut(argument_arc);
-                            argument.replace(pattern, replacement);
-                        }
-                    }
-                } else {
-                    // If pattern is a variable or atom then recursively find it in every argument of the 
-                    // composite term and replace it with another term.
-                    for argument_arc in c.arguments.iter_mut() {
-                        let argument: &mut Term = Arc::make_mut(argument_arc);
-                        argument.replace(pattern, replacement);
-                    }
-                }
-            },
-            _ => {
-                // Replace directly when the self term is variable or atom that matches the pattern.
-                if self == pattern { *self = replacement.clone(); }
-            },
-        };
+        self.traverse(
+            &|term| { return term == pattern; }, 
+            &mut |mut term| { *term = replacement.clone(); }
+        );
     }
 }
 
@@ -218,10 +192,16 @@ impl Term {
                     let arg: Term = arg_arc.as_ref().clone();
                     new_args.push(Arc::new(arg.rename(scope.clone())));
                 }
-                let mut c_copy = c.clone();
-                c_copy.sort = Arc::new(new_t);
-                c_copy.arguments = new_args;
-                c_copy.into()
+                let mut c2 = c.clone();
+                c2.sort = Arc::new(new_t);
+                c2.arguments = new_args;
+                c2.into()
+            },
+            Term::Variable(v) => {
+                // It looks like the renamed variable has fragments with a dot but it actually does not.
+                let mut v2 = v.clone();
+                v2.root = format!("{}.{}", scope, v.root);
+                v2.into()
             },
             _ => { self.clone() }
         };
@@ -447,27 +427,59 @@ impl Term {
             },
         }
         
+    
+    }
+
+    /// Traverse the term recursively from root to find the term that satifies the pattern
+    /// and then apply the logic to the mutable term.
+    pub fn traverse<F1, F2>(&mut self, pattern: &F1, logic: &mut F2) 
+    where F1: Fn(&Term) -> bool, F2: FnMut(&mut Term)
+    {
+        if pattern(self) {
+            logic(self);
+        }
+
+        // Recursively match all arguments in the composite term even the term is already matched.
+        match self {
+            Term::Composite(c) => {
+                for arg_arc in c.arguments.iter_mut() {
+                    let arg_term = Arc::make_mut(arg_arc);
+                    arg_term.traverse(pattern, logic);
+                }
+            },
+            _ => {}
+        };
     }
     
-    /// Recursively check if two terms have the same structure.
+    /// Recursively check if two terms have the same structure and variable matches all terms.
     pub fn match_with(&self, term: &Term) -> bool {
-        if let Term::Atom(a) = self {
-            return self == term;
-        } else if let Term::Composite(c) = self {
-            // Recursively compare every pair of arguments.
-            if let Term::Composite(tc) = term {
-                if c.sort != tc.sort { return false; }
-                for i in 0 .. c.arguments.len() {
-                    let arg1 = c.arguments.get(i).unwrap();
-                    let arg2 = tc.arguments.get(i).unwrap();
-                    if !arg1.match_with(arg2) { return false; }
+        match self {
+            Term::Composite(c) => {
+                // Recursively compare every pair of arguments.
+                match term {
+                    Term::Composite(tc) => {
+                        if c.sort != tc.sort { return false; }
+                        for i in 0 .. c.arguments.len() {
+                            let arg1 = c.arguments.get(i).unwrap();
+                            let arg2 = tc.arguments.get(i).unwrap();
+                            if !arg1.match_with(arg2) { return false; }
+                        }
+                        return true;
+                    },
+                    Term::Variable(_) => { return true; },
+                    Term::Atom(_) => { return false; },
+                };
+            },
+            Term::Variable(_) => {
+                return true; // Variable matches all terms.
+            },
+            Term::Atom(a) => {
+                if let Term::Variable(_) = term {
+                    return true; // Variable matches all terms.
                 }
-                true
-            } else { return false; } // Composite won't match atom or variable.
-        } else { 
-            // Variable matches all terms.
-            return true; 
-        }
+                return self == term;
+            },
+        };
     }
 
     /// Propagate the binding to a term (only works for composite term) and return a new term. 

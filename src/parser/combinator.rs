@@ -346,6 +346,7 @@ named!(tagged_domain<&str, TaggedDomainAst>,
     )
 );
 
+// transform parameter is either id:: Domain or id: Term.
 named!(transform_param<&str, TransformParamAst>,
     alt!(
         map!(tagged_domain, |x| { 
@@ -361,12 +362,19 @@ named!(transform_param<&str, TransformParamAst>,
     )
 );
 
-// Parse model transformation command in cmd e.g. r = SimpleCopy(V(1), m1)
-/*named!(transformation<&str, String>,
+// Parse model transformation command in cmd e.g. r = SimpleCopy(V(1), m1) and model name
+// will be treated as variable term here.
+named!(pub transformation<&str, TransformationAst>,
     do_parse!(
-
+        result_name: id >>
+        delimited!(space0, tag!("="), space0) >>
+        transform_name: id >>
+        tag!("(") >>
+        params: separated_list!(delimited!(space0, tag!(","), space0), term) >>
+        tag!(")") >>
+        (TransformationAst { result_name, transform_name, params })
     )
-)*/
+);
 
 named!(transform<&str, ModuleAst>, 
     do_parse!(
@@ -685,40 +693,14 @@ fn parse_predicate(neg: Option<&str>, alias: Option<String>, term: TermAst) -> P
     }
 }
 
-pub fn parse_into_term(
-    env_opt: &Option<Env>, 
-    domain_name: String, 
-    model_name: Option<String>, 
-    s: &str
-) -> Option<Arc<Term>>
-{
-    match env_opt {
-        Some(env) => {
-            let domain = env.get_domain_by_name(&domain_name).unwrap();
-            let term_ast = composite(s).unwrap().1;
-            let mut term = term_ast.to_term(domain);
-            
-            // if model is not none replace variable in the new term by propagating alias map.
-            let result_term = match model_name {
-                Some(name) => {
-                    let model = env.get_model_by_name(&name).unwrap();
-                    /* 
-                    1. Replace variable in the new term by propagating alias map.
-                    2. Update its alias and argument's alias recursively by propagating reverse alias map.
-                    */
-                    term.propagate_bindings(&model.alias_map).unwrap()
-                        .propagate_reverse_bindings(&model.reverse_alias_map).unwrap()
-                },
-                _ => { Arc::new(term) }
-            };
-
-
-            Some(result_term)
-        },
-        _ => { None }
-    }
-    
-}
+// Match composite, variable or atom term.
+named!(pub term<&str, TermAst>,
+    alt!(
+        composite |
+        map!(atom, |x| { x.into() }) |
+        map!(variable, |x| { x.into() })
+    )
+);
 
 named!(composite<&str, TermAst>, 
     do_parse!(
@@ -731,9 +713,7 @@ named!(composite<&str, TermAst>,
                 delimited!(
                     space0, 
                     alt!(
-                        composite | 
-                        map!(atom, |x| { x.into() }) |
-                        map!(variable, |x| { x.into() }) |
+                        term |
                         // Handle some weird expression like %id only in model transformation.
                         map!(param_id, |x| { x.into() }) 
                     ), 

@@ -9,6 +9,7 @@ use std::iter::*;
 use std::vec::Vec;
 use std::convert::TryInto;
 use std::string::String;
+use std::collections::HashMap;
 
 use im::{OrdMap, OrdSet};
 
@@ -55,12 +56,6 @@ impl<FM: FormulaModule> Session<FM> {
         }
     }
 
-    pub fn parse_term_str(&self, term_str: &str) -> Option<Arc<Term>> {
-        // Call function from parser.
-        // parse_into_term(&self.env, self.domain_name.clone(), self.model_name.clone(), term_str)
-        unimplemented!()
-    }
-
     fn _advance(&mut self) {
         self.input.advance_to(self.step_count);
         self.input.flush();
@@ -70,12 +65,18 @@ impl<FM: FormulaModule> Session<FM> {
         self.step_count += 1;
     }
 
+    pub fn create_term(&self, term_str: &str) -> Option<Arc<Term>> {
+        let term_ast = term(term_str).unwrap().1;
+        let term = term_ast.to_term(&self.module);
+        Some(Arc::new(term))
+    }
+
     pub fn add_term(&mut self, term: Arc<Term>) {
         self.input.insert(term);
         self._advance();
     }
 
-    pub fn add_terms(&mut self, terms: Vec<Arc<Term>>) {
+    pub fn add_terms<Iter: IntoIterator<Item=Arc<Term>>>(&mut self, terms: Iter) {
         for term in terms {
             self.input.insert(term);
         }
@@ -87,7 +88,7 @@ impl<FM: FormulaModule> Session<FM> {
         self._advance();
     }
 
-    pub fn remove_terms(&mut self, terms: Vec<Arc<Term>>) {
+    pub fn remove_terms<Iter: IntoIterator<Item=Arc<Term>>>(&mut self, terms: Iter) {
         for term in terms {
             self.input.remove(term);
         }
@@ -98,6 +99,7 @@ impl<FM: FormulaModule> Session<FM> {
         let terms = self.module.terms();
         self.add_terms(terms);
     }
+
 }
 
 
@@ -118,6 +120,31 @@ impl DDEngine {
     pub fn install(&mut self, program_text: String) {
         let env = load_program(program_text + " EOF");
         self.env = env;
+    }
+
+    pub fn create_model_transformation(&mut self, cmd: &str) -> Transformation {
+        // tast is TransformationAst.
+        let tast = transformation(cmd).unwrap().1;
+        let transform = self.env.get_transform_by_name(&tast.transform_name).unwrap();
+
+        let mut input_model_map = HashMap::new();
+        let mut input_term_map = HashMap::new();
+
+        for (i, param) in tast.params.iter().enumerate() {
+            let raw_term = param.to_term(transform);
+            let id = transform.get_id(i).unwrap().clone();
+
+            if let Term::Variable(v) = raw_term {
+                // Looks like a variable term but actually is a model name.
+                let model_name = v.root;
+                let model = self.env.get_model_by_name(&model_name[..]).unwrap().clone();
+                input_model_map.insert(id, model);
+            } else {
+                input_term_map.insert(id, raw_term);
+            }
+        }
+
+        Transformation::new(transform.clone(), input_term_map, input_model_map)
     }
 
     pub fn dataflow_filtered_by_type<G>(
@@ -143,11 +170,10 @@ impl DDEngine {
             })
     }
 
-
+    // TODO: Some predicates in the rule may have the same pattern.
     pub fn dataflow_filtered_by_pattern() {
 
     }
-
 
     pub fn dataflow_filtered_by_positive_predicate_constraint<G>(
         &self,

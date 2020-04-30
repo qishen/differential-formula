@@ -25,7 +25,7 @@ pub enum Program {
 }
 
 pub trait FormulaModule {
-    fn terms(&self) -> Vec<Arc<Term>>;
+    fn terms(&self) -> HashSet<Arc<Term>>;
     fn stratified_rules(&self) -> Vec<Vec<Rule>>;
     fn type_map(&self) -> &HashMap<String, Arc<Type>>;
 }
@@ -38,6 +38,8 @@ pub struct Transform {
     pub type_map: HashMap<String, Arc<Type>>,
     // Rules defined in transformation.
     pub rules: Vec<Rule>,
+    // A list of strings representing the Ids of params.
+    pub params: Vec<String>,
     // Some parameters in transform are terms.
     pub input_type_map: HashMap<String, Arc<Type>>,
     // The other parameters in transform are domains. 
@@ -47,8 +49,8 @@ pub struct Transform {
 }
 
 impl FormulaModule for Transform {
-    fn terms(&self) -> Vec<Arc<Term>> {
-        vec![]
+    fn terms(&self) -> HashSet<Arc<Term>> {
+        HashSet::new()
     }
 
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
@@ -61,6 +63,12 @@ impl FormulaModule for Transform {
     }
 }
 
+impl Transform {
+    pub fn get_id(&self, position: usize) -> Option<&String> {
+        self.params.get(position)
+    }
+}
+
 /// `Transformation` is the instantiation of `Transform`.
 pub struct Transformation {
     pub transform: Transform,
@@ -69,9 +77,9 @@ pub struct Transformation {
 }
 
 impl FormulaModule for Transformation {
-    fn terms(&self) -> Vec<Arc<Term>> {
+    fn terms(&self) -> HashSet<Arc<Term>> {
         // Rename terms in all model params and merge them together.
-        let mut merged_terms = vec![];
+        let mut merged_terms = HashSet::new();
         for (id, model) in self.input_model_map.iter() {
             let rename_model = model.rename(id.clone());
             merged_terms.extend(rename_model.terms);
@@ -118,8 +126,8 @@ pub struct Domain {
 }
 
 impl FormulaModule for Domain {
-    fn terms(&self) -> Vec<Arc<Term>> {
-        vec![]
+    fn terms(&self) -> HashSet<Arc<Term>> {
+        HashSet::new()
     }
 
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
@@ -167,7 +175,7 @@ impl Domain {
 pub struct Model {
     pub model_name: String,
     pub domain: Domain,
-    pub terms: Vec<Arc<Term>>,
+    pub terms: HashSet<Arc<Term>>,
     // variable term to composite term mapping.
     pub alias_map: HashMap<Arc<Term>, Arc<Term>>, 
     // composite term to string alias mapping and the composite can't have alias built in.
@@ -175,7 +183,7 @@ pub struct Model {
 }
 
 impl FormulaModule for Model {
-    fn terms(&self) -> Vec<Arc<Term>> {
+    fn terms(&self) -> HashSet<Arc<Term>> {
         self.terms.clone()
     }
 
@@ -191,7 +199,7 @@ impl FormulaModule for Model {
 impl Model {
     pub fn new(model_name: String, 
         domain: Domain, 
-        terms: Vec<Arc<Term>>, 
+        terms: HashSet<Arc<Term>>, 
         alias_map: HashMap<Arc<Term>, Arc<Term>>) -> Self
     {
         // Map alias-free term into its alias in string format.
@@ -220,21 +228,24 @@ impl Model {
 
     pub fn rename(&self, scope: String) -> Model {
         let renamed_domain = self.domain.rename(scope.clone());
-        let mut renamed_terms = vec![];
+        let mut renamed_terms = HashSet::new();
         let mut renamed_alias_map = HashMap::new();
 
         for term_arc in self.terms.iter() {
             let term: Term = term_arc.as_ref().clone();
             let renamed_term = term.rename(scope.clone());
-            renamed_terms.push(Arc::new(renamed_term));
+            renamed_terms.insert(Arc::new(renamed_term));
         }
 
         //  Update alias map while keep the same variables.
         for (key, term_arc) in self.alias_map.iter() {
             let term: Term = term_arc.as_ref().clone();
             let renamed_term = term.rename(scope.clone());
-            renamed_alias_map.insert(key.clone(), Arc::new(renamed_term));
+            let renamed_key = key.rename(scope.clone());
+            renamed_alias_map.insert(Arc::new(renamed_key), Arc::new(renamed_term));
         }
+
+        // TODO: reverse alias map.
 
         Model::new(
             format!("{}.{}", scope.clone(), self.model_name),
