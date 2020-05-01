@@ -67,7 +67,7 @@ model Pair of IsoDAGs includes Left::LittleCycle, Right::LittleCycle
 transform Add (id: Integer, GraphIn:: DAGs) 
 returns (GraphOut:: DAGs)
 {
-   //GraphOut.V(%id).
+   GraphOut.V(%id).
    GraphOut.V(x) :- GraphIn.V(x).
    GraphOut.E(x, y) :- GraphIn.E(x, y).
 }
@@ -96,6 +96,6 @@ returns (GraphOut:: DAGs)
 transform PrettyCopy (GraphIn:: DAGs) 
 returns (GraphOut:: DAGs)
 {
-   Frame ::= GraphIn.V + GraphIn.E.
+   //Frame ::= GraphIn.V + GraphIn.E.
    //GraphOut._(x) :- x is Frame.
 }

@@ -8,6 +8,7 @@ use std::collections::hash_map::DefaultHasher;
 
 use differential_formula::engine::*;
 use differential_formula::expression::*;
+use differential_formula::module::*;
 use differential_formula::type_system::*;
 use differential_formula::term::*;
 use num::*;

@@ -9,6 +9,8 @@ use std::fs;
 use std::path::Path;
 use std::collections::HashMap;
 
+use rand::{Rng, SeedableRng, StdRng};
+
 
 static MODEL1: &str = "
 model m of Graph {
@@ -222,24 +224,8 @@ fn test_ddengine_10() {
 }
 */
 
-#[test]
-fn test_ddengine_on_social_network() {
-    let path = Path::new("./tests/samples/SocialNetwork.4ml");
-    let content = fs::read_to_string(path).unwrap();
-    
-
-    let mut engine = DDEngine::new();
-    engine.inspect = true;
-    engine.install(content);
-
-    // The domain of model `example` is `SocialNetwork`.
-    let model = engine.env.get_model_by_name("example").unwrap().clone();
-    let mut session = Session::new(model, &engine);
-    session.load();
-}
-
-fn load_program() -> DDEngine {
-    let path = Path::new("./tests/testcase/p1.4ml");
+fn load_program(file_path: &str) -> DDEngine {
+    let path = Path::new(file_path);
     let content = fs::read_to_string(path).unwrap();
     
     let mut engine = DDEngine::new();
@@ -248,10 +234,9 @@ fn load_program() -> DDEngine {
     return engine;
 }
 
-
 #[test]
 fn test_print_modules() {
-    let engine = load_program();
+    let engine = load_program("./tests/testcase/p1.4ml");
 
     let dag = engine.env.get_domain_by_name("DAGs");
     println!("domain DAGs is {:?}", dag);
@@ -273,8 +258,19 @@ fn test_print_modules() {
 
 
 #[test]
+fn test_transform_add() {
+    let mut engine = load_program("./tests/testcase/p1.4ml");
+    let transformation = engine.create_model_transformation("r = Add(100, LittleCycle)");
+    let mut session = Session::new(transformation, &engine);
+    session.load();
+
+    //let v4 = session.create_term("GraphIn.V(4)").unwrap();
+    //session.add_term(v4)
+}
+
+#[test]
 fn test_transform_del() {
-    let mut engine = load_program();
+    let mut engine = load_program("./tests/testcase/p1.4ml");
     let transformation = engine.create_model_transformation("r = Del(1, LittleCycle)");
     let mut session = Session::new(transformation, &engine);
     session.load();
@@ -285,7 +281,7 @@ fn test_transform_del() {
 
 #[test]
 fn test_transform_complete() {
-    let mut engine = load_program();
+    let mut engine = load_program("./tests/testcase/p1.4ml");
     let transformation = engine.create_model_transformation("r = Complete(LittleCycle)");
     let mut session = Session::new(transformation, &engine);
     session.load();
@@ -293,7 +289,7 @@ fn test_transform_complete() {
 
 #[test]
 fn test_transform_uglycopy() {
-    let mut engine = load_program();
+    let mut engine = load_program("./tests/testcase/p1.4ml");
     let transformation = engine.create_model_transformation("r = UglyCopy(LittleCycle)");
     let mut session = Session::new(transformation, &engine);
     session.load();
@@ -301,8 +297,61 @@ fn test_transform_uglycopy() {
 
 #[test]
 fn test_transform_prettycopy() {
-    let mut engine = load_program();
+    let mut engine = load_program("./tests/testcase/p1.4ml");
     let transformation = engine.create_model_transformation("r = PrettyCopy(LittleCycle)");
     let mut session = Session::new(transformation, &engine);
     session.load();
+}
+
+#[test]
+fn test_social_network() {
+    let engine = load_program("./tests/samples/SocialNetwork.4ml");
+    let model = engine.env.get_model_by_name("example").unwrap().clone();
+    let mut session = Session::new(model, &engine);
+    session.load();
+}
+
+#[test]
+fn test_incremental_transitive_closure() {
+    let mut engine = load_program("./tests/testcase/p0.4ml");
+    let seed: &[_] = &[1, 2, 3, 4];
+    let mut rng1: StdRng = SeedableRng::from_seed(seed);
+
+    // Example: cargo test test_incremental_transitive_closure -- --nocapture 100 100
+    let nodes: usize = std::env::args().nth(3).unwrap_or("100".to_string()).parse().unwrap();
+    let edges: usize = std::env::args().nth(4).unwrap_or("50".to_string()).parse().unwrap();
+    let updated_edges: usize = std::env::args().nth(5).unwrap_or("20".to_string()).parse().unwrap();
+
+    let m1 = engine.create_empty_model("m1", "Graph").clone();
+    let mut session = Session::new(m1, &engine);
+    let mut terms = vec![];
+
+    for i in 0 .. edges {
+        let num1 = rng1.gen_range(0, nodes);
+        let num2 = rng1.gen_range(0, nodes);
+        let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
+        let edge_arc = session.create_term(&edge_str).unwrap();
+        terms.push(edge_arc);
+    }
+
+    println!("Compute transitive closure with {} nodes and {} edges", nodes, edges);
+    let timer = std::time::Instant::now();
+    session.add_terms(terms);
+    let d1 = timer.elapsed();
+
+    let mut updated_terms = vec![];
+    for i in 0 .. updated_edges {
+        let num1 = rng1.gen_range(0, nodes);
+        let num2 = rng1.gen_range(0, nodes);
+        let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
+        let edge_arc = session.create_term(&edge_str).unwrap();
+        updated_terms.push(edge_arc);
+    }
+    let timer = std::time::Instant::now();
+    session.add_terms(updated_terms);
+    let d2 = timer.elapsed();
+
+    // Print out results for benchmark.
+    println!("Initial computation finished in {:?}", d1);
+    println!("Updates finished in {:?}", d2);
 }
