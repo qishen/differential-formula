@@ -26,6 +26,7 @@ pub enum Program {
 
 pub trait FormulaModule {
     fn terms(&self) -> HashSet<Arc<Term>>;
+    fn conformance_rules(&self) -> Vec<Rule>;
     fn stratified_rules(&self) -> Vec<Vec<Rule>>;
     fn type_map(&self) -> &HashMap<String, Arc<Type>>;
 }
@@ -46,16 +47,34 @@ pub struct Transform {
     pub input_domain_map: HashMap<String, Domain>,
     // The domains in the output of transform.
     pub output_domain_map: HashMap<String, Domain>,
+    // Yes, you can defined new terms in transform.
+    pub terms: HashSet<Arc<Term>>,
 }
 
 impl FormulaModule for Transform {
     fn terms(&self) -> HashSet<Arc<Term>> {
-        HashSet::new()
+        self.terms.clone()
+    }
+
+    fn conformance_rules(&self) -> Vec<Rule> {
+        let mut conformance_rules = vec![];
+        for rule in self.rules.clone() {
+            if rule.is_conformance_rule() {
+                conformance_rules.push(rule);
+            }
+        }
+        conformance_rules
     }
 
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
         // TODO: Rules may contains variable like `%id` that needs to be instantiated in transformation.
-        vec![self.rules.clone()]
+        let mut stratified_rules = vec![];
+        for rule in self.rules.clone() {
+            if !rule.is_conformance_rule() {
+                stratified_rules.push(rule);
+            }
+        }
+        vec![stratified_rules]
     }
 
     fn type_map(&self) -> &HashMap<String, Arc<Type>> {
@@ -80,16 +99,46 @@ impl FormulaModule for Transformation {
     fn terms(&self) -> HashSet<Arc<Term>> {
         // Rename terms in all model params and merge them together.
         let mut merged_terms = HashSet::new();
+
         for (id, model) in self.input_model_map.iter() {
             let rename_model = model.rename(id.clone());
             merged_terms.extend(rename_model.terms);
         }
+
+        // Some additional terms may be defined in transform even with some %id that need to be replaced.
+        for (key, replacement) in self.input_term_map.iter() {
+            let pattern: Term = Variable::new(key.clone(), vec![]).into();
+            for mut raw_term in self.transform.terms.clone() {
+                let mut term = Arc::make_mut(&mut raw_term);
+                term.replace(&pattern, replacement);
+                merged_terms.insert(raw_term);
+            }
+        }
+
         merged_terms
+    }
+
+    fn conformance_rules(&self) -> Vec<Rule> {
+        let mut raw_rules = self.transform.conformance_rules();
+        for (key, replacement) in self.input_term_map.iter() {
+            let pattern: Term = Variable::new(key.clone(), vec![]).into();
+            for rule in raw_rules.iter_mut() {
+                rule.replace(&pattern, replacement);
+            }
+        }
+        raw_rules
     }
 
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
         // TODO: Need to replace things like %id.
-        self.transform.stratified_rules()
+        let mut raw_rules = self.transform.stratified_rules();
+        for (key, replacement) in self.input_term_map.iter() {
+            let pattern: Term = Variable::new(key.clone(), vec![]).into();
+            for rule in raw_rules.iter_mut() {
+                rule.replace(&pattern, replacement);
+            }
+        }
+        raw_rules
     }
 
     fn type_map(&self) -> &HashMap<String, Arc<Type>> {
@@ -117,7 +166,6 @@ impl Transformation {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Domain {
     pub name: String,
@@ -130,9 +178,25 @@ impl FormulaModule for Domain {
         HashSet::new()
     }
 
+    fn conformance_rules(&self) -> Vec<Rule> {
+        let mut conformance_rules = vec![];
+        for rule in self.rules.clone() {
+            if rule.is_conformance_rule() {
+                conformance_rules.push(rule);
+            }
+        }
+        conformance_rules
+    }
+
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
-        // TODO: Need to be stratified.
-        vec![self.rules.clone()]
+        // TODO: Rules may contains variable like `%id` that needs to be instantiated in transformation.
+        let mut stratified_rules = vec![];
+        for rule in self.rules.clone() {
+            if !rule.is_conformance_rule() {
+                stratified_rules.push(rule);
+            }
+        }
+        vec![stratified_rules]
     }
 
     fn type_map(&self) -> &HashMap<String, Arc<Type>> {
@@ -187,8 +251,12 @@ impl FormulaModule for Model {
         self.terms.clone()
     }
 
+    fn conformance_rules(&self) -> Vec<Rule> {
+        self.domain.conformance_rules()
+    }
+
     fn stratified_rules(&self) -> Vec<Vec<Rule>> {
-        vec![]
+        self.domain.stratified_rules()
     }
 
     fn type_map(&self) -> &HashMap<String, Arc<Type>> {

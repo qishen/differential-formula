@@ -9,7 +9,7 @@ use std::iter::*;
 use std::vec::Vec;
 use std::convert::TryInto;
 use std::string::String;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 use im::{OrdMap, OrdSet};
 
@@ -99,7 +99,6 @@ impl<FM: FormulaModule> Session<FM> {
         let terms = self.module.terms();
         self.add_terms(terms);
     }
-
 }
 
 
@@ -120,6 +119,21 @@ impl DDEngine {
     pub fn install(&mut self, program_text: String) {
         let env = load_program(program_text + " EOF");
         self.env = env;
+    }
+
+    pub fn install_model(&mut self, module: Model) {
+        self.env.model_map.insert(module.model_name.clone(), module); 
+    }
+
+    pub fn create_empty_model(&mut self, model_name: &str, domain_name: &str) -> Model {
+        let domain = self.env.get_domain_by_name(domain_name).unwrap().clone();
+        Model {
+            model_name: model_name.to_string(),
+            domain,
+            terms: HashSet::new(),
+            alias_map: HashMap::new(),
+            reverse_alias_map: HashMap::new()
+        }
     }
 
     pub fn create_model_transformation(&mut self, cmd: &str) -> Transformation {

@@ -46,7 +46,10 @@ impl Display for Rule {
             con_str
         }).collect();
 
-        let head_str = term_strs.join(", ");
+        let head_str = match self.is_conformance_rule() {
+            true => "conforms".to_string(),
+            false => term_strs.join(", ")
+        };
         let body_str = constraint_strs.join(", ");
         write!(f, "{}", head_str + " :- " + &body_str)
     }

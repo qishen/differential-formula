@@ -22,7 +22,9 @@ use num::*;
 // Export this function to parse FORMULA file in string format.
 pub fn load_program(content: String) -> Env {
     let result = program(&content[..]).unwrap();
-    //println!("{:?}", result.0);
+    // Make sure the whole file is parsed rather than part of the program.
+    assert_eq!(result.0, "EOF");
+    // println!("{:?}", result.0);
     let program_ast = result.1;
     program_ast.build_env()
 }
@@ -85,7 +87,7 @@ named!(tagged_typename<&str, (Option<String>, TypeDefAst)>,
     )
 );
 
-named!(composite_typedef<&str, (String, TypeDefAst)>,
+named!(composite_typedef<&str, TypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
@@ -96,7 +98,7 @@ named!(composite_typedef<&str, (String, TypeDefAst)>,
             delimited!(space0, tag!(")"), space0)
         ) >>
         dot: tag!(".") >>
-        ((t.clone(), parse_composite_typedef(t, args)))
+        (parse_composite_typedef(t, args))
     )
 );
 
@@ -112,13 +114,13 @@ fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -
     }.into()
 }
 
-named!(union_typedef<&str, (String, TypeDefAst)>,
+named!(union_typedef<&str, TypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
         subs: separated_list!(tag!("+"), delimited!(space0, typename, space0)) >>
         tag!(".") >>
-        ((t.clone(), parse_union_typedef(t, subs)))
+        (parse_union_typedef(t, subs))
     )
 );
 
@@ -177,20 +179,6 @@ fn parse_rule(head: Vec<TermAst>, body: Vec<ConstraintAst>) -> RuleAst {
     }
 }
 
-named!(domain_rules<&str, Vec<RuleAst>>,
-    separated_list!(skip, alt!(rule | conformance))
-);
-
-named!(domain_types<&str, Vec<(String, TypeDefAst)>>,
-    do_parse!(
-        typedefs: separated_list!(
-            skip,
-            alt!(composite_typedef | union_typedef) 
-        ) >>
-        (typedefs)
-    )
-);
-
 // Two types of inheritances:
 // 1. domain X extends Y, Z {}. 
 // 2. domain Y extends left:: Y, right:: Y {}.
@@ -201,6 +189,16 @@ named!(subdomain<&str, (Option<String>, String)>,
             |(scope, sep, domain)| { (Some(scope), domain) } 
         ) |
         map!(id, |t| { (None, t) })
+    )
+);
+
+named!(module_sentence<&str, ModuleSentenceAst>,
+    alt!(
+        map!(alt!(rule | conformance), |x| { ModuleSentenceAst::Rule(x) }) |
+        map!(alt!(composite_typedef | union_typedef), |x| { ModuleSentenceAst::Type(x) }) |
+        map!(
+            tuple!(term, terminated!(skip, tag!("."))), |(x, _)| { ModuleSentenceAst::Term(x) }
+        )
     )
 );
 
@@ -223,19 +221,16 @@ named!(
         skip >>
         tag!("{") >>
         skip >>
-        typedefs: domain_types >> 
-        skip >>
-        rules: domain_rules >>
+        sentences: separated_list!(skip, module_sentence) >>
         skip >>
         tag!("}") >>
-        (parse_domain(domain_name, typedefs, rules, subdomains_data))
+        (parse_domain(domain_name, sentences, subdomains_data))
     )
 );
 
 fn parse_domain(
     domain_name: String, 
-    typedefs: Vec<(String, TypeDefAst)>, 
-    rules: Vec<RuleAst>,
+    sentences: Vec<ModuleSentenceAst>,
     subdomains_opt: Option<(String, Vec<(Option<String>, String)>)>
 ) -> ModuleAst {
     let mut inherit_type = "None".to_string();
@@ -252,6 +247,17 @@ fn parse_domain(
             }
         }
     };
+
+    let mut rules = vec![];
+    let mut typedefs = vec![];
+
+    for sentence in sentences {
+        match sentence {
+            ModuleSentenceAst::Rule(r) => { rules.push(r); },
+            ModuleSentenceAst::Type(t) => { typedefs.push(t); },
+            _ => {} // terms are not allowed in domain.
+        }
+    }
 
     let domain_ast = DomainAst {
         name: domain_name,
@@ -394,12 +400,10 @@ named!(transform<&str, ModuleAst>,
         skip >>
         tag!("{") >>
         skip >>
-        typedefs: domain_types >> 
-        skip >>
-        rules: domain_rules >>
+        sentences: separated_list!(skip, module_sentence) >>
         skip >>
         tag!("}") >>
-        (parse_transform(transform_name, inputs, output, typedefs, rules))
+        (parse_transform(transform_name, inputs, output, sentences))
     )
 );
 
@@ -407,15 +411,28 @@ fn parse_transform(
     transform_name: String, 
     inputs: Vec<TransformParamAst>,
     output: Vec<TaggedDomainAst>, 
-    typedefs: Vec<(String, TypeDefAst)>,
-    rules: Vec<RuleAst>) -> ModuleAst
+    sentences: Vec<ModuleSentenceAst>,
+) -> ModuleAst
 {
+    let mut rules = vec![];
+    let mut typedefs = vec![];
+    let mut terms = vec![];
+
+    for sentence in sentences {
+        match sentence {
+            ModuleSentenceAst::Rule(r) => { rules.push(r); },
+            ModuleSentenceAst::Type(t) => { typedefs.push(t); },
+            ModuleSentenceAst::Term(term) => { terms.push(term); } 
+        }
+    }
+    
     let transform_ast = TransformAst {
         transform_name,
         inputs,
         output,
         typedefs,
         rules,
+        terms,
     };
 
     ModuleAst::Transform(transform_ast)
@@ -911,7 +928,7 @@ mod tests {
         let rules = content.split("\n--------\n");
         for formula_rule in rules {
             println!("{:?}", formula_rule);
-            assert_eq!(domain_rules(&formula_rule[..]).unwrap().0, "\n--EOF--");
+            assert_eq!(module_sentence(&formula_rule[..]).unwrap().0, "\n--EOF--");
         }
     }
 

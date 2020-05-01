@@ -138,6 +138,12 @@ impl TypeDefAstBehavior for EnumTypeDefAst {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum ModuleSentenceAst {
+    Type(TypeDefAst),
+    Rule(RuleAst),
+    Term(TermAst),
+}
 
 #[derive(Clone, Debug)]
 pub enum ModuleAst {
@@ -169,8 +175,9 @@ pub struct TransformAst {
     pub transform_name: String, 
     pub inputs: Vec<TransformParamAst>,
     pub output: Vec<TaggedDomainAst>, 
-    pub typedefs: Vec<(String, TypeDefAst)>,
+    pub typedefs: Vec<TypeDefAst>,
     pub rules: Vec<RuleAst>,
+    pub terms: Vec<TermAst>,
 }
 
 #[derive(Clone, Debug)]
@@ -183,7 +190,7 @@ pub struct TransformationAst {
 #[derive(Clone, Debug)]
 pub struct DomainAst {
     pub name: String,
-    pub types: Vec<(String, TypeDefAst)>,
+    pub types: Vec<TypeDefAst>,
     pub rules: Vec<RuleAst>,
     // includes or extends [scope :: subdomain]
     pub inherit_type: String,
@@ -403,26 +410,33 @@ impl ProgramAst {
 
         // Add types that are defined in transform.
         let mut type_ast_map = HashMap::new();
-        for (typename, type_ast) in transform_ast.typedefs.iter() {
-            type_ast_map.insert(typename.clone(), type_ast.clone());
+        for type_ast in transform_ast.typedefs.iter() {
+            let name = type_ast.name().unwrap();
+            type_ast_map.insert(name, type_ast.clone());
         } 
 
         for type_name in type_ast_map.keys() {
             self.create_type(type_name.clone(), &type_ast_map, &mut type_map);
         }
 
-        // A fake domain for transform
-        let transform_domain = Domain {
+        // A temporary domain for transform to create rules and term.
+        let temp_transform_domain = Domain {
             name: transform_name.clone(),
             type_map: type_map.clone(),
             rules: vec![],
         };
 
         // Add rules into domain and converting rule ASTs need type information in domain.
-        // TODO: add conformance rules.
         let mut rules = vec![];
         for rule_ast in transform_ast.rules.iter() {
-            rules.push(rule_ast.to_rule(&transform_domain));
+            rules.push(rule_ast.to_rule(&temp_transform_domain));
+        }
+
+        // Add terms that defined in the transform.
+        let mut terms = HashSet::new();
+        for term_ast in transform_ast.terms.iter() {
+            let term = Arc::new(term_ast.to_term(&temp_transform_domain));
+            terms.insert(term);
         }
 
         // Some parameters that are known types in `type_map`
@@ -438,6 +452,7 @@ impl ProgramAst {
             input_type_map,
             input_domain_map,
             output_domain_map,
+            terms
         };
 
         transform_map.insert(transform_name.clone(), transform.clone());
@@ -483,8 +498,9 @@ impl ProgramAst {
 
         // `type_ast_map` contains both native type and type alias that are from subdomains.
         let mut type_ast_map = HashMap::new();
-        for (typename, type_ast) in domain_ast.types.iter() {
-            type_ast_map.insert(typename.clone(), type_ast.clone());
+        for type_ast in domain_ast.types.iter() {
+            let name = type_ast.name().unwrap();
+            type_ast_map.insert(name, type_ast.clone());
         }
 
         for type_name in type_ast_map.keys() {
