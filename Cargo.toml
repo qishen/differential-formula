@@ -32,4 +32,8 @@ petgraph = "0.5"
 num-iter = "0.1"
 derivative = "1"
 z3 = "0.4.0"
-clap = "2.23.0"
+
+# clap = "2.33.0"
+# clap v3 is not quite compatible with clap v2 while the documentation is still on v2.
+# Here we use the github repo to get the latest clap v3.  
+clap = { git = "https://github.com/clap-rs/clap" }

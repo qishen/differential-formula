@@ -1,0 +1,3 @@
+load tests/testcase/p1.4ml
+query Path10
+apply r = Add(100, LittleCycle)
