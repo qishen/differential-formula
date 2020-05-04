@@ -31,7 +31,6 @@ use crate::parser::combinator::*;
 use crate::util::GenericMap;
 
 
-
 pub struct Session<FM: FormulaModule> {
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
     input: InputSession<i32, Arc<Term>, isize>,
@@ -119,6 +118,24 @@ impl DDEngine {
     pub fn install(&mut self, program_text: String) {
         let env = load_program(program_text + " EOF");
         self.env = env;
+    }
+
+    /// Find module in environment and add a new rule to the module
+    /// Only support Domain and Transform module.
+    pub fn add_rule(&mut self, module_name: &str, rule_text: &str) -> bool {
+        let rule_ast = rule(rule_text).unwrap().1;
+        if self.env.transform_map.contains_key(module_name) {
+            let transform = self.env.transform_map.get_mut(module_name).unwrap();
+            let rule = rule_ast.to_rule(transform);
+            transform.rules.push(rule);
+        } else if self.env.domain_map.contains_key(module_name) {
+            let domain = self.env.domain_map.get_mut(module_name).unwrap();
+            let rule = rule_ast.to_rule(domain);
+            domain.rules.push(rule);
+        } else {
+            return false;
+        }
+        true
     }
 
     pub fn install_model(&mut self, module: Model) {
@@ -580,8 +597,15 @@ impl DDEngine {
                     .map(move |binding| {
                         let mut new_terms: Vec<Arc<Term>> = vec![];
                         for head_term in head_terms.iter() {
-                            let mut new_term = head_term.propagate_bindings(&binding).unwrap();
-                            new_terms.push(new_term);
+                            // If head term has variable term then it means that's a constant.
+                            if let Term::Variable(var) = head_term {
+                                let constant_name = var.root.clone();
+                                let constant = Term::create_constant(constant_name);
+                                new_terms.push(Arc::new(constant));
+                            } else {
+                                let mut new_term = head_term.propagate_bindings(&binding).unwrap();
+                                new_terms.push(new_term);
+                            }
                         }
                         new_terms
                     })

@@ -5,11 +5,10 @@ use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
 
-use std::fs;
-use std::path::Path;
 use std::convert::TryInto;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::fs;
+use std::path::Path;
 use std::collections::*;
 
 use nom::character::*;
@@ -156,11 +155,11 @@ named!(conformance<&str, RuleAst>,
 );
 
 // Comments are allowed between constraints in both head and body.
-named!(rule<&str, RuleAst>,
+named!(pub rule<&str, RuleAst>,
     do_parse!(
         head: separated_list!(
             delimited!(skip, tag!(","), skip), 
-            alt!(composite | variable_ast)
+            alt!(composite | map!(variable, |x| { x.into() }))
         ) >>
         delimited!(skip, tag!(":-"), skip) >>
         body: separated_list!(
@@ -602,7 +601,7 @@ named!(setcompre<&str, SetComprehensionAst>,
             terminated!(tag!(","), space0))) >>
         tag!("{") >>
         vars: separated_list!(tag!(","), 
-            delimited!(space0, alt!(composite | variable_ast), space0)
+            delimited!(space0, alt!(composite | map!(variable, |x| { x.into() })), space0)
         ) >>
         delimited!(space0, tag!("|"), space0) >>
         condition: separated_list!(tag!(","), 
@@ -651,13 +650,16 @@ named!(constraint<&str, ConstraintAst>,
     alt!(
         map!(predicate, |x| { x.into() }) |
         map!(binary, |x| { x.into() }) |
-        map!(type_constraint, |x| { x.into() })
+        map!(type_constraint, |x| { x.into() }) |
+        // Nullary predicate is just a variable with keyword `no` in the beginning.
+        // Need to put it at last because it's partially matched with `type_constraint`.
+        map!(nullary_predicate, |x| { x.into() })
     )
 );
 
 named!(type_constraint<&str, TypeConstraintAst>,
     do_parse!(
-        var: variable_ast >>
+        var: map!(variable, |x| { x.into() }) >>
         op: delimited!(space0, alt!(tag!("is") | tag!(":")), space0) >>
         sort: typename >>
         (parse_type_constraint(var, sort))
@@ -687,6 +689,15 @@ fn parse_binary(op: BinOp, left: ExprAst, right: ExprAst) -> BinaryAst {
         right,
     }
 }
+
+
+named!(nullary_predicate<&str, PredicateAst>,
+    do_parse!(
+        neg: opt!(delimited!(space0, tag!("no"), space0)) >>
+        constant: map!(variable, |x| { x.into() }) >>
+        (parse_predicate(neg, None, constant))
+    )
+);
 
 named!(predicate<&str, PredicateAst>,
     do_parse!(
@@ -751,7 +762,6 @@ fn parse_composite(alias: Option<String>, sort: TypeDefAst, args: Vec<TermAst>) 
     }.into()
 }
 
-
 // Underscore and quote sign at the end is allowed in variable name.
 named!(varname<&str, &str>, 
     complete!(alt!(
@@ -769,12 +779,6 @@ named!(varname<&str, &str>,
 fn is_alphanumeric_char(c: char) -> bool {
     is_alphanumeric(c as u8)
 }
-
-named!(variable_ast<&str, TermAst>, 
-    map!(variable, |x| {
-        x.into()
-    })
-);
 
 named!(variable<&str, Term>,
     do_parse!(
@@ -887,7 +891,6 @@ mod tests {
         assert_eq!(atom("123E-02").unwrap().0, "");
         assert_eq!(atom("-11223344").unwrap().0, "");
         assert_eq!(variable("hello_world ").unwrap().0, " ");
-        assert_eq!(variable_ast("hi ").unwrap().0, " ");
         assert_eq!(variable("a.b.c ").unwrap().0, " ");
         assert_eq!(composite("Edge(node1 , Node(\"hello\"))").unwrap().0, "");
         assert_eq!(composite("Node(\"hi\")").unwrap().0, "");

@@ -67,6 +67,10 @@ impl Rule {
         rule.convert_negative_predicate();
         rule
     }
+    
+    pub fn find_predicate(&self) {
+        
+    }
 
     pub fn is_conformance_rule(&self) -> bool {
         self.head.len() == 0

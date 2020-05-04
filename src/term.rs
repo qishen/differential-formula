@@ -180,6 +180,17 @@ impl FormulaExpr for Term {
 }
 
 impl Term {
+    /// Given a string create a nullary composite type with no arguments inside
+    /// and return the singleton term or constant in other words.
+    pub fn create_constant(constant: String) -> Term {
+        let nullary_type: Type = CompositeType {
+            name: constant,
+            arguments: vec![],
+        }.into();
+        
+        Composite::new(Arc::new(nullary_type), vec![], None).into()
+    }
+
     // TODO: it works but has too many copies on its sort.
     pub fn rename(&self, scope: String) -> Term {
         let new_term: Term = match self {

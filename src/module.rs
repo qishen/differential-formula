@@ -1,4 +1,3 @@
-use std::borrow::*;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
@@ -7,7 +6,8 @@ use std::fmt::*;
 use std::string::String;
 
 use enum_dispatch::enum_dispatch;
-use serde::{Serialize, Deserialize};
+//use petgraph::
+
 
 use crate::expression::*;
 use crate::term::*;
@@ -26,6 +26,7 @@ pub enum Program {
 
 pub trait FormulaModule {
     fn terms(&self) -> HashSet<Arc<Term>>;
+    fn rules(&self) -> Vec<Rule>;
     fn conformance_rules(&self) -> Vec<Rule>;
     fn stratified_rules(&self) -> Vec<Vec<Rule>>;
     fn type_map(&self) -> &HashMap<String, Arc<Type>>;
@@ -54,6 +55,10 @@ pub struct Transform {
 impl FormulaModule for Transform {
     fn terms(&self) -> HashSet<Arc<Term>> {
         self.terms.clone()
+    }
+
+    fn rules(&self) -> Vec<Rule> {
+        self.rules.clone()
     }
 
     fn conformance_rules(&self) -> Vec<Rule> {
@@ -118,6 +123,10 @@ impl FormulaModule for Transformation {
         merged_terms
     }
 
+    fn rules(&self) -> Vec<Rule> {
+        self.rules().clone()
+    }
+
     fn conformance_rules(&self) -> Vec<Rule> {
         let mut raw_rules = self.transform.conformance_rules();
         for (key, replacement) in self.input_term_map.iter() {
@@ -176,6 +185,10 @@ pub struct Domain {
 impl FormulaModule for Domain {
     fn terms(&self) -> HashSet<Arc<Term>> {
         HashSet::new()
+    }
+
+    fn rules(&self) -> Vec<Rule> {
+        self.rules.clone()
     }
 
     fn conformance_rules(&self) -> Vec<Rule> {
@@ -249,6 +262,10 @@ pub struct Model {
 impl FormulaModule for Model {
     fn terms(&self) -> HashSet<Arc<Term>> {
         self.terms.clone()
+    }
+
+    fn rules(&self) -> Vec<Rule> {
+        self.domain.rules()
     }
 
     fn conformance_rules(&self) -> Vec<Rule> {

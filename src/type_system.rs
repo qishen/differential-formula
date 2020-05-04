@@ -132,7 +132,6 @@ impl FormulaType for RangeType {
     }
 }
 
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum BaseType {
     Boolean,
@@ -149,7 +148,6 @@ impl FormulaType for BaseType {
     }
 }
 
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
     pub name: String,
@@ -162,7 +160,6 @@ impl FormulaType for CompositeType {
     }
 }
 
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
     pub name: String,
@@ -174,6 +171,3 @@ impl FormulaType for UnionType {
         self.name.clone()
     }
 }
-
-
-

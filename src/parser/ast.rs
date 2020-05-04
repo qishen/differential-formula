@@ -1,5 +1,6 @@
 use std::collections::*;
 use std::sync::Arc;
+use std::convert::TryInto;
 use std::borrow::Borrow;
 use enum_dispatch::enum_dispatch;
 use num::*;
@@ -814,10 +815,23 @@ impl ConstraintAstBehavior for PredicateAst {
                 Some(term)
             }
         };
+        
+        // TermAst is either Term or CompositeTermAst.
+        let real_term = match &self.term {
+            TermAst::Term(var_term) => {
+                // If it's a variable then don't treat it as a variable term,
+                // instead convert it into a constant (A composite term with zero argument)
+                let var: Variable = var_term.clone().try_into().unwrap();
+                let constant = var.root.clone();
+                let nullary_term = Term::create_constant(constant);
+                nullary_term
+            },
+            _ => { self.term.to_term(module) }
+        };
 
         Predicate {
             negated: self.negated,
-            term: self.term.to_term(module),
+            term: real_term,
             alias,
         }.into()
     }
