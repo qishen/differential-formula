@@ -376,7 +376,7 @@ impl DDEngine {
     {
         // Construct a headless rule from a list of constraints.
         let temp_rule = Rule::new(vec![], constraints.clone());
-        let pos_preds = temp_rule.pos_preds();
+        let pos_preds = temp_rule.predicate_constraints();
 
         let default_vars: OrdSet<Term> = OrdSet::new();
         // TODO: find a better way to create an empty collection.
@@ -387,7 +387,7 @@ impl DDEngine {
             });
 
         // Join all positive predicate terms by their shared variables one by one in order.
-        let (mut vars, mut collection) = pos_preds.iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
+        let (mut vars, mut collection) = pos_preds.into_iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
             let pred: Predicate = pred_constraint.clone().try_into().unwrap();
             let term = pred.term.clone();
             let mut vars: OrdSet<Term> = OrdSet::new();
@@ -412,7 +412,7 @@ impl DDEngine {
 
         });
 
-        for bin_constraint in temp_rule.ordered_definition_constraints().into_iter() {
+        for bin_constraint in temp_rule.ordered_declaration_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
             // Let's assume every set comprehension must be explicitly declared with a variable on the left side of binary constraint.
             // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.

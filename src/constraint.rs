@@ -194,6 +194,20 @@ impl Display for Binary {
 impl ConstraintBehavior for Binary {}
 
 impl Binary {
+    /// Assume all set comprehensions are separatedly declared like `a = count({..}) and 
+    /// will not occur elsewhere in other parts of the expression.
+    pub fn variables_current_level(&self) -> HashSet<Term> {
+        if let Expr::BaseExpr(base_expr) = &self.right {
+            if let BaseExpr::SetComprehension(_setcompre) = base_expr {
+                // if the right side is a set comprehension then return variable on the left side,
+                // which is just one variable term to declare the set comprehension.
+                return self.left.variables();
+            }
+        }
+        // Return all variables if no set comprehension exists.
+        self.variables()
+    }
+
     /// Check if the binary constraint has set comprehension inside it.
     pub fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 

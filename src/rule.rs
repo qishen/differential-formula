@@ -20,17 +20,42 @@ use crate::expression::*;
 use crate::constraint::*;
 
 
+pub struct DontCareVarGen {
+    counter: i64
+}
+
+impl DontCareVarGen {
+    pub fn new() -> Self {
+        DontCareVarGen { counter: 0 }
+    }
+
+    pub fn generate(&mut self) -> Term {
+        let var: Term = Variable::new(format!("~dc{}", self.counter), vec![]).into();
+        self.counter += 1;
+        var
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rule {
     head: Vec<Term>,
     body: Vec<Constraint>,
-    dc_var_counter: i64,
 }
 
 impl FormulaExpr for Rule {
+    // All variables are found recursively including the ones in set comprehension.
+    fn variables(&self) -> HashSet<Term> {
+        // Head is ignored because the variables it has already exist in the body.
+        self.body.variables()
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.head.replace(pattern, replacement);
         self.body.replace(pattern, replacement);
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        self.body.replace_set_comprehension(generator)
     }
 }
 
@@ -58,20 +83,36 @@ impl Display for Rule {
 
 impl Rule {
     pub fn new(head: Vec<Term>, body: Vec<Constraint>) -> Self {
-        let mut rule = Rule {
-            head,
-            body,
-            dc_var_counter: 0,
-        };
+        let mut rule = Rule { head, body };
 
-        rule.convert_negative_predicate();
+        // Don't-care variable generator to generate some variables like ~dc that user
+        // can't use when writing rules.
+        let mut dc_generator = DontCareVarGen::new();
+
+        // Convert negation to set comprehension.
+        rule.replace_negative_predicate(&mut dc_generator);
+
+        // Replace undeclared set comprehension with variable term and declare set 
+        // comprehensions as new constraints. 
+        // e.g. 1 + count({..}) > 3 will be converted to 1 + ~dc > 3, ~dc = count({..}).
+        let map = rule.replace_set_comprehension(&mut dc_generator);
+
+        // Add set comprehension declaration into current rule.
+        for (var, setcompre) in map.into_iter() {
+            let left: Expr = BaseExpr::Term(var).into();
+            let right: Expr = BaseExpr::SetComprehension(setcompre).into();
+            let binary: Constraint = Binary { op: BinOp::Eq, left, right }.into();
+            rule.body.push(binary);
+        }
+
+        if !rule.validate() {
+            // TODO: Raise exception
+        }
+
         rule
     }
     
-    pub fn find_predicate(&self) {
-        
-    }
-
+    /// Check if it is a headless conformance rule.
     pub fn is_conformance_rule(&self) -> bool {
         self.head.len() == 0
     }
@@ -84,46 +125,70 @@ impl Rule {
         self.body.clone()
     }
 
-    fn convert_negative_predicate(&mut self) {
+    /// Return all constraints in the body of current rule that are predicates to match terms,
+    /// we assume there are no negative predicates since they are all converted to set comprehensions.
+    pub fn predicate_constraints(&self) -> Vec<&Constraint> {
+        self.body.iter().filter(|x| {
+            match x {
+                Constraint::Predicate(_p) => true,
+                _ => false,
+            }
+        }).collect()
+    }
+   
+    /// Return all binary constraints in the body of current rule excluding the ones in set comprehensions.
+    pub fn binary_constraints(&self) -> Vec<&Constraint> {
+        self.body.iter().filter(|x| {
+            match x {
+                Constraint::Binary(_b) => true,
+                _ => false,
+            }
+        }).collect()
+    }
+
+    pub fn type_constraints(&self) -> Vec<&Constraint> {
+        self.body.iter().filter(|x| {
+            match x {
+                Constraint::TypeConstraint(_t) => true,
+                _ => false,
+            }
+        }).collect()
+    }
+
+    /// Convert negated constraint `no X(..)` into two constraints with set comprehension,
+    /// ~dc1 = count({ ~dc | ~dc is X(..) }), ~dc1 = 0.
+    fn replace_negative_predicate(&mut self, generator: &mut DontCareVarGen) {
         let mut constraints = vec![];
-        // Empty all constraints in the rule body.
         let clist: Vec<Constraint> = self.body.drain(..).collect(); 
         for constraint in clist.into_iter() {
             match constraint {
                 Constraint::Predicate(predicate) => {
                     if predicate.negated {
-                        let varname = format!("~dc{}", self.dc_var_counter);
-                        self.dc_var_counter += 1;
-                        let introduced_var: Term = Variable::new(varname, vec![]).into();
-                        let (b1, b2) = predicate.to_binary_constraints(introduced_var).unwrap();
+                        let introduced_var = generator.generate();
+                        let (b1, b2) = predicate.convert_negation(introduced_var).unwrap();
                         constraints.push(b1);
                         constraints.push(b2);
                     }
-                    else {
-                        constraints.push(predicate.into());
-                    }
+                    else { constraints.push(predicate.into()); }
                 },
-                _ => {
-                    constraints.push(constraint);
-                }
+                _ => { constraints.push(constraint); }
             }
         }
 
         self.body = constraints;
     }
 
-    // Return all existing variables in the body of a rule.
-    pub fn variables(&self) -> HashSet<Term> {
+    /// Return all existing variables in the body of a rule including the ones in set comprehension.
+    pub fn variables_current_level(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
         for constraint in self.body.iter() {
             match constraint {
                 Constraint::Predicate(predicate) => {
-                    let vars = predicate.variables();
-                    var_set.extend(vars);
+                    var_set.extend(predicate.variables());
                 },
                 Constraint::Binary(binary) => {
-                    var_set.extend(binary.left.variables());
-                    var_set.extend(binary.right.variables());
+                    // Skip variables in set comprehension.
+                    var_set.extend(binary.variables_current_level());
                 },
                 Constraint::TypeConstraint(type_constraint) => {
                     var_set.insert(type_constraint.var.clone());
@@ -134,211 +199,181 @@ impl Rule {
         var_set
     }
 
-    // Return derived variables by simply deducting matched variables from all variables.
-    pub fn derived_variables(&self) -> HashSet<Term> {
-        /*
-        If variable with fragments like x.y.z = a + b is mistaken as derived variable, 
-        then remove it from derived variable list.
-        */
-        let mut diff_vars = HashSet::new();
-        let matched_vars = self.matched_variables();
-        let all_vars = self.variables();
+    /// Return derived variables by simply deducting matched variables from all variables.
+    /// A derived variable is used to declare an arithmetic expression or set comprehension that
+    /// doesn't appear in the predicates and should not have fragments.
+    /// e.g. x = c * c + 1, x = count({..})
+    pub fn declaration_variables(&self) -> HashSet<Term> {
+        // If a variable with fragments like x.y.z = a + b is mistaken as derived variable, 
+        // then remove it from derived variable list.
+        let mut derived_vars = HashSet::new();
+        let pred_matched_vars = self.predicate_matched_variables();
+        let all_vars = self.variables_current_level();
+
+        // println!("rule: {}, pred: {:?}, all vars {:?}", self, pred_matched_vars, all_vars);
 
         for var in all_vars.into_iter() {
             // var cannot have fragments as a derived variable.
-            if !matched_vars.contains(&var) && &var == var.root() {
-                diff_vars.insert(var);
+            if !pred_matched_vars.contains(&var) && &var == var.root() {
+                derived_vars.insert(var);
             }
         }
 
-        diff_vars
+        derived_vars
     }
 
-    pub fn matched_variables(&self) -> HashSet<Term> {
+    /// Find all variables that are matched in the predicates of the current rule and the rules 
+    /// in set comprehension are not included in this method.
+    pub fn predicate_matched_variables(&self) -> HashSet<Term> {
         let mut var_set = HashSet::new();
         for constraint in self.body.iter() {
             match constraint {
                 Constraint::Predicate(predicate) => {
-                    // All variables in predicate and its alias are matched variables.
-                    let mut vars = predicate.variables();
+                    let vars = predicate.variables();
                     var_set.extend(vars);
                 },
-                Constraint::Binary(binary) => {
-                    // For binary constraint only set comprehension has matched variables in its condition,
-                    // other variables are either derived variables or ones already matched in other predicates.
-                    let mut setcompres = binary.left.set_comprehensions();
-                    setcompres.append(&mut binary.right.set_comprehensions());
-
-                    for setcompre in setcompres.iter() {
-                        let vars = setcompre.matched_variables();
-                        var_set.extend(vars);
-                    }
-                },
-                Constraint::TypeConstraint(type_constraint) => {
-                    // The single variable here must be already matched else where.
-                }
+                _ => {}
             }
         }
 
         var_set
     }
 
-    pub fn pos_preds(&self) -> Vec<Constraint> {
-        let preds: Vec<Constraint> = self.body.iter().filter(|x| {
-            match x {
-                Constraint::Predicate(p) => {
-                    if p.negated { return false; }
-                    else { return true; }
-                },
-                _ => false,
+    pub fn validate(&self) -> bool {
+        let pred_matched_vars = self.predicate_matched_variables();
+        let declaration_vars = self.declaration_variables();
+        let all_vars = self.variables_current_level();
+        // Make sure there is no unused variables.
+        for var in all_vars.iter() {
+            if !pred_matched_vars.contains(var) && !declaration_vars.contains(var) {
+                return false;
             }
-        }).map(|x| x.clone()).collect();     
-
-        preds
-    }
-
-    /* 
-    Simply check if the left side is a single variable term in the list of derived variables.
-    */
-    pub fn is_constraint_with_derived_term(&self, constraint: Constraint) -> bool {
-        let derived_vars = self.derived_variables();
-        match constraint {
-            Constraint::Binary(b) => {
-                match b.left {
-                    Expr::BaseExpr(base_expr) => {
-                        match base_expr {
-                            BaseExpr::Term(term) => {
-                                match term {
-                                    Term::Variable(v) => { 
-                                        let var_term: Term = v.into();
-                                        if derived_vars.contains(&var_term) { true } 
-                                        else { false }
-                                    },
-                                    _ => { false },
-                                }
-                            },
-                            _ => { false },
-                        }
-                    },
-                    _ => { false },
-                }
-            },
-            _ => { false },
         }
+
+        // All variables in the head should appear in the body too.
+        for var in self.head.variables().iter() {
+            if !all_vars.contains(var) { return false; }
+        }
+
+        true
     }
 
+    /// Return the first constraint with set comprehension as the picked candidate or just select
+    /// the first candidate if all candidates don't have set comprehension.
+    pub fn elect_declaration_constraint<'a>(&self, candidates: Vec<&'a Constraint>) -> &'a Constraint {
+        for constraint in candidates.clone().into_iter() {
+            let binary: Binary = constraint.clone().try_into().unwrap();
+            match binary.right {
+                Expr::BaseExpr(base_expr) => {
+                    if let BaseExpr::SetComprehension(setcompre) = base_expr {
+                        return constraint;
+                    }
+                },
+                _ => {}
+            }
+        }
 
-    /*
-    A list of constraints in which every variable inside it can be directly evaluated by binding map.
-    Simply return all binary constraints that are not definition constraints.
-    */
+        return candidates[0];
+    }
+
+    /// A list of constraints in which every variable inside it can be directly evaluated by binding map.
+    /// Simply return all binary constraints that are not definition constraints.
     pub fn pure_constraints(&self) -> Vec<&Constraint> {
         let mut pure_constraints = vec![];
-        let definition_constraint_set: HashSet<&Constraint> = HashSet::from_iter(self.ordered_definition_constraints());
+        let declaration_constraint_set: HashSet<&Constraint> = HashSet::from_iter(
+            self.ordered_declaration_constraints()
+        );
+
         for constraint in self.binary_constraints() {
-            if !definition_constraint_set.contains(constraint) {
+            if !declaration_constraint_set.contains(constraint) {
                 pure_constraints.push(constraint);
             }
         }
+
         pure_constraints
     }
 
+    pub fn ordered_declaration_constraints(&self) -> Vec<&Constraint> {
+        self.sort_declaration_constraints().0
+    }
 
-    /* 
-    Definition constraints are declarations of new derived variable and they were never matched
-    in other predicates in the same rule.
-    e.g. var = [set comprehension] or var = [Expr]. Expr can not be an atom.
-    Re-arrange the order of definition constraints to make sure c = count({..}) is executed
-    before val = c * c.
-    */
-    pub fn ordered_definition_constraints(&self) -> Vec<&Constraint> {
-        let mut definition_constraints = vec![];
-        let declared_vars = self.derived_variables();
-        for declared_var in declared_vars.iter() {
-            let cons = self.definition_constraints_of_variable(declared_var);
-            /* 
-            Assume set comprehension is always put on the top before other types of expression.
-            Only the first one is considered as definition constraint and rest of them are pure
-            constraints.
-            e.g. [c = count({..}), c = a + 1, c = 1], the last two are pure constraints.
-            */
-            let first = cons.get(0).unwrap();
-            definition_constraints.push(first.clone());
-        }
-
-        let mut map = HashMap::new();
-        let mut graph = Graph::new();
-        for constraint in definition_constraints.clone() {
-            // Each node is indexed and associated with a weight in which you can store some data.
-            let node = graph.add_node(constraint);
-            map.insert(constraint, node);
-        }
-
-        for constraint in definition_constraints.clone() {
-            let &node = map.get(constraint).unwrap();
-            // left of binary must be a variable term.
-            let binary: Binary = constraint.clone().try_into().unwrap();
-            let base_expr: BaseExpr = binary.left.try_into().unwrap();
-            let left_var: Term = base_expr.try_into().unwrap(); 
-
-            for other_constraint in definition_constraints.clone() {
-                let other_binary: Binary = other_constraint.clone().try_into().unwrap();
-                // Check if the right side of the other definition constraint contain this definition variable.
-                if other_binary.right.variables().contains(&left_var) {
-                    let &other_node = map.get(other_constraint).unwrap();
-                    graph.add_edge(node, other_node, 1);
+    /// Definition constraints are declarations of new derived variable and they were never matched
+    /// in other predicates in the same rule.
+    /// e.g. c = count({..}), c = val +100, val = c * c, val = c + a, val = a + 1, X(a).
+    /// Re-arrange the order of definition constraints to make sure c = count({..}) is executed
+    /// before val = c * c.
+    pub fn sort_declaration_constraints(&self) -> (Vec<&Constraint>, Vec<&Constraint>) {
+        let mut declaration_constraints = vec![];
+        // Some declaration constraints are downgraded to pure constraints.
+        let mut downgraded_constraints = vec![];
+        for (variable, candidates) in self.declaration_constraint_map().into_iter() {
+            let picked = self.elect_declaration_constraint(candidates.clone());
+            for candidate in candidates.into_iter() {
+                if candidate == picked {
+                    declaration_constraints.push(candidate);
+                } else {
+                    downgraded_constraints.push(candidate);
                 }
             }
         }
 
-        let mut ordered_definition_constraints = vec![];
+        let mut graph = Graph::new();
+        let mut nodes = vec![];
+        for constraint in declaration_constraints {
+            // Each node is indexed and associated with a weight in which you can store some data.
+            let node = graph.add_node(constraint);
+            nodes.push(node);
+        }
+
+        for n1 in nodes.iter() {
+            for n2 in nodes.iter() {
+                let b1: Binary = graph.node_weight(n1.clone()).unwrap().clone().clone().try_into().unwrap();
+                let b2: Binary = graph.node_weight(n2.clone()).unwrap().clone().clone().try_into().unwrap();
+                let base_expr: BaseExpr = b1.left.try_into().unwrap();
+                let left_var: Term = base_expr.try_into().unwrap();
+
+                if b2.right.variables().contains(&left_var) {
+                    graph.add_edge(n1.clone(), n2.clone(), 1);
+                }
+            }
+        }
+
+        let mut sorted_declaration_constraints = vec![];
         let indexes = toposort(&graph, None).unwrap();
 
         for index in indexes {
             let &constraint = graph.node_weight(index).unwrap();
-            ordered_definition_constraints.push(constraint);
+            sorted_declaration_constraints.push(constraint);
         }
-         
-        ordered_definition_constraints
+
+        (sorted_declaration_constraints, downgraded_constraints)
     }
 
-    /*
-    Return all binary constraints in which the left side is the specified variable.
-    e.g. result = [a = count({...}), a = b + c, a = 1]
-    */
-    fn definition_constraints_of_variable(&self, variable: &Term) -> Vec<&Constraint> {
-        let mut matched_constraints = vec![];
+    /// Return a map that maps declaration variable to a list of expressions because the declaration
+    /// variable may occur in more than one binary constraint, which is a single variable term on the
+    /// left side of the binary constraint. e.g. val -> [count({..}), c * c]
+    fn declaration_constraint_map(&self) -> HashMap<Term, Vec<&Constraint>> {
+        let declaration_vars = self.declaration_variables();
+        let mut map = HashMap::new();
         for constraint in self.body.iter() {
-            match constraint {
-                Constraint::Binary(b) => {
-                    match &b.left {
-                        Expr::BaseExpr(be) => {
-                            match be {
-                                BaseExpr::Term(t) => {
-                                    if t == variable {
-                                        matched_constraints.push(constraint);
-                                    }
-                                },
-                                _ => {}
+            if let Constraint::Binary(b) = constraint {
+                if let Expr::BaseExpr(left_be) = &b.left {
+                    if let BaseExpr::Term(t) = left_be {
+                        // It has to be a declaration variable.
+                        if declaration_vars.contains(t) {
+                            if !map.contains_key(t) {
+                                map.insert(t.clone(), vec![]);
                             }
-                        },
-                        _ => {}
+                            map.get_mut(t).unwrap().push(constraint);
+                        }
                     }
-                },
-                _ => {},
+                }
             }
-        }        
+        }
 
-        matched_constraints
+        // println!("{} @@@@@ {:?} ##### {:?}", self, declaration_vars, map);
+
+        map
     }
-   
-    // Return all binary constraints.
-    pub fn binary_constraints(&self) -> Vec<&Constraint> {
-        self.body.iter().filter(|x| {
-            match x {
-                Constraint::Binary(b) => true,
-                _ => false,
-            }
-        }).collect()
-    }
+
 }
