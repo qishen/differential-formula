@@ -1,4 +1,5 @@
 use std::borrow::*;
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
@@ -15,6 +16,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::type_system::*;
 use crate::expression::*;
+use crate::rule::*;
 use crate::util::GenericMap;
 
 
@@ -171,11 +173,36 @@ impl Debug for Term {
 }
 
 impl FormulaExpr for Term {
-    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+    fn variables(&self) -> HashSet<Term> {
+        // Allow multiple mutable reference for closure.
+        let vars = RefCell::new(HashSet::new());
         self.traverse(
+            &|term| {
+                match term {
+                    Term::Variable(v) => true,
+                    _ => false
+                }
+            },
+            &|term| {
+                if !term.is_dc_variable() {
+                    vars.borrow_mut().insert(term.clone());
+                }
+            }
+        );
+        
+        vars.into_inner()
+    }
+
+    fn replace(&mut self, pattern: &Term, replacement: &Term) {
+        self.traverse_mut(
             &|term| { return term == pattern; }, 
             &mut |mut term| { *term = replacement.clone(); }
         );
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        // No set comprehension exists in terms.
+        HashMap::new()
     }
 }
 
@@ -256,25 +283,6 @@ impl Term {
             },
             _ => { false }
         }
-    }
-
-    pub fn variables(&self) -> HashSet<&Term> {
-        let mut set  = HashSet::new();
-        match self {
-            Term::Composite(c) => {
-                for arg in c.arguments.iter() {
-                    set.extend(arg.variables());
-                }
-            },
-            Term::Variable(v) => {
-                if !self.is_dc_variable() {
-                    set.insert(self);
-                }
-            },
-            _ => {}
-        }
-
-        set
     }
 
     /// Compare two lists of variable terms and return true if some terms in one list
@@ -441,9 +449,27 @@ impl Term {
     
     }
 
+    pub fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
+    where F1: Fn(&Term) -> bool, F2: Fn(&Term)
+    {
+        if pattern(self) {
+            logic(self);
+        }
+
+        // Recursively match all arguments in the composite term even the term is already matched.
+        match self {
+            Term::Composite(c) => {
+                for arg in c.arguments.iter() {
+                    arg.traverse(pattern, logic);
+                }
+            },
+            _ => {}
+        };
+    }
+
     /// Traverse the term recursively from root to find the term that satifies the pattern
     /// and then apply the logic to the mutable term.
-    pub fn traverse<F1, F2>(&mut self, pattern: &F1, logic: &mut F2) 
+    pub fn traverse_mut<F1, F2>(&mut self, pattern: &F1, logic: &mut F2) 
     where F1: Fn(&Term) -> bool, F2: FnMut(&mut Term)
     {
         if pattern(self) {
@@ -455,7 +481,7 @@ impl Term {
             Term::Composite(c) => {
                 for arg_arc in c.arguments.iter_mut() {
                     let arg_term = Arc::make_mut(arg_arc);
-                    arg_term.traverse(pattern, logic);
+                    arg_term.traverse_mut(pattern, logic);
                 }
             },
             _ => {}

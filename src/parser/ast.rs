@@ -555,7 +555,7 @@ impl ProgramAst {
             let mut term = term_ast.to_term(domain);
 
             // Reursively traverse the term to find all variables with fragments and fix them.
-            term.traverse(
+            term.traverse_mut(
                 &|t| { 
                     match t {
                         Term::Variable(v) => { v.fragments.len() > 0 },
@@ -667,8 +667,8 @@ impl ProgramAst {
         // if current term has variables inside then propagate binding to them first.
         let raw_term_vars = raw_term.variables();
         for raw_term_var in raw_term_vars {
-            if raw_alias_map.contains_gkey(raw_term_var) {
-                self.propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
+            if raw_alias_map.contains_gkey(&raw_term_var) {
+                self.propagate_alias_map(&raw_term_var, raw_alias_map, alias_map);
             }
         }
     

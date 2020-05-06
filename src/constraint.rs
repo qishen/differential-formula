@@ -15,6 +15,7 @@ use num::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
+use crate::rule::*;
 use crate::util::GenericMap;
 
 
@@ -26,9 +27,23 @@ pub struct Predicate {
 }
 
 impl FormulaExpr for Predicate {
+    fn variables(&self) -> HashSet<Term> {
+        let mut var_set = HashSet::new();
+        var_set.extend(self.term.variables());
+        // Don't forget to add alias to variable set.
+        if let Some(var) = self.alias.clone() {
+            var_set.insert(var);
+        }
+        var_set
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.term.replace(pattern, replacement);
         FormulaExpr::replace(&mut self.alias, pattern, replacement);
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        HashMap::new()
     }
 }
 
@@ -52,30 +67,19 @@ impl Display for Predicate {
 }
 
 
-impl ConstraintBehavior for Predicate {
-    fn variables(&self) -> HashSet<Term> {
-        let mut var_set = HashSet::new();
-        var_set.extend(self.term.variables().into_iter().map(|x| x.clone()));
-        
-        if self.alias != None {
-            var_set.insert(self.alias.clone().unwrap());
-        }
-
-        var_set
-    }
-}
+impl ConstraintBehavior for Predicate {}
 
 
 impl Predicate {
     // Negative predicate constraint is count({setcompre}) = 0 in disguise.
-    pub fn to_binary_constraints(&self, var: Term) -> Option<(Constraint, Constraint)> {
+    pub fn convert_negation(&self, var: Term) -> Option<(Constraint, Constraint)> {
         // Positive predicate is not allowed to be converted into Binary constraint.
         if !self.negated {
             return None;
         }
 
-        // Give it an alias starting with "~" that cannot be accepted by parser to make sure it
-        // will never coincide with variables in current rule defined by user.
+        // Give it an alias starting with "~" that cannot be accepted by parser to avoid 
+        // collision with other user-defined variables.
         let alias: Term = Variable::new("~dc".to_string(), vec![]).into();
         let vars = vec![alias.clone()];
         let pos_predicate = Predicate {
@@ -147,9 +151,37 @@ pub struct Binary {
 }
 
 impl FormulaExpr for Binary {
+    fn variables(&self) -> HashSet<Term> {
+        let mut set = HashSet::new();
+        set.extend(self.left.variables());
+        set.extend(self.right.variables());
+        set
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.left.replace(pattern, replacement);
         self.right.replace(pattern, replacement);
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        let mut map = HashMap::new();
+        // If left side is a variable term and right side is set comprehension then do nothing.
+        if let Expr::BaseExpr(be1) = &self.left {
+            if let BaseExpr::Term(_) = be1 {
+                if let Expr::BaseExpr(be2) = &self.right {
+                    if let BaseExpr::SetComprehension(_) = be2 {
+                        return map;
+                    }
+                }
+            }
+        }
+
+        // Gather all set comprehensions from both left and right hand sides.
+        let left_map = self.left.replace_set_comprehension(generator);
+        let right_map = self.right.replace_set_comprehension(generator);
+        map.extend(left_map);
+        map.extend(right_map);
+        map
     }
 }
 
@@ -159,23 +191,16 @@ impl Display for Binary {
     }
 }
 
-impl ConstraintBehavior for Binary {
-    fn variables(&self) -> HashSet<Term> {
-        let mut set = HashSet::new();
-        set.extend(self.left.variables());
-        set.extend(self.right.variables());
-        set
-    }
-}
+impl ConstraintBehavior for Binary {}
 
 impl Binary {
+    /// Check if the binary constraint has set comprehension inside it.
     pub fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
     pub fn evaluate<T>(&self, binding: &T) -> Option<bool> 
-    where 
-        T: GenericMap<Arc<Term>, Arc<Term>>, 
+    where T: GenericMap<Arc<Term>, Arc<Term>>
     {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 
@@ -207,8 +232,19 @@ pub struct TypeConstraint {
 }
 
 impl FormulaExpr for TypeConstraint {
+    fn variables(&self) -> HashSet<Term> {
+        let mut set = HashSet::new();
+        set.insert(self.var.clone());
+        set
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.var.replace(pattern, replacement);
+
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        HashMap::new()
     }
 }
 
@@ -218,19 +254,12 @@ impl Display for TypeConstraint {
     }
 }
 
-impl ConstraintBehavior for TypeConstraint {
-    fn variables(&self) -> HashSet<Term> {
-        let mut set = HashSet::new();
-        set.insert(self.var.clone());
-        set
-    }
-}
+
+impl ConstraintBehavior for TypeConstraint {}
 
 
 #[enum_dispatch(Constraint)]
-pub trait ConstraintBehavior {
-    fn variables(&self) -> HashSet<Term>;
-}
+pub trait ConstraintBehavior {}
 
 
 #[enum_dispatch]
@@ -242,11 +271,33 @@ pub enum Constraint {
 }
 
 impl FormulaExpr for Constraint {
+    fn variables(&self) -> HashSet<Term> {
+        match self {
+            Constraint::Predicate(p) => p.variables(),
+            Constraint::Binary(b) => b.variables(),
+            Constraint::TypeConstraint(t) => t.variables()
+        }
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         match self {
             Constraint::Predicate(p) => p.replace(pattern, replacement),
             Constraint::Binary(b) => b.replace(pattern, replacement),
             Constraint::TypeConstraint(t) => t.replace(pattern, replacement),
+        };
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        match self {
+            Constraint::Predicate(p) => {
+                return p.replace_set_comprehension(generator);
+            },
+            Constraint::Binary(b) => {
+                return b.replace_set_comprehension(generator);
+            },
+            Constraint::TypeConstraint(t) => {
+                return t.replace_set_comprehension(generator);
+            },
         };
     }
 }

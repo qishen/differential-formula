@@ -4,6 +4,7 @@ extern crate timely;
 extern crate differential_dataflow;
 
 use std::borrow::*;
+use std::convert::TryInto;
 use std::iter::*;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -22,10 +23,26 @@ use crate::util::GenericMap;
 
 
 pub trait FormulaExpr {
+    // Return all variables in the expression.
+    fn variables(&self) -> HashSet<Term>;
+    /// Find a term with certain pattern in the expression and replace it with another term.
     fn replace(&mut self, pattern: &Term, replacement: &Term);
+    /// Find set comprehension in the expression and replace it with a don't-care variable to 
+    /// represent it. The method will return a hash map mapping don't-care variable term to set 
+    /// comprehension and there is a counter that is used to generate variable name.
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension>;
 }
 
 impl<T: FormulaExpr> FormulaExpr for Option<T> {
+    fn variables(&self) -> HashSet<Term> {
+        match self {
+            Some(expr) => {
+                expr.variables()
+            },
+            None => { HashSet::new() }
+        }
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         match self {
             Some(expr) => {
@@ -34,13 +51,40 @@ impl<T: FormulaExpr> FormulaExpr for Option<T> {
             None => {},
         };
     }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        match self {
+            Some(expr) => {
+                return expr.replace_set_comprehension(generator);
+            },
+            None => { return HashMap::new(); },
+        };
+    }
 }
 
 impl<T: FormulaExpr> FormulaExpr for Vec<T> {
+    fn variables(&self) -> HashSet<Term> {
+        let mut vars = HashSet::new();
+        for element in self.iter() {
+            let sub_vars = element.variables();
+            vars.extend(sub_vars);
+        }
+        vars
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         for element in self.iter_mut() {
             element.replace(pattern, replacement);
         }
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        let mut map = HashMap::new();
+        for element in self.iter_mut() {
+            let sub_map = element.replace_set_comprehension(generator);
+            map.extend(sub_map);
+        }
+        map
     }
 }
 
@@ -54,9 +98,22 @@ pub struct SetComprehension {
 }
 
 impl FormulaExpr for SetComprehension {
+    fn variables(&self) -> HashSet<Term> {
+        let mut vars = self.vars.variables();
+        vars.extend(self.condition.variables());
+        vars
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.vars.replace(pattern, replacement);
         self.condition.replace(pattern, replacement);
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        let var = generator.generate();
+        // Set comprehension may have set comprehension expression inside itself.
+        // TODO: convert it to a rule and do some changes.
+        self.condition.replace_set_comprehension(generator)
     }
 }
 
@@ -215,7 +272,6 @@ impl SetCompreOp {
     }
 }
 
-
 impl Display for SetComprehension {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headterm_strs: Vec<String> = self.vars.iter().map(|x| {
@@ -244,14 +300,10 @@ impl SetComprehension {
             default,
         }
     }
-    pub fn variables(&self) -> HashSet<Term> {
-        let rule: Rule = self.clone().into();
-        rule.variables()
-    }
 
     pub fn matched_variables(&self) -> HashSet<Term> {
         let rule: Rule = self.clone().into();
-        rule.matched_variables()
+        rule.predicate_matched_variables()
     }
 }
 
@@ -272,7 +324,6 @@ impl Display for ArithmeticOp {
             ArithmeticOp::Mul => "*",
             ArithmeticOp::Div => "/",
         };
-
         write!(f, "{}", op_str)
     }
 }
@@ -291,28 +342,6 @@ pub enum BaseExpr {
 
 // TODO: put them separately into methods in the BaseExprBehavior trait.
 impl ExprBehavior for BaseExpr {
-    fn variables(&self) -> HashSet<Term> {
-        let mut term_set = HashSet::new();
-        match self {
-            BaseExpr::SetComprehension(setcompre) => {
-                // Turn it into a rule and find all rule variables.
-                let rule: Rule = setcompre.clone().into();
-                let vars = rule.variables();
-                term_set.extend(vars);
-            },
-            BaseExpr::Term(term) => {
-                match term {
-                    Term::Variable(v) => {
-                        term_set.insert(term.clone());
-                    },
-                    _ => {},
-                }
-            },
-        };
-
-        term_set
-    }
-
     fn has_set_comprehension(&self) -> bool {
         let has_setcompre = match self {
             BaseExpr::SetComprehension(s) => true,
@@ -399,11 +428,36 @@ impl Display for BaseExpr {
 }
 
 impl FormulaExpr for BaseExpr {
+    fn variables(&self) -> HashSet<Term> {
+        match self {
+            BaseExpr::Term(t) => t.variables(),
+            BaseExpr::SetComprehension(s) => s.variables(),
+        }
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         match self {
             BaseExpr::SetComprehension(s) => s.replace(pattern, replacement),
             BaseExpr::Term(t) => t.replace(pattern, replacement),
         };
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        let mut map = HashMap::new();
+        match self {
+            BaseExpr::SetComprehension(setcompre) => {
+                // It won't return anything but do some conversion if setcompre has setcompre inside itself.
+                setcompre.replace_set_comprehension(generator);
+            },
+            BaseExpr::Term(t) => {
+                return map;
+            },
+        };
+        let introduced_var = generator.generate();
+        let mut base_expr: BaseExpr = BaseExpr::Term(introduced_var.clone());
+        std::mem::swap(self, &mut base_expr);
+        map.insert(introduced_var, base_expr.try_into().unwrap()); 
+        return map;
     }
 }
 
@@ -416,9 +470,27 @@ pub struct ArithExpr {
 }
 
 impl FormulaExpr for ArithExpr {
+    fn variables(&self) -> HashSet<Term> {
+        let mut vars = HashSet::new();
+        let left_vars = self.left.variables();
+        let right_vars = self.right.variables();
+        vars.extend(left_vars);
+        vars.extend(right_vars);
+        vars
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         Arc::make_mut(&mut self.left).replace(pattern, replacement);
         Arc::make_mut(&mut self.right).replace(pattern, replacement);
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        let mut map = HashMap::new();
+        let left_map = Arc::make_mut(&mut self.left).replace_set_comprehension(generator);
+        let right_map = Arc::make_mut(&mut self.right).replace_set_comprehension(generator);
+        map.extend(left_map);
+        map.extend(right_map);
+        map
     }
 }
 
@@ -429,15 +501,6 @@ impl Display for ArithExpr {
 }
 
 impl ExprBehavior for ArithExpr {
-    fn variables(&self) -> HashSet<Term> {
-        let mut var_set = HashSet::new();
-        let mut left_set = self.left.variables();
-        let mut right_set = self.right.variables();
-        var_set.extend(left_set);
-        var_set.extend(right_set);
-        var_set
-    }
-
     fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension();
     }
@@ -471,7 +534,6 @@ impl ExprBehavior for ArithExpr {
 
 #[enum_dispatch(Expr)]
 pub trait ExprBehavior {
-    fn variables(&self) -> HashSet<Term>;
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
     fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
@@ -488,10 +550,24 @@ pub enum Expr {
 }
 
 impl FormulaExpr for Expr {
+    fn variables(&self) -> HashSet<Term> {
+        match self {
+            Expr::BaseExpr(b) => b.variables(),
+            Expr::ArithExpr(a) => a.variables(),
+        }
+    }
+
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         match self {
             Expr::BaseExpr(b) => b.replace(pattern, replacement),
             Expr::ArithExpr(a) => a.replace(pattern, replacement),
+        }
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+        match self {
+            Expr::BaseExpr(b) => { return b.replace_set_comprehension(generator); },
+            Expr::ArithExpr(a) => { return a.replace_set_comprehension(generator); }
         }
     }
 }
