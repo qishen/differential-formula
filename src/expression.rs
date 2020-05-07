@@ -19,7 +19,7 @@ use num::*;
 use crate::term::*;
 use crate::rule::*;
 use crate::constraint::*;
-use crate::util::GenericMap;
+use crate::util::*;
 
 
 pub trait FormulaExpr {
@@ -30,7 +30,7 @@ pub trait FormulaExpr {
     /// Find set comprehension in the expression and replace it with a don't-care variable to 
     /// represent it. The method will return a hash map mapping don't-care variable term to set 
     /// comprehension and there is a counter that is used to generate variable name.
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension>;
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension>;
 }
 
 impl<T: FormulaExpr> FormulaExpr for Option<T> {
@@ -52,7 +52,7 @@ impl<T: FormulaExpr> FormulaExpr for Option<T> {
         };
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         match self {
             Some(expr) => {
                 return expr.replace_set_comprehension(generator);
@@ -78,7 +78,7 @@ impl<T: FormulaExpr> FormulaExpr for Vec<T> {
         }
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         let mut map = HashMap::new();
         for element in self.iter_mut() {
             let sub_map = element.replace_set_comprehension(generator);
@@ -109,8 +109,8 @@ impl FormulaExpr for SetComprehension {
         self.condition.replace(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
-        let var = generator.generate();
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
+        let var = generator.generate_dc_term();
         // Set comprehension may have set comprehension expression inside itself.
         // TODO: convert it to a rule and do some changes.
         self.condition.replace_set_comprehension(generator)
@@ -442,7 +442,7 @@ impl FormulaExpr for BaseExpr {
         };
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         let mut map = HashMap::new();
         match self {
             BaseExpr::SetComprehension(setcompre) => {
@@ -453,7 +453,7 @@ impl FormulaExpr for BaseExpr {
                 return map;
             },
         };
-        let introduced_var = generator.generate();
+        let introduced_var = generator.generate_dc_term();
         let mut base_expr: BaseExpr = BaseExpr::Term(introduced_var.clone());
         std::mem::swap(self, &mut base_expr);
         map.insert(introduced_var, base_expr.try_into().unwrap()); 
@@ -484,7 +484,7 @@ impl FormulaExpr for ArithExpr {
         Arc::make_mut(&mut self.right).replace(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         let mut map = HashMap::new();
         let left_map = Arc::make_mut(&mut self.left).replace_set_comprehension(generator);
         let right_map = Arc::make_mut(&mut self.right).replace_set_comprehension(generator);
@@ -564,7 +564,7 @@ impl FormulaExpr for Expr {
         }
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         match self {
             Expr::BaseExpr(b) => { return b.replace_set_comprehension(generator); },
             Expr::ArithExpr(a) => { return a.replace_set_comprehension(generator); }

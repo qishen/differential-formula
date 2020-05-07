@@ -20,6 +20,7 @@ use crate::util::*;
 pub enum Type {
     BaseType,
     CompositeType,
+    EnumType,
     RangeType,
     RenamedType,
     UnionType,
@@ -97,6 +98,18 @@ impl Type {
 #[enum_dispatch(Type)]
 pub trait FormulaType {
     fn name(&self) -> String;
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct EnumType {
+    pub name: String,
+    pub items: Vec<Term>,
+}
+
+impl FormulaType for EnumType {
+    fn name(&self) -> String {
+        return format!("{:?}", self.name);
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]

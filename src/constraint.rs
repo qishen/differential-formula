@@ -15,8 +15,7 @@ use num::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
-use crate::rule::*;
-use crate::util::GenericMap;
+use crate::util::*;
 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -42,7 +41,7 @@ impl FormulaExpr for Predicate {
         FormulaExpr::replace(&mut self.alias, pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         HashMap::new()
     }
 }
@@ -163,7 +162,7 @@ impl FormulaExpr for Binary {
         self.right.replace(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         let mut map = HashMap::new();
         // If left side is a variable term and right side is set comprehension then do nothing.
         if let Expr::BaseExpr(be1) = &self.left {
@@ -257,7 +256,7 @@ impl FormulaExpr for TypeConstraint {
 
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         HashMap::new()
     }
 }
@@ -301,7 +300,7 @@ impl FormulaExpr for Constraint {
         };
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         match self {
             Constraint::Predicate(p) => {
                 return p.replace_set_comprehension(generator);

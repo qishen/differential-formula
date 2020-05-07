@@ -1,11 +1,34 @@
 use core::hash::Hash;
 use core::borrow::Borrow;
-
-use std::iter::*;
 use std::collections::HashMap;
-use std::collections::hash_map::Keys;
 use im::OrdMap;
 
+use crate::term::*;
+
+#[derive(Debug, Clone)]
+pub struct NameGenerator {
+    prefix: String,
+    counter: i64
+}
+
+impl NameGenerator {
+    pub fn new(prefix: &str) -> Self {
+        NameGenerator { 
+            prefix: prefix.to_string(), 
+            counter: 0 
+        }
+    }
+
+    pub fn generate_name(&mut self) -> String {
+        format!("{}{}", self.prefix, self.counter)
+    }
+
+    pub fn generate_dc_term(&mut self) -> Term {
+        let var: Term = Variable::new(format!("{}{}", self.prefix, self.counter), vec![]).into();
+        self.counter += 1;
+        var
+    }
+}
 
 /*
 Rust standard lib does not provide a generic map interface like C# does after v1.0 because 

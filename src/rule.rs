@@ -18,23 +18,8 @@ use petgraph::algo::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::constraint::*;
+use crate::util::*;
 
-
-pub struct DontCareVarGen {
-    counter: i64
-}
-
-impl DontCareVarGen {
-    pub fn new() -> Self {
-        DontCareVarGen { counter: 0 }
-    }
-
-    pub fn generate(&mut self) -> Term {
-        let var: Term = Variable::new(format!("~dc{}", self.counter), vec![]).into();
-        self.counter += 1;
-        var
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Rule {
@@ -54,7 +39,7 @@ impl FormulaExpr for Rule {
         self.body.replace(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         self.body.replace_set_comprehension(generator)
     }
 }
@@ -87,7 +72,7 @@ impl Rule {
 
         // Don't-care variable generator to generate some variables like ~dc that user
         // can't use when writing rules.
-        let mut dc_generator = DontCareVarGen::new();
+        let mut dc_generator = NameGenerator::new("~dc");
 
         // Convert negation to set comprehension.
         rule.replace_negative_predicate(&mut dc_generator);
@@ -157,14 +142,14 @@ impl Rule {
 
     /// Convert negated constraint `no X(..)` into two constraints with set comprehension,
     /// ~dc1 = count({ ~dc | ~dc is X(..) }), ~dc1 = 0.
-    fn replace_negative_predicate(&mut self, generator: &mut DontCareVarGen) {
+    fn replace_negative_predicate(&mut self, generator: &mut NameGenerator) {
         let mut constraints = vec![];
         let clist: Vec<Constraint> = self.body.drain(..).collect(); 
         for constraint in clist.into_iter() {
             match constraint {
                 Constraint::Predicate(predicate) => {
                     if predicate.negated {
-                        let introduced_var = generator.generate();
+                        let introduced_var = generator.generate_dc_term();
                         let (b1, b2) = predicate.convert_negation(introduced_var).unwrap();
                         constraints.push(b1);
                         constraints.push(b2);

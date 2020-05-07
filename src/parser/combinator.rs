@@ -4,11 +4,12 @@ use crate::module::*;
 use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
+use crate::util::*;
 
 use std::convert::TryInto;
 use std::str::FromStr;
-use std::fs;
 use std::path::Path;
+use std::fs;
 use std::collections::*;
 
 use nom::character::*;
@@ -113,24 +114,60 @@ fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -
     }.into()
 }
 
+named!(enum_typedef_inline<&str, TypeDefAst>,
+    do_parse!(
+        tag!("{") >>
+        items: separated_list!(tag!("."), delimited!(space0, term, space0)) >>
+        tag!("}") >>
+        (parse_enum_typedef(None, items))
+    )
+);
+
+named!(enum_typedef<&str, TypeDefAst>,
+    do_parse!(
+        t: id >>
+        delimited!(space0, tag!("::="), space0) >>
+        tag!("{") >>
+        items: separated_list!(tag!(","), delimited!(space0, term, space0)) >>
+        tag!("}") >>
+        skip >>
+        tag!(".") >>
+        (parse_enum_typedef(Some(t), items))
+    )
+);
+
+fn parse_enum_typedef(t_opt: Option<String>, items: Vec<TermAst>) -> TypeDefAst {
+    EnumTypeDefAst { 
+        name: t_opt, 
+        items 
+    }.into()
+}
+
+named!(union_typedef_inline<&str, TypeDefAst>,
+    do_parse!(
+        subs: separated_list!(tag!("+"), delimited!(space0, typename, space0)) >>
+        (parse_union_typedef(None, subs))
+    )
+);
+
 named!(union_typedef<&str, TypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
         subs: separated_list!(tag!("+"), delimited!(space0, typename, space0)) >>
         tag!(".") >>
-        (parse_union_typedef(t, subs))
+        (parse_union_typedef(Some(t), subs))
     )
 );
 
-fn parse_union_typedef(t: String, subtypes: Vec<TypeDefAst>) -> TypeDefAst {
+fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<TypeDefAst>) -> TypeDefAst {
     let mut boxed_subtypes = vec![];
     for subtype in subtypes {
         boxed_subtypes.push(Box::new(subtype));
     }
 
     UnionTypeDefAst {
-        name: Some(t),
+        name: t_opt,
         subtypes: boxed_subtypes,
     }.into()
 }
@@ -194,7 +231,11 @@ named!(subdomain<&str, (Option<String>, String)>,
 named!(module_sentence<&str, ModuleSentenceAst>,
     alt!(
         map!(alt!(rule | conformance), |x| { ModuleSentenceAst::Rule(x) }) |
-        map!(alt!(composite_typedef | union_typedef), |x| { ModuleSentenceAst::Type(x) }) |
+        map!(alt!(
+            composite_typedef | 
+            union_typedef |
+            enum_typedef
+        ), |x| { ModuleSentenceAst::Type(x) }) |
         map!(
             tuple!(term, terminated!(skip, tag!("."))), |(x, _)| { ModuleSentenceAst::Term(x) }
         )
@@ -458,6 +499,9 @@ named!(program<&str, ProgramAst>,
                 }
             }
         }
+
+        // Need a name generator to generate name for inline union type and enum type.
+        let generator = NameGenerator::new("");
 
         ProgramAst {
             domain_ast_map,

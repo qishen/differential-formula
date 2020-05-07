@@ -16,8 +16,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::type_system::*;
 use crate::expression::*;
-use crate::rule::*;
-use crate::util::GenericMap;
+use crate::util::*;
 
 
 #[enum_dispatch(Term)]
@@ -200,7 +199,7 @@ impl FormulaExpr for Term {
         );
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut DontCareVarGen) -> HashMap<Term, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
         // No set comprehension exists in terms.
         HashMap::new()
     }

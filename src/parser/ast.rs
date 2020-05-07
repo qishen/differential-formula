@@ -130,7 +130,7 @@ impl TypeDefAstBehavior for RangeTypeDefAst {
 #[derive(Debug, Clone)]
 pub struct EnumTypeDefAst {
     pub name: Option<String>,
-    pub enums: Vec<String>,
+    pub items: Vec<TermAst>,
 }
 
 impl TypeDefAstBehavior for EnumTypeDefAst {
@@ -215,6 +215,7 @@ pub struct ProgramAst {
     pub domain_ast_map: HashMap<String, DomainAst>,
     pub model_ast_map: HashMap<String, ModelAst>,
     pub transform_ast_map: HashMap<String, TransformAst>,
+    //generator: NameGenerator,
 }
 
 impl ProgramAst {
@@ -310,6 +311,34 @@ impl ProgramAst {
                 }.into();
 
                 Arc::new(union_type)
+            },
+            TypeDefAst::EnumTypeDefAst(etypedef) => {
+                /*
+                let name = match etypedef.name {
+                    Some(ename) => ename.clone(),
+                    None => {
+                        format!("ENUM{}", self.generator.generate_name())
+                    }
+                };
+                */
+
+                let mut items = vec![];
+                for term_ast in etypedef.items.clone() {
+                    let term: Term = term_ast.try_into().unwrap();
+                    if let Term::Variable(v) = term {
+                        // Create a constant from variable term.
+                        let constant = Term::create_constant(v.root);
+                        items.push(constant);
+                    } else if let Term::Atom(_) = term {
+                        items.push(term);
+                    }
+
+                }
+
+                let name = etypedef.name().unwrap();
+                let enum_type = EnumType { name, items }.into();
+
+                Arc::new(enum_type)
             },
             _ => { 
                 unimplemented!()
