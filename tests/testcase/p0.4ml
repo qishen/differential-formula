@@ -1,4 +1,5 @@
 domain Graph {
+    MyEnum ::= {2, 3, "hi"}.
     Node ::= new(name: Integer).
     Edge ::= new(src: Node, dst: Node).
     Path ::= new(src: Node, dst: Node).
@@ -7,6 +8,25 @@ domain Graph {
     Nocycle ::= new(node: Node).
     TwoEdge ::= new(first: Edge, second: Edge).
 
+    Hello :- Edge(x, y).
+    Hello2 :- Edge(c, d), count({ e | e is Edge(a, b)}) = 6 .
+    Goodbye :- Edge(x, y), Hello .
     Path(x, y) :- Edge(x, y).
     Path(x, z) :- Path(x, y), Path(y, z).
+}
+
+
+model m of Graph {
+    n0 is Node(0).
+    n1 is Node(1).
+    n2 is Node(2).
+    n3 is Node(3).
+    n4 is Node(4).
+
+    Edge(n0, n0).
+    Edge(n0, n1).
+    Edge(n1, n2).
+    //Edge(n2, n2).
+    Edge(n2, n3).
+    Edge(n3, n4).
 }
