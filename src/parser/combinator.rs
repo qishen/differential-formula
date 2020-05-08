@@ -58,10 +58,9 @@ named!(param_id<&str, Term>,
     )
 );
 
-// Same pattern as `id` but return ast instead of string.
-// Two types of typename: 
-// 1. Native type e.g. Node or Edge.
-// 2. Chained renamed type alias e.g. left.Node or right.x.y.z.Node
+// There are two types of typename: 
+// 1. Native type referenced by alias. e.g. Node or Edge.
+// 2. Chained renamed type carrying information about scopes. e.g. left.Node or right.x.y.z.Node
 named!(typename<&str, TypeDefAst>,
     map!(separated_nonempty_list!(tag!("."), id), |mut names| {
         let name = names.remove(names.len()-1);
@@ -73,19 +72,20 @@ named!(typename<&str, TypeDefAst>,
 );
 
 // Two types of typename: 1. Node ::= new (id: String). 2. Node ::= new (String).
-named!(tagged_typename<&str, (Option<String>, TypeDefAst)>,
+named!(tagged_type<&str, (Option<String>, TypeDefAst)>,
     alt!(
         map!(
-            tuple!(id, delimited!(space0, tag!(":"), space0), typename),
-            |(id_str, sep, t)| {
+            tuple!(id, delimited!(space0, tag!(":"), space0), union_typedef_inline),
+            |(id_str, _sep, t)| {
                 (Some(id_str.to_string()), t)
             } 
         ) |
-        map!(typename, |t| { 
+        map!(union_typedef_inline, |t| { 
             (None, t) 
         })
     )
 );
+
 
 named!(composite_typedef<&str, TypeDefAst>,
     do_parse!(
@@ -94,7 +94,7 @@ named!(composite_typedef<&str, TypeDefAst>,
         opt!(delimited!(space0, tag!("new"), space0)) >>
         args: delimited!(
             delimited!(space0, tag!("("), space0), 
-            separated_list!(delimited!(space0, tag!(","), space0), tagged_typename),    
+            separated_list!(delimited!(space0, tag!(","), space0), tagged_type),    
             delimited!(space0, tag!(")"), space0)
         ) >>
         dot: tag!(".") >>
@@ -117,7 +117,9 @@ fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -
 named!(enum_typedef_inline<&str, TypeDefAst>,
     do_parse!(
         tag!("{") >>
-        items: separated_list!(tag!("."), delimited!(space0, term, space0)) >>
+        space0 >>
+        items: separated_list!(delimited!(space0, tag!(","), space0), term) >>
+        space0 >>
         tag!("}") >>
         (parse_enum_typedef(None, items))
     )
@@ -128,7 +130,7 @@ named!(enum_typedef<&str, TypeDefAst>,
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
         tag!("{") >>
-        items: separated_list!(tag!(","), delimited!(space0, term, space0)) >>
+        items: separated_list!(delimited!(space0, tag!(","), space0), term) >>
         tag!("}") >>
         skip >>
         tag!(".") >>
@@ -143,9 +145,12 @@ fn parse_enum_typedef(t_opt: Option<String>, items: Vec<TermAst>) -> TypeDefAst 
     }.into()
 }
 
+// Union of defined type or enum type expression.
 named!(union_typedef_inline<&str, TypeDefAst>,
     do_parse!(
-        subs: separated_list!(tag!("+"), delimited!(space0, typename, space0)) >>
+        subs: separated_list!(
+            delimited!(space0, tag!("+"), space0), 
+            alt!(typename | enum_typedef_inline)) >>
         (parse_union_typedef(None, subs))
     )
 );
@@ -154,22 +159,24 @@ named!(union_typedef<&str, TypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
-        subs: separated_list!(tag!("+"), delimited!(space0, typename, space0)) >>
+        subs: separated_list!(
+            delimited!(space0, tag!("+"), space0), 
+            alt!(typename | enum_typedef_inline)) >>
         tag!(".") >>
         (parse_union_typedef(Some(t), subs))
     )
 );
 
 fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<TypeDefAst>) -> TypeDefAst {
-    let mut boxed_subtypes = vec![];
-    for subtype in subtypes {
-        boxed_subtypes.push(Box::new(subtype));
+    if subtypes.len() == 1 {
+        return subtypes.get(0).unwrap().clone();
+    } else {
+        let mut boxed_subtypes = vec![];
+        for subtype in subtypes {
+            boxed_subtypes.push(Box::new(subtype));
+        }
+        return UnionTypeDefAst { name: t_opt, subtypes: boxed_subtypes }.into();
     }
-
-    UnionTypeDefAst {
-        name: t_opt,
-        subtypes: boxed_subtypes,
-    }.into()
 }
 
 
@@ -398,7 +405,7 @@ named!(transform_param<&str, TransformParamAst>,
         map!(tagged_domain, |x| { 
             TransformParamAst::TaggedDomain(x) 
         }) | 
-        map!(tagged_typename, |x| {
+        map!(tagged_type, |x| {
             let tag = x.0.unwrap(); // tag cannot be none here.
             let formula_type = x.1;
             TransformParamAst::TaggedType(
@@ -920,8 +927,8 @@ mod tests {
         assert_eq!(typename("yyy ").unwrap().0, " ");
         assert_eq!(typename("b3aab2c ").unwrap().0, " ");
         assert_eq!(typename("left.Node ").unwrap().0, " ");
-        assert_eq!(tagged_typename("id : Hello ").unwrap().0, " ");
-        assert_eq!(tagged_typename("id : right.Hello ").unwrap().0, " ");
+        assert_eq!(tagged_type("id : Hello ").unwrap().0, " ");
+        assert_eq!(tagged_type("id : right.Hello ").unwrap().0, " ");
     }
 
     #[test]

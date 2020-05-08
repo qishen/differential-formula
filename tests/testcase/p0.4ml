@@ -1,6 +1,7 @@
 domain Graph {
-    MyEnum ::= {2, 3, "hi"}.
-    Node ::= new(name: Integer).
+    MyEnum ::= {2, 3, "hi"} + Node + Edge.
+    Union ::= Node + Edge.
+    Node ::= new(name: Integer + String).
     Edge ::= new(src: Node, dst: Node).
     Path ::= new(src: Node, dst: Node).
     Line ::= new(a: Node, b: Node, c: Node, d: Node).
@@ -15,6 +16,14 @@ domain Graph {
     Path(x, z) :- Path(x, y), Path(y, z).
 }
 
+transform Add (id: Integer, GraphIn:: Graph) 
+returns (GraphOut:: Graph)
+{
+    Thing ::= GraphIn.Node + GraphOut.Node + {1, 2, "hi"} + GraphIn.Edge.
+    GraphOut.Node(%id).
+    GraphOut.Node(x) :- GraphIn.Node(x).
+    GraphOut.Edge(x, y) :- GraphIn.Edge(x, y).
+}
 
 model m of Graph {
     n0 is Node(0).

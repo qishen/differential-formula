@@ -249,8 +249,9 @@ impl ProgramAst {
 
     fn create_type(
         &self, t: String, 
-        ast_map: &HashMap<String, TypeDefAst>,    // Only has type ASTs in current domain.
+        ast_map: &mut HashMap<String, TypeDefAst>,    // Only has type ASTs in current domain.
         type_map: &mut HashMap<String, Arc<Type>>,     // Recursively put new created type into type map.
+        generator: &mut NameGenerator,
     ) 
     -> Arc<Type>
     {
@@ -258,30 +259,41 @@ impl ProgramAst {
             let existing_type = type_map.get(&t).unwrap();
             return existing_type.clone();
         } 
-        
+
         let type_ast = ast_map.get(&t).unwrap();
-        let new_type = match type_ast {
+        let new_type = match type_ast.clone() {
             TypeDefAst::AliasTypeDefAst(aliastypedef) => {
                 // At this point, type from subdomains should be available in `type_map`.
                 let full_name = aliastypedef.name().unwrap();
                 if type_map.contains_key(&full_name) {
                     type_map.get(&full_name).unwrap().clone()
                 } else {
-                    self.create_type(full_name, ast_map, type_map)
+                    self.create_type(full_name, ast_map, type_map, generator)
                 }
             },
             TypeDefAst::CompositeTypeDefAst(ctypedef) => {
                 let mut args = vec![];
                 let typename = ctypedef.name().unwrap();
                 for (id_opt, arg_ast) in ctypedef.args.iter() {
-                    let name = arg_ast.name().unwrap();
+                    // The name could be None if that's an inline type definition like `A ::= (a: B + C)`.
+                    let name = match arg_ast.name() {
+                        Some(name) => name,
+                        None => {
+                            // Need to add it to `ast_map` because only ASTs of named type are included. 
+                            let auto_name = generator.generate_name();
+                            ast_map.insert(auto_name.clone(), arg_ast.as_ref().clone());
+                            auto_name
+                        }
+                    };
+
                     let subtype_opt = type_map.get(&name);
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
                         None => { 
-                            self.create_type(name, ast_map, type_map)
+                            self.create_type(name, ast_map, type_map, generator)
                         }
                     };
+
                     args.push((id_opt.clone(), subtype));
                 }
 
@@ -294,13 +306,31 @@ impl ProgramAst {
             },
             TypeDefAst::UnionTypeDefAst(utypedef) => {
                 let mut subtypes = vec![];
-                let typename = utypedef.name().unwrap();
+                let typename = match utypedef.name() {
+                    Some(name) => name,
+                    None => {
+                        // Need to add it to `ast_map` because only ASTs of named type are included. 
+                        let auto_name = generator.generate_name();
+                        ast_map.insert(auto_name.clone(), type_ast.clone());
+                        auto_name
+                    }
+                };
+
                 for subtype_ast in utypedef.subtypes.iter() {
-                    let name = subtype_ast.name().unwrap();
+                    // It could be a enum type without name.
+                    let name = match subtype_ast.name() {
+                        Some(name) => name,
+                        None => {
+                            // Need to add it to `ast_map` because only ASTs of named type are included. 
+                            let auto_name = generator.generate_name();
+                            ast_map.insert(auto_name.clone(), subtype_ast.as_ref().clone());
+                            auto_name
+                        }
+                    };
                     let subtype_opt = type_map.get(&name);
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
-                        None => { self.create_type(name, ast_map, type_map) }
+                        None => { self.create_type(name, ast_map, type_map, generator) }
                     };
                     subtypes.push(subtype);
                 }
@@ -313,15 +343,6 @@ impl ProgramAst {
                 Arc::new(union_type)
             },
             TypeDefAst::EnumTypeDefAst(etypedef) => {
-                /*
-                let name = match etypedef.name {
-                    Some(ename) => ename.clone(),
-                    None => {
-                        format!("ENUM{}", self.generator.generate_name())
-                    }
-                };
-                */
-
                 let mut items = vec![];
                 for term_ast in etypedef.items.clone() {
                     let term: Term = term_ast.try_into().unwrap();
@@ -332,12 +353,19 @@ impl ProgramAst {
                     } else if let Term::Atom(_) = term {
                         items.push(term);
                     }
-
                 }
 
-                let name = etypedef.name().unwrap();
-                let enum_type = EnumType { name, items }.into();
+                let name = match etypedef.name() {
+                    Some(name) => name,
+                    None => {
+                        // Need to add it to `ast_map` because only ASTs of named type are included. 
+                        let auto_name = generator.generate_name();
+                        ast_map.insert(auto_name.clone(), type_ast.clone());
+                        auto_name
+                    }
+                };
 
+                let enum_type = EnumType { name, items }.into();
                 Arc::new(enum_type)
             },
             _ => { 
@@ -367,6 +395,8 @@ impl ProgramAst {
         if transform_map.contains_key(&transform_name) {
             return transform_map.get(&transform_name).unwrap().clone();
         }
+
+        let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", transform_name)[..]);
 
         // Those are the params and returns for transform(x1, x2 ... x3) -> (y1, y2, y3)
         let mut input_type_map = HashMap::new();
@@ -441,12 +471,18 @@ impl ProgramAst {
         // Add types that are defined in transform.
         let mut type_ast_map = HashMap::new();
         for type_ast in transform_ast.typedefs.iter() {
-            let name = type_ast.name().unwrap();
+            let name = match type_ast.name() {
+                Some(name) => name,
+                None => {
+                    generator.generate_name()
+                }
+            };
             type_ast_map.insert(name, type_ast.clone());
         } 
 
-        for type_name in type_ast_map.keys() {
-            self.create_type(type_name.clone(), &type_ast_map, &mut type_map);
+        let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
+        for type_name in type_names {
+            self.create_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
         // A temporary domain for transform to create rules and term.
@@ -494,6 +530,8 @@ impl ProgramAst {
             return domain_map.get(&domain_name).unwrap().clone(); 
         }
 
+        let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", domain_name)[..]);
+
         let mut type_map = HashMap::new();
         self.import_builtin_types(&mut type_map);
 
@@ -529,12 +567,19 @@ impl ProgramAst {
         // `type_ast_map` contains both native type and type alias that are from subdomains.
         let mut type_ast_map = HashMap::new();
         for type_ast in domain_ast.types.iter() {
-            let name = type_ast.name().unwrap();
+            let name = match type_ast.name() {
+                Some(name) => name,
+                None => {
+                    // When it's an inline type definition.
+                    generator.generate_name()
+                }
+            };
             type_ast_map.insert(name, type_ast.clone());
         }
 
-        for type_name in type_ast_map.keys() {
-            self.create_type(type_name.clone(), &type_ast_map, &mut type_map);
+        let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
+        for type_name in type_names {
+            self.create_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
         let mut domain = Domain {
