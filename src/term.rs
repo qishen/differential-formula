@@ -23,7 +23,6 @@ use crate::util::*;
 pub trait FormulaTerm {}
 
 
-// Ignore alias field when calculate hash and compare equality.
 #[derive(Derivative)]
 #[derivative(Hash)]
 #[derivative(PartialEq)]
@@ -34,6 +33,7 @@ pub trait FormulaTerm {}
 pub struct Composite {
     pub sort: Arc<Type>,
     pub arguments: Vec<Arc<Term>>,
+    // Ignore `alias` when check equality or compute hash as one term may have multiple alias.
     #[derivative(Hash="ignore")]
     #[derivative(PartialEq="ignore")]
     //#[derivative(Eq="ignore")]
@@ -448,6 +448,7 @@ impl Term {
     
     }
 
+    // Traverse the term recursively to find the pattern without mutating the found term.
     pub fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
     where F1: Fn(&Term) -> bool, F2: Fn(&Term)
     {
@@ -456,6 +457,8 @@ impl Term {
         }
 
         // Recursively match all arguments in the composite term even the term is already matched.
+        // For example: List ::= new (content: Integer, next: List + {NIL}). We can write a pattern 
+        // like List(a, b) that not only match List(1, List(2, NIL)) but also match its child List(2, NIL).
         match self {
             Term::Composite(c) => {
                 for arg in c.arguments.iter() {
@@ -475,7 +478,6 @@ impl Term {
             logic(self);
         }
 
-        // Recursively match all arguments in the composite term even the term is already matched.
         match self {
             Term::Composite(c) => {
                 for arg_arc in c.arguments.iter_mut() {
@@ -486,38 +488,34 @@ impl Term {
             _ => {}
         };
     }
-    
-    /// Recursively check if two terms have the same structure and variable matches all terms.
-    pub fn match_with(&self, term: &Term) -> bool {
-        match self {
-            Term::Composite(c) => {
-                // Recursively compare every pair of arguments.
-                match term {
-                    Term::Composite(tc) => {
-                        if c.sort != tc.sort { return false; }
-                        for i in 0 .. c.arguments.len() {
-                            let arg1 = c.arguments.get(i).unwrap();
-                            let arg2 = tc.arguments.get(i).unwrap();
-                            if !arg1.match_with(arg2) { return false; }
-                        }
-                        return true;
-                    },
-                    Term::Variable(_) => { return true; },
-                    Term::Atom(_) => { return false; },
-                };
-            },
-            Term::Variable(_) => {
-                return true; // Variable matches all terms.
-            },
-            Term::Atom(a) => {
-                if let Term::Variable(_) = term {
-                    return true; // Variable matches all terms.
-                }
-                return self == term;
-            },
-        };
-    }
 
+
+    pub fn propagate_binding<T>(&self, map: &T) -> Option<Arc<Term>>
+    where T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        // Make a clone and mutate the term when pattern matched.
+        let mut term = self.clone();
+        term.traverse_mut(
+            &|term| {
+                if map.contains_gkey(term) || map.contains_gkey(term.root()) { return true; } 
+                else { return false; }
+            },
+            &mut |mut term| {
+                if map.contains_gkey(term) {
+                    let replacement: &Term = map.gget(term).unwrap().borrow();
+                    *term = replacement.clone();
+                } else {
+                    // Dig into the root term to find the subterm by labels. 
+                    let root = term.root();
+                    let root_term = map.gget(root).unwrap();
+                    // *term = Term::find_subterm(root_term.clone(), arg_borrowed).unwrap();
+                }
+            }
+        );
+
+        Some(Arc::new(term))
+    }
+    
     /// Propagate the binding to a term (only works for composite term) and return a new term. 
     /// The map must implement GenericMap with the type of both key and value restricted to Arc<Term>.
     pub fn propagate_bindings<T>(&self, map: &T) -> Option<Arc<Term>> 

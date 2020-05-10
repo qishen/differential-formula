@@ -64,10 +64,11 @@ impl<FM: FormulaModule> Session<FM> {
         self.step_count += 1;
     }
 
-    pub fn create_term(&self, term_str: &str) -> Option<Arc<Term>> {
-        let term_ast = term(term_str).unwrap().1;
+    pub fn create_term(&self, term_str: &str) -> Option<Term> {
+        // Add an ending to avoid Incomplete Error in the parser.
+        let term_ast = term(&format!("{}{}", term_str, "~")[..]).unwrap().1;
         let term = term_ast.to_term(&self.module);
-        Some(Arc::new(term))
+        Some(term)
     }
 
     pub fn add_term(&mut self, term: Arc<Term>) {
@@ -132,6 +133,12 @@ impl DDEngine {
             let domain = self.env.domain_map.get_mut(module_name).unwrap();
             let rule = rule_ast.to_rule(domain);
             domain.rules.push(rule);
+        } else if self.env.model_map.contains_key(module_name) {
+            // Every model has a deep copy of the domain so models are actually detached from
+            // the original domain and it is safe to modify the domain owned by the model.
+            let model = self.env.model_map.get_mut(module_name).unwrap();
+            let rule = rule_ast.to_rule(&model.domain);
+            model.domain.rules.push(rule);
         } else {
             return false;
         }

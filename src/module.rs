@@ -124,7 +124,7 @@ impl FormulaModule for Transformation {
     }
 
     fn rules(&self) -> Vec<Rule> {
-        self.rules().clone()
+        self.transform.rules().clone()
     }
 
     fn conformance_rules(&self) -> Vec<Rule> {

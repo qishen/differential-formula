@@ -7,6 +7,7 @@ use differential_formula::type_system::*;
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::collections::HashMap;
 
 use rand::{Rng, SeedableRng, StdRng};
@@ -24,8 +25,7 @@ fn load_program(file_path: &str) -> DDEngine {
 
 #[test]
 fn test_ddengine_1() {
-    let rule = "Path(a, b) :- Edge(a, b).
-        //Path(a, c) :- Path(a, b), Path(b, c).";
+    let rule = "Path(a, b) :- Edge(a, b).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -45,9 +45,7 @@ fn test_ddengine_2() {
 
 #[test]
 fn test_ddengine_3() {
-    let rule = "
-        Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
-    ";
+    let rule = "Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -57,14 +55,14 @@ fn test_ddengine_3() {
 
 #[test]
 fn test_ddengine_4() {
-    let rule = "
-        Path(a, b) :- Edge(a, b).
-        Path(a, c) :- Path(a, b), Path(b, c).
-        Nocycle(u) :- u is Node(_), no Path(u, u).
-    ";
+    let rule1 = "Path(a, b) :- Edge(a, b).";
+    let rule2 = "Path(a, c) :- Path(a, b), Path(b, c).";
+    let rule3 = "Nocycle(u) :- u is Node(_), no Path(u, u).";
 
     let mut engine = load_program("./tests/testcase/p0.4ml");
-    engine.add_rule("m", rule);
+    engine.add_rule("m", rule1);
+    engine.add_rule("m", rule2);
+    engine.add_rule("m", rule3);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
     let mut session = Session::new(m, &engine);
     session.load();
@@ -88,10 +86,7 @@ fn test_ddengine_4() {
 
 #[test]
 fn test_ddengine_5() {
-    let rule = "
-        Line(a, b, c, d) :- Edge(a, b), Edge(c, d).
-    ";
-
+    let rule = "Line(a, b, c, d) :- Edge(a, b), Edge(c, d).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -102,9 +97,7 @@ fn test_ddengine_5() {
 
 #[test]
 fn test_ddengine_6() {
-    let rule = "
-        TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).
-    ";
+    let rule = "TwoEdge(x, y) :- x is Edge(a, b), y is Edge(b, c).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -114,10 +107,7 @@ fn test_ddengine_6() {
 
 #[test]
 fn test_ddengine_6x() {
-    let rule = "
-        TwoEdge(x, y) :- x is Edge(_, _), y is Edge(_, _).
-    ";
-
+    let rule = "TwoEdge(x, y) :- x is Edge(_, _), y is Edge(_, _).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -127,8 +117,7 @@ fn test_ddengine_6x() {
 
 #[test]
 fn test_ddengine_7() {
-    let rule = "
-        TwoEdge(x, x, square) :- x is Edge(c, d), 
+    let rule = "TwoEdge(x, x, square) :- x is Edge(c, d), 
                                  aggr = count({Edge(a, a), b | Edge(a, b)}), 
                                  square = aggr * aggr, aggr * 2 = 20 .
     ";
@@ -150,9 +139,7 @@ fn test_ddengine_7() {
 
 #[test]
 fn test_ddengine_7x() {
-    let rule = "
-        Node(num) :- x is Node(_), num = aggr + 100, aggr = maxAll(1000, { k | Edge(_, Node(k)) }).
-    ";
+    let rule = "Node(num) :- x is Node(_), num = aggr + 100, aggr = maxAll(1000, { k | Edge(_, Node(k)) }).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -172,10 +159,7 @@ fn test_ddengine_7x() {
 
 #[test]
 fn test_ddengine_8() {
-    let rule = "
-        Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).
-    ";
-
+    let rule = "Edge(x.src, d) :- x is Edge(a, b), y is Edge(b, c), Edge(y.dst, d).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -185,9 +169,7 @@ fn test_ddengine_8() {
 
 #[test]
 fn test_ddengine_8x() {
-    let rule = "
-        Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).
-    ";
+    let rule = "Edge(a, c) :- x is Edge(a, y.src), y is Edge(x.dst, c).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -199,9 +181,8 @@ fn test_ddengine_8x() {
 // TODO: Fix the constraint classification in rule.
 fn test_ddengine_9() {
     // Let's try a nested aggregation.
-    let rule = "
-    TwoEdge(x, x, num) :- x is Edge(c, d), aggr1 = count({ n | n is Node(_), aggr2 = count({ x | x is Edge(a, b) }) }), num = aggr1 * 100 .
-    ";
+    let rule = "TwoEdge(x, x, num) :- x is Edge(c, d), 
+    aggr1 = count({ n | n is Node(_), aggr2 = count({ x | x is Edge(a, b) }) }), num = aggr1 * 100 .";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -212,10 +193,7 @@ fn test_ddengine_9() {
 
 #[test]
 fn test_ddengine_10() {
-    let rule = "
-    Node(num) :- num = aggr * 1000, aggr = count({Edge(a, a), b | Edge(a, b)}).
-    ";
-
+    let rule = "Node(num) :- num = aggr * 1000, aggr = count({Edge(a, a), b | Edge(a, b)}).";
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -265,7 +243,7 @@ fn test_transform_del() {
     session.load();
 
     let v4 = session.create_term("GraphIn.V(4)").unwrap();
-    session.add_term(v4)
+    session.add_term(Arc::new(v4))
 }
 
 #[test]
@@ -319,8 +297,8 @@ fn test_incremental_transitive_closure() {
         let num1 = rng1.gen_range(0, nodes);
         let num2 = rng1.gen_range(0, nodes);
         let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
-        let edge_arc = session.create_term(&edge_str).unwrap();
-        terms.push(edge_arc);
+        let edge = session.create_term(&edge_str).unwrap();
+        terms.push(Arc::new(edge));
     }
 
     println!("Compute transitive closure with {} nodes and {} edges", nodes, edges);
@@ -333,8 +311,8 @@ fn test_incremental_transitive_closure() {
         let num1 = rng1.gen_range(0, nodes);
         let num2 = rng1.gen_range(0, nodes);
         let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
-        let edge_arc = session.create_term(&edge_str).unwrap();
-        updated_terms.push(edge_arc);
+        let edge = session.create_term(&edge_str).unwrap();
+        updated_terms.push(Arc::new(edge));
     }
     let timer = std::time::Instant::now();
     session.add_terms(updated_terms.clone());

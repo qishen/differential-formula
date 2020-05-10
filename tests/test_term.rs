@@ -21,21 +21,12 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 }
 
 
-fn parse_program(program: &str, model_name: &str) -> Model {
+fn parse_program(program: &str, model_name: &str) -> (Model, DDEngine) {
     let mut engine = DDEngine::new();
     engine.inspect = true;
     engine.install(program.to_string());
     let model = engine.env.get_model_by_name(model_name).unwrap().clone();
-    model
-}
-
-fn create_term_map(model: Model, names: Vec<&str>) -> HashMap<String, Term> {
-    let mut term_map = HashMap::new();
-    for name in names {
-        let term = model.get_term_by_name(name);
-        term_map.insert(name.to_string(), term.clone());
-    }
-    term_map
+    (model, engine)
 }
 
 #[test]
@@ -67,62 +58,70 @@ fn test_term_bindings() {
         }
     ";
 
-    let model = parse_program(program, "g");
-    let names = vec![
-        "n1", "n1x", "n2", "n2x", "n3", "e1", "e1x", "e2", "e2x", "te1", 
-        "nv1", "ev1", "ev2", "ev3", "tev1"
-    ];
+    let (model, engine) = parse_program(program, "g");
+    let mut session = Session::new(model.clone(), &engine);
 
-    let term_map = create_term_map(model, names);
+    let n1 = model.get_term_by_name("n1");
+    let n1x = model.get_term_by_name("n1x");
+    let n2 = model.get_term_by_name("n2");
+    let n2x = model.get_term_by_name("n2x");
+    let n3 = model.get_term_by_name("n3");
+    let e1 = model.get_term_by_name("e1");
+    let e1x = model.get_term_by_name("e1x");
+    let e2 = model.get_term_by_name("e2");
+    let e2x = model.get_term_by_name("e2x");
+    let te1 = model.get_term_by_name("te1");
 
-    let n1 = term_map.get("n1").unwrap();
-    let n1x = term_map.get("n1x").unwrap();
-    let n2 = term_map.get("n2").unwrap();
-    let n2x = term_map.get("n2x").unwrap();
-    let n3 = term_map.get("n3").unwrap();
-    let e1 = term_map.get("e1").unwrap();
-    let e1x = term_map.get("e1x").unwrap();
-    let e2 = term_map.get("e2").unwrap();
-    let e2x = term_map.get("e2x").unwrap();
-    let te1 = term_map.get("te1").unwrap();
-
-    let nv1 = term_map.get("nv1").unwrap();
-    let ev1 = term_map.get("ev1").unwrap();
-    let ev2 = term_map.get("ev2").unwrap();
-    let ev3 = term_map.get("ev3").unwrap();
-    let tev1 = term_map.get("tev1").unwrap();
+    let nv1 = model.get_term_by_name("nv1");
+    let ev1 = model.get_term_by_name("ev1");
+    let ev2 = model.get_term_by_name("ev2");
+    let ev3 = model.get_term_by_name("ev3");
+    let tev1 = model.get_term_by_name("tev1");
 
 
-    // -------- Test Term Equality -------- //
+    println!("// -------- Test Term Equality -------- //");
     assert_eq!(n1, n1x);
     assert_eq!(e1, e1x);
     assert_eq!(e2, e2x);
 
-    let v1: Term = Variable::new("x".to_string(), vec![]).into();
-    let v1x: Term = Variable::new("x".to_string(), vec![]).into();
-    let v2: Term = Variable::new("x".to_string(), vec!["y".to_string(), "z".to_string()]).into();
-    let v2x: Term = Variable::new("x".to_string(), vec!["y".to_string(), "z".to_string()]).into();
+    // Add random alias to `n1y` and see if it's still equal to `n1`.
+    let mut n1y = session.create_term("Node(1)").unwrap();
+    if let Term::Composite(c) = &mut n1y {
+        c.alias = Some("hello".to_string());
+    }
+    assert_eq!(n1, &n1y);
+    println!("{} is equal to {}", n1, n1y);
+
+    let v1 = session.create_term("x").unwrap();
+    let v1x = session.create_term("x").unwrap();
+    let v2 = session.create_term("x.y.z").unwrap(); 
+    let v2x = session.create_term("x.y.z").unwrap();
 
     // The root is a term without fragments.
-    assert_eq!(v2.root(), &v1);
+    assert_eq!(v2.root(), v1.borrow());
 
     // Variable terms with same root but different fragments.
     assert_ne!(v1, v2);
 
 
-    // -------- Test Term Replacement -------- //
-    assert_eq!(nv1.match_with(n1), true);
+    println!("// -------- Test Term Replacement -------- //");
     
-    let x: Term = Variable::new("x".to_string(), vec![]).into();
-    let y: Term = Variable::new("y".to_string(), vec![]).into();
+    let x = session.create_term("x").unwrap();
+    let y = session.create_term("y").unwrap();
+    let xy = session.create_term("x.y").unwrap();
+
     // Create a copy and replace variable `x` and `y` with terms.
-    let mut ev1_copy = ev1.clone();
-    ev1_copy.replace(&x, n1);
-    ev1_copy.replace(&y, n2);
-    assert_eq!(&ev1_copy, e1);
+    let mut ev1_0 = ev1.clone();
+    let mut ev1_1 = ev1_0.clone();
+    ev1_1.replace(&x, n1);
+    println!("Replace {} in {} with {} and finally get {}", x, ev1_0, n1, ev1_1);
+    let mut ev1_2 = ev1_1.clone();
+    ev1_2.replace(&y, n2);
+    println!("Replace {} in {} with {} and finally get {}", y, ev1_1, n2, ev1_2);
+    assert_eq!(&ev1_2, e1);
 
 
-    // -------- Test Term Bindings -------- //
+    println!("// -------- Test Term Bindings -------- //");
 
     // Node(x) -> Node(1)
     let binding1 = nv1.get_bindings(&Arc::new(n1.clone())).unwrap();
@@ -138,32 +137,42 @@ fn test_term_bindings() {
     let new_n1 = nv1.propagate_bindings(&binding1).unwrap();
     let new_e1 = ev1.propagate_bindings(&binding2).unwrap();
 
-    //assert_eq!(n1, new_n1.borrow());
-    //assert_eq!(e1, new_e1.borrow());
+    assert_eq!(n1, new_n1.borrow());
+    assert_eq!(e1, new_e1.borrow());
 
-    println!("{:?}", binding1);
-    println!("{:?}", binding2);
-    println!("{:?}", binding3);
-    println!("{:?}", binding4);
-    println!("{:?}", binding5);
+    println!("Bind {} to {} and get {:?}", nv1, n1, binding1);
+    println!("Bind {} to {} and get {:?}", ev1, e1, binding2);
+    println!("Bind {} to {} and get {:?}", ev2, e1, binding3);
+    println!("Bind {} to {} and get {:?}", ev3, e1, binding4);
+    println!("Bind {} to {} and get {:?}", tev1, te1, binding5);
+
+
+    println!("// -------- Test Extension on Term Bindings -------- //");
     
-    // Testing on extension of bindings.
-    let var: Term = Variable::new("x".to_string(), vec!["name".to_string()]).into();
-    Term::update_binding(&Arc::new(var.clone()), &mut binding2);
-    let atom1: Term = Atom::Int(BigInt::from_i64(1).unwrap()).into();
-    assert_eq!(binding2.get(&var).unwrap(), &Arc::new(atom1));
-    println!("Updated binding {:?}", binding2);
+    // Testing on extension of bindings when the bindings has key `x` but wants to extend
+    // the binding with key `x.y` or `x.y.z` which represent the subterms derived from the 
+    // term `x` points to.
+    let var = session.create_term("x.name").unwrap();
+    println!("Original binding: {:?}", binding2);
 
-    let var1: Term = Variable::new("x".to_string(), vec!["src".to_string()]).into();
-    let varx: Term = Variable::new("x".to_string(), vec![]).into();
-    let var2: Term = Variable::new("x".to_string(), vec!["src".to_string(), "name".to_string()]).into();
+    Term::update_binding(&Arc::new(var.clone()), &mut binding2);
+    let atom1 = session.create_term("1").unwrap();
+
+    assert_eq!(binding2.get(&var).unwrap(), &Arc::new(atom1));
+    println!("Updated binding: {:?}", binding2);
+
+    let var1 = session.create_term("x.src").unwrap();
+    let varx = session.create_term("x").unwrap();
+    let var2 = session.create_term("x.src.name").unwrap();
+    println!("Original binding: {:?}", binding5);
+
     Term::update_binding(&Arc::new(var1.clone()), &mut binding5);
     binding5.remove(&Arc::new(varx));
+
     Term::update_binding(&Arc::new(var2), &mut binding5);
     println!("Updated binding {:?}", binding5);
 }
 
-/*
 #[test]
 fn test_subterm() {
     let program = "
@@ -184,41 +193,54 @@ fn test_subterm() {
         }
     ";
 
-    let model = parse_program(program, "g");
-    let n1 = term_map.get("n1");
-    let n2 = term_map.get("n2");
-    let x1 = term_map.get("x1");
-    let x2 = term_map.get("x2");
+    let (model, engine) = parse_program(program, "g");
+    let session = Session::new(model.clone(), &engine);
 
-    let te1 = term_map.get("te1");
-    let te2 = term_map.get("te2");
-    let v0: Term = Variable::new("x".to_string(), vec!["one".to_string()]).into();
-    let v0x: Term = Variable::new("x".to_string(), vec!["wrong".to_string()]).into();
-    let v1: Term = Variable::new("x".to_string(), vec!["one".to_string(), "src".to_string()]).into();
-    let v2: Term = Variable::new("y".to_string(), vec!["two".to_string(), "dst".to_string()]).into();
-    let v2x: Term = Variable::new("y".to_string(), vec!["two".to_string(), "dst".to_string(), "wrong".to_string()]).into();
+    let n1 = model.get_term_by_name("n1");
+    let n2 = model.get_term_by_name("n2");
+    let x1 = model.get_term_by_name("x1");
+    let x2 = model.get_term_by_name("x2");
+
+    let te1 = model.get_term_by_name("te1");
+    let te2 = model.get_term_by_name("te2");
+
+    let v0 = session.create_term("x.one").unwrap();
+    let v0x = session.create_term("x.wrong").unwrap();
+    let v1 = session.create_term("x.one.src").unwrap();
+    let v2 = session.create_term("y.two.dst").unwrap();
+    let v2x = session.create_term("y.two.dst.wrong").unwrap();
+
+    println!("// -------- Test Finding Subterm -------- //");
 
     let subterm1_arc = Term::find_subterm(Arc::new(te1.clone()), &v0).unwrap();
     let subterm1x_arc = Term::find_subterm_by_labels(Arc::new(te1.clone()), &vec!["one".to_string()]).unwrap();
     let subterm1: &Term = subterm1_arc.borrow();
     let subterm1x: &Term = subterm1x_arc.borrow();
+
     assert_eq!(subterm1, x1);
+    println!("Use {} to find subterm in {} and the result is {}", v0, te1, subterm1);
+
     assert_eq!(subterm1x, x1);
+    println!("Use {:?} to find subterm in {} and the result is {}", vec!["one"], te1, subterm1x);
 
     let subterm2_arc = Term::find_subterm(Arc::new(te1.clone()), &v1).unwrap();
     let subterm2: &Term = subterm2_arc.borrow();
+    println!("Use {} to find subterm in {} and the result is {}", v1, te1, subterm2);
     assert_eq!(subterm2, n1);
 
     let subterm3_arc = Term::find_subterm(Arc::new(te2.clone()), &v2).unwrap();
     let subterm3: &Term = subterm3_arc.borrow();
+    println!("Use {} to find subterm in {} and the result is {}", v2, te2, subterm3);
     assert_eq!(subterm3, n2);
 
     // Given unmatched label at the beginning.
     let subterm4_arc = Term::find_subterm(Arc::new(te1.clone()), &v0x);
+    println!("Use {} to find subterm in {} and the result is {:?}", v0x, te1, subterm4_arc);
     assert_eq!(subterm4_arc, None);
 
     // Given unmatched label at the end.
     let subterm5_arc = Term::find_subterm(Arc::new(te1.clone()), &v2x);
+    println!("Use {} to find subterm in {} and the result is {:?}", v2x, te1, subterm5_arc);
     assert_eq!(subterm5_arc, None);
 
     assert_eq!(v0.has_subterm(&v0), Some(true));
@@ -229,4 +251,4 @@ fn test_subterm() {
     // Only works on comparison between variable terms.
     assert_eq!(v0.has_subterm(&n1), None);
     assert_eq!(n1.has_subterm(&v0), None);
-}*/
+}

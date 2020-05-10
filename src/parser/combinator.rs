@@ -162,6 +162,7 @@ named!(union_typedef<&str, TypeDefAst>,
         subs: separated_list!(
             delimited!(space0, tag!("+"), space0), 
             alt!(typename | enum_typedef_inline)) >>
+        skip >>
         tag!(".") >>
         (parse_union_typedef(Some(t), subs))
     )
@@ -927,8 +928,9 @@ mod tests {
         assert_eq!(typename("yyy ").unwrap().0, " ");
         assert_eq!(typename("b3aab2c ").unwrap().0, " ");
         assert_eq!(typename("left.Node ").unwrap().0, " ");
-        assert_eq!(tagged_type("id : Hello ").unwrap().0, " ");
-        assert_eq!(tagged_type("id : right.Hello ").unwrap().0, " ");
+        // Even the next char is space, it still could be imcomplete because of union types.
+        assert_eq!(tagged_type("id : Hello ~").unwrap().0, " ~");
+        assert_eq!(tagged_type("id : right.Hello ~").unwrap().0, " ~");
     }
 
     #[test]

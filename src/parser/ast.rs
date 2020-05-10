@@ -510,7 +510,7 @@ impl ProgramAst {
             let input_type = type_map.get(&type_ast.name().unwrap()).unwrap();
         }
 
-        let mut transform = Transform {
+        let transform = Transform {
             name: transform_name.clone(),
             type_map,
             rules,
