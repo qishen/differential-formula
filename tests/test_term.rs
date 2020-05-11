@@ -133,6 +133,10 @@ fn test_term_bindings() {
     let binding4 = ev3.get_bindings(&Arc::new(e1.clone())).unwrap();
     // TwoEdge(x, y) -> TwoEdge(Edge(n1, n2), Edge(n2, n3))
     let mut binding5 = tev1.get_bindings(&Arc::new(te1.clone())).unwrap();
+    // 
+    let edge_uu = session.create_term("Edge(u, u)").unwrap();
+    let binding6 = edge_uu.get_bindings(&Arc::new(e1.clone()));
+    assert_eq!(binding6.clone(), None);
 
     let new_n1 = nv1.propagate_bindings(&binding1).unwrap();
     let new_e1 = ev1.propagate_bindings(&binding2).unwrap();
@@ -145,6 +149,7 @@ fn test_term_bindings() {
     println!("Bind {} to {} and get {:?}", ev2, e1, binding3);
     println!("Bind {} to {} and get {:?}", ev3, e1, binding4);
     println!("Bind {} to {} and get {:?}", tev1, te1, binding5);
+    println!("Bind {} to {} and get {:?}", e1, edge_uu, binding6);
 
 
     println!("// -------- Test Extension on Term Bindings -------- //");

@@ -394,30 +394,30 @@ impl DDEngine {
             });
 
         // Join all positive predicate terms by their shared variables one by one in order.
-        let (mut vars, mut collection) = pos_preds.into_iter().fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
-            let pred: Predicate = pred_constraint.clone().try_into().unwrap();
-            let term = pred.term.clone();
-            let mut vars: OrdSet<Term> = OrdSet::new();
-            vars.extend(term.variables().into_iter().map(|x| x.clone()));
+        let (mut vars, mut collection) = pos_preds.into_iter()
+            .fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
+                let pred: Predicate = pred_constraint.clone().try_into().unwrap();
+                let term = pred.term.clone();
+                let mut vars: OrdSet<Term> = OrdSet::new();
+                vars.extend(term.variables().into_iter().map(|x| x.clone()));
 
-            // Don't forget to add alias variable for the predicate constraint.
-            if let Some(vterm) = pred.alias.clone() {
-                vars.insert(vterm);
-            }
-            
-            let col = self.dataflow_filtered_by_positive_predicate_constraint(
-                models, 
-                pred_constraint.clone(),
-            );
+                // Don't forget to add alias variable for the predicate constraint.
+                if let Some(vterm) = pred.alias.clone() {
+                    vars.insert(vterm);
+                }
+                
+                let col = self.dataflow_filtered_by_positive_predicate_constraint(
+                    models, 
+                    pred_constraint.clone(),
+                );
 
-            if prev_vars.len() != 0 {
-                return self.join_two_bindings(prev_vars, &prev_col, vars, &col);
-            }
-            else {
-                return (vars, col);
-            }
-
-        });
+                if prev_vars.len() != 0 {
+                    return self.join_two_bindings(prev_vars, &prev_col, vars, &col);
+                }
+                else {
+                    return (vars, col);
+                }
+            });
 
         for bin_constraint in temp_rule.ordered_declaration_constraints().into_iter() {
             let binary: Binary = bin_constraint.clone().try_into().unwrap();
@@ -431,7 +431,7 @@ impl DDEngine {
             let var_term_arc = Arc::new(var_term.clone());
 
             // Add the definition term into the list of all variable terms in current rule.
-            vars.insert(var_term.clone());
+            //vars.insert(var_term.clone());
 
             match binary.right {
                 Expr::BaseExpr(right_base_expr) => {
@@ -444,6 +444,9 @@ impl DDEngine {
                                 models, 
                                 &setcompre
                             );
+
+                            // Add declaration variable into the set of all vars after evaluation of setcompre
+                            vars.insert(var_term.clone());
                         },
                         _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
                     }
@@ -499,6 +502,8 @@ impl DDEngine {
         // If inner scope and outer scope don't have shared variables then it means they can be handled separately.
         match Term::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
             false => {
+                // Inner scope and outer scope have no shared variables then use the stream produced by set
+                // comprehension to aggregate the terms in the set and return an integer.
                 let aggregation_stream = ordered_inner_collection
                     .map(|x| { ((), x) })
                     .reduce(move |key, input, output| {
@@ -517,7 +522,8 @@ impl DDEngine {
                         let aggregated_result = setcompre_op.aggregate(terms);
                         output.push((vec![aggregated_result], 1));
                     });
-
+                
+                // A production of two streams from inner scope and outer scope.
                 ordered_outer_collection
                     .map(|x| { ((), x) })
                     .join(&aggregation_stream)
@@ -528,6 +534,7 @@ impl DDEngine {
                         binding
                     })
             },
+            // When inner scope and outer scope share some same variables.
             true => {
                 setcompre_var = Arc::new(var.clone());
                 setcompre_default = setcompre.default.clone();
@@ -539,16 +546,21 @@ impl DDEngine {
                     &ordered_inner_collection
                 );
 
+                println!("Split: outer_vars={:?}, inner_vars={:?}", outer_vars, inner_vars);
+
                 // Take binding in the outer scope as key and bindings in inner scope are grouped by the key.
-                let binding_and_aggregation_stream = self.split_binding(&join_stream, outer_vars.clone(), inner_vars.clone())
+                let binding_and_aggregation_stream = self.split_binding(
+                        &join_stream, outer_vars.clone(), inner_vars.clone()
+                    )
+                    .inspect(|x| println!("Before reduce: {:?}", x))
                     .reduce(move |key, input, output| {
                         let mut terms = vec![];
                         for (binding, count) in input.iter() {
                             for head_term in head_terms.iter() {
                                 let term = match head_term {
-                                    Term::Composite(c) => { head_term.propagate_bindings(*binding).unwrap() },
-                                    Term::Variable(v) => { binding.gget(head_term).unwrap().clone() },
-                                    Term::Atom(a) => { Arc::new(head_term.clone()) }
+                                    Term::Composite(_) => { head_term.propagate_bindings(*binding).unwrap() },
+                                    Term::Variable(_) => { binding.gget(head_term).unwrap().clone() },
+                                    Term::Atom(_) => { Arc::new(head_term.clone()) }
                                 };
                                 terms.push((term, count));
                             }
@@ -556,6 +568,9 @@ impl DDEngine {
 
                         let aggregated_result = setcompre_op.aggregate(terms);
                         output.push((vec![aggregated_result], 1));
+                    })
+                    .inspect(|x| {
+                        println!("After reduce: {:?}", x);
                     });
 
                 let binding_with_aggregation_stream = binding_and_aggregation_stream
@@ -610,7 +625,7 @@ impl DDEngine {
                                 let constant = Term::create_constant(constant_name);
                                 new_terms.push(Arc::new(constant));
                             } else {
-                                let mut new_term = head_term.propagate_bindings(&binding).unwrap();
+                                let new_term = head_term.propagate_bindings(&binding).unwrap();
                                 new_terms.push(new_term);
                             }
                         }

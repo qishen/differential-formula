@@ -389,59 +389,49 @@ impl Term {
         T: GenericMap<Arc<Term>, Arc<Term>>
     {
         match self {
-            Term::Atom(sa) => { false }, 
-            Term::Variable(sv) => { true },
+            Term::Atom(sa) => { false }, // Atom cannot be a pattern.
+            Term::Variable(sv) => { 
+                // Detect a conflict in variable binding and return false.
+                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
+                    return false;
+                } 
+                // Skip the don't-care variable represented by underscore.
+                if !self.is_dc_variable() {
+                    // TODO: This is bad and need to implement the same method for Arc<Term>
+                    // to avoid deep clone of the variable.
+                    let var: &Term = self.borrow();
+                    binding.ginsert(Arc::new(var.clone()), term.clone());
+                }
+
+                return true;
+            },
             Term::Composite(sc) => {
                 match term.borrow() {
                     Term::Composite(c) => {
-                        if sc.sort == c.sort {
-                            for i in 0..sc.arguments.len() {
-                                let x = sc.arguments.get(i).unwrap();
-                                let y = c.arguments.get(i).unwrap();
-        
-                                match x.borrow() {
-                                    Term::Atom(xa) => {
-                                        // Atom arguments need to be equal.
-                                        if x != y {
-                                            return false;
-                                        }
-                                    },
-                                    Term::Variable(xv) => {
-                                        if !x.is_dc_variable() {
-                                            binding.ginsert(x.clone(), y.clone());
-                                        }
-                                    },
-                                    Term::Composite(xc) => {
-                                        let mut sub_binding = HashMap::new();
-                                        let has_binding = x.get_bindings_in_place(&mut sub_binding, y);
-                                        if has_binding {
-                                            for (k, v) in sub_binding.drain() {
-                                                // Detect a variable binding conflict and return false immediately.
-                                                if binding.contains_gkey(&k) {
-                                                    if binding.gget(&k).unwrap() != &v {
-                                                        return false;
-                                                    }
-                                                } else {
-                                                    binding.ginsert(k, v);
-                                                }
-                                            }    
-                                        } else {
-                                            // No binding found for current argument.
-                                            return false;
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
+                        if sc.sort != c.sort {
                             return false;
                         }
+
+                        for i in 0..sc.arguments.len() {
+                            let x = sc.arguments.get(i).unwrap();
+                            let y = c.arguments.get(i).unwrap();
+    
+                            match x.borrow() {
+                                Term::Atom(xa) => {
+                                    // Atom arguments need to be equal.
+                                    if x != y { return false; }
+                                },
+                                _ => {
+                                    let has_binding = x.get_bindings_in_place(binding, y);
+                                    if !has_binding { return false; }
+                                }
+                            }
+                        }
                     },
-                    _ => {
-                        return false;
-                    }
+                    _ => { return false; } // Composite pattern won't match atom or variable.
                 };
         
-                true
+                return true;
             },
         }
         
