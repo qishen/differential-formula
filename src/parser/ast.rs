@@ -683,23 +683,12 @@ impl ProgramAst {
             let submodel_name = model_ast.renamed_submodels.get(scope).unwrap();
             self.create_model(submodel_name.clone(), model_map, domain_map);
 
-            // Just make a deep copy since they are all Arc<Term>.
-            let submodel = model_map.get(submodel_name).unwrap();
-            
-            // Copy all renamed terms.
-            for term_arc in submodel.terms.iter() {
-                let renamed_term = term_arc.rename(scope.clone());
-                // Because the renamed term has unique scope so don't need to check duplicates.
-                model_store.insert(Arc::new(renamed_term));
-            }
-
-            // Copy renamed alias map to raw alias map.
-            for (name, term) in submodel.alias_map.iter() {
-                raw_alias_map.insert(
-                    Arc::new(name.rename(scope.clone())), 
-                    Arc::new(term.rename(scope.clone()))
-                );
-            }
+            // TODO: Submodels should be imported as traces.
+            // Just make a deep copy as they are all Arc<Term> and rename the whole model.
+            let mut submodel = model_map.get(submodel_name).unwrap().clone();
+            submodel.rename(scope.clone());
+            model_store.extend(submodel.terms);
+            alias_map.extend(submodel.alias_map);
         }
 
         /* 

@@ -20,7 +20,10 @@ use crate::util::*;
 
 
 #[enum_dispatch(Term)]
-pub trait FormulaTerm {}
+pub trait TermEnum {}
+impl TermEnum for Atom {}
+impl TermEnum for Variable {}
+impl TermEnum for Composite {}
 
 
 #[derive(Derivative)]
@@ -73,9 +76,6 @@ impl Composite {
 }
 
 
-impl FormulaTerm for Composite {}
-
-
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Variable {
     pub root: String,
@@ -115,9 +115,6 @@ impl Variable {
 }
 
 
-impl FormulaTerm for Variable {}
-
-
 #[enum_dispatch]
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Atom {
@@ -147,7 +144,10 @@ pub enum Term {
     Atom
 }
 
-impl FormulaTerm for Atom {}
+pub trait FormulaTerm {
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
+    where T: GenericMap<Arc<Term>, Arc<Term>>;
+}
 
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -205,6 +205,112 @@ impl FormulaExpr for Term {
     }
 }
 
+impl FormulaTerm for Arc<Term> {
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
+    where 
+        T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        match self.borrow() {
+            Term::Atom(sa) => { false }, // Atom cannot be a pattern.
+            Term::Variable(sv) => { 
+                // Detect a conflict in variable binding and return false.
+                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
+                    return false;
+                } 
+                // Skip the don't-care variable represented by underscore.
+                if !self.is_dc_variable() {
+                    // Yep no deep copy here but the code is redundant.
+                    binding.ginsert(self.clone(), term.clone());
+                }
+
+                return true;
+            },
+            Term::Composite(sc) => {
+                match term.borrow() {
+                    Term::Composite(c) => {
+                        if sc.sort != c.sort {
+                            return false;
+                        }
+
+                        for i in 0..sc.arguments.len() {
+                            let x = sc.arguments.get(i).unwrap();
+                            let y = c.arguments.get(i).unwrap();
+    
+                            match x.borrow() {
+                                Term::Atom(xa) => {
+                                    // Atom arguments need to be equal.
+                                    if x != y { return false; }
+                                },
+                                _ => {
+                                    let has_binding = x.get_bindings_in_place(binding, y);
+                                    if !has_binding { return false; }
+                                }
+                            }
+                        }
+                    },
+                    _ => { return false; } // Composite pattern won't match atom or variable.
+                };
+        
+                return true;
+            },
+        }
+    }
+}
+
+impl FormulaTerm for Term {
+    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
+    where 
+        T: GenericMap<Arc<Term>, Arc<Term>>
+    {
+        match self {
+            Term::Atom(sa) => { false }, // Atom cannot be a pattern.
+            Term::Variable(sv) => { 
+                // Detect a conflict in variable binding and return false.
+                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
+                    return false;
+                } 
+                // Skip the don't-care variable represented by underscore.
+                if !self.is_dc_variable() {
+                    // This is bad and need to implement the same method for Arc<Term>
+                    // to avoid deep clone of the variable.
+                    let var: &Term = self.borrow();
+                    binding.ginsert(Arc::new(var.clone()), term.clone());
+                }
+
+                return true;
+            },
+            Term::Composite(sc) => {
+                match term.borrow() {
+                    Term::Composite(c) => {
+                        if sc.sort != c.sort {
+                            return false;
+                        }
+
+                        for i in 0..sc.arguments.len() {
+                            let x = sc.arguments.get(i).unwrap();
+                            let y = c.arguments.get(i).unwrap();
+    
+                            match x.borrow() {
+                                Term::Atom(xa) => {
+                                    // Atom arguments need to be equal.
+                                    if x != y { return false; }
+                                },
+                                _ => {
+                                    let has_binding = x.get_bindings_in_place(binding, y);
+                                    if !has_binding { return false; }
+                                }
+                            }
+                        }
+                    },
+                    _ => { return false; } // Composite pattern won't match atom or variable.
+                };
+        
+                return true;
+            },
+        }
+    }
+}
+
 impl Term {
     /// Given a string create a nullary composite type with no arguments inside
     /// and return the singleton term or constant in other words.
@@ -217,33 +323,30 @@ impl Term {
         Composite::new(Arc::new(nullary_type), vec![], None).into()
     }
 
-    // TODO: it works but has too many copies on its sort.
-    pub fn rename(&self, scope: String) -> Term {
-        let new_term: Term = match self {
-            Term::Composite(c) => {
-                let t = c.sort.as_ref().clone();
-                let new_t = t.rename_type(scope.clone());
-                let mut new_args = vec![];
-                // Recursively rename each one in the arguments.
-                for arg_arc in c.arguments.iter() {
-                    let arg: Term = arg_arc.as_ref().clone();
-                    new_args.push(Arc::new(arg.rename(scope.clone())));
+    pub fn rename(&mut self, scope: String) {
+        self.traverse_mut(
+            &|term| {
+                match term {
+                    Term::Atom(_) => false, // Don't need to rename atom term.
+                    _ => true,
                 }
-                let mut c2 = c.clone();
-                c2.sort = Arc::new(new_t);
-                c2.arguments = new_args;
-                c2.into()
-            },
-            Term::Variable(v) => {
-                // It looks like the renamed variable has fragments with a dot but it actually does not.
-                let mut v2 = v.clone();
-                v2.root = format!("{}.{}", scope, v.root);
-                v2.into()
-            },
-            _ => { self.clone() }
-        };
-
-        new_term
+            }, 
+            &mut |term| {
+                match term {
+                    Term::Variable(v) => {
+                        // It looks like the renamed variable has fragments with a dot 
+                        // but it actually does not. e.g. [x].[y] => [GraphIn.x].[y]
+                        // Still only have one fragment.
+                        v.root = format!("{}.{}", scope, v.root);
+                    },
+                    Term::Composite(c) => {
+                        // TODO: A deep copy of type in every term looks bad.
+                        let new_type = c.sort.rename_type(scope.clone());
+                        c.sort = Arc::new(new_type);
+                    },
+                    _ => {}
+                }
+            });
     }
 
     pub fn is_groundterm(&self) -> bool {
@@ -383,61 +486,6 @@ impl Term {
         }
     }
 
-    /// Assume this method only called by composite term.
-    pub fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
-    where 
-        T: GenericMap<Arc<Term>, Arc<Term>>
-    {
-        match self {
-            Term::Atom(sa) => { false }, // Atom cannot be a pattern.
-            Term::Variable(sv) => { 
-                // Detect a conflict in variable binding and return false.
-                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
-                    return false;
-                } 
-                // Skip the don't-care variable represented by underscore.
-                if !self.is_dc_variable() {
-                    // TODO: This is bad and need to implement the same method for Arc<Term>
-                    // to avoid deep clone of the variable.
-                    let var: &Term = self.borrow();
-                    binding.ginsert(Arc::new(var.clone()), term.clone());
-                }
-
-                return true;
-            },
-            Term::Composite(sc) => {
-                match term.borrow() {
-                    Term::Composite(c) => {
-                        if sc.sort != c.sort {
-                            return false;
-                        }
-
-                        for i in 0..sc.arguments.len() {
-                            let x = sc.arguments.get(i).unwrap();
-                            let y = c.arguments.get(i).unwrap();
-    
-                            match x.borrow() {
-                                Term::Atom(xa) => {
-                                    // Atom arguments need to be equal.
-                                    if x != y { return false; }
-                                },
-                                _ => {
-                                    let has_binding = x.get_bindings_in_place(binding, y);
-                                    if !has_binding { return false; }
-                                }
-                            }
-                        }
-                    },
-                    _ => { return false; } // Composite pattern won't match atom or variable.
-                };
-        
-                return true;
-            },
-        }
-        
-    
-    }
-
     // Traverse the term recursively to find the pattern without mutating the found term.
     pub fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
     where F1: Fn(&Term) -> bool, F2: Fn(&Term)
@@ -480,7 +528,7 @@ impl Term {
     }
 
 
-    pub fn propagate_binding<T>(&self, map: &T) -> Option<Arc<Term>>
+    pub fn propagate_bindings<T>(&self, map: &T) -> Option<Arc<Term>>
     where T: GenericMap<Arc<Term>, Arc<Term>>
     {
         // Make a clone and mutate the term when pattern matched.
@@ -495,70 +543,18 @@ impl Term {
                     let replacement: &Term = map.gget(term).unwrap().borrow();
                     *term = replacement.clone();
                 } else {
+                    // The term here must be a variable term and have fragments like inside A(x.id, y.name).
                     // Dig into the root term to find the subterm by labels. 
                     let root = term.root();
                     let root_term = map.gget(root).unwrap();
-                    // *term = Term::find_subterm(root_term.clone(), arg_borrowed).unwrap();
+                    let val_arc = Term::find_subterm(root_term.clone(), &term).unwrap();
+                    let val: &Term = val_arc.borrow();
+                    *term = val.clone();
                 }
             }
         );
 
         Some(Arc::new(term))
-    }
-    
-    /// Propagate the binding to a term (only works for composite term) and return a new term. 
-    /// The map must implement GenericMap with the type of both key and value restricted to Arc<Term>.
-    pub fn propagate_bindings<T>(&self, map: &T) -> Option<Arc<Term>> 
-    where 
-        T: GenericMap<Arc<Term>, Arc<Term>>,
-    {
-        let new_term = match self {
-            Term::Composite(composite) => {
-                let mut arguments = vec![];
-                for i in 0..composite.arguments.len() {
-                    let arg = composite.arguments.get(i).unwrap();
-                    let arg_borrowed: &Term = arg.borrow();
-                    let new_arg = match arg_borrowed {
-                        Term::Composite(_) => {
-                            arg_borrowed.propagate_bindings(map).unwrap()
-                        },
-                        Term::Variable(_) => {
-                            let root = arg_borrowed.root();
-                            let result;
-                            if map.contains_gkey(arg_borrowed) {
-                                // Find an exact match in hash map and return its value cloned.
-                                result = map.gget(arg).unwrap().clone();
-                            } else if map.contains_gkey(root) {
-                                // Dig into the root term to find the subterm by labels. 
-                                let root_term = map.gget(root).unwrap();
-                                result = Term::find_subterm(root_term.clone(), arg_borrowed).unwrap();
-                            } else {
-                                // No match and just return variable itself.
-                                result = arg.clone();
-                            }
-                            result
-                        },
-                        Term::Atom(a) => { arg.clone() }
-                    };
-
-                    arguments.push(new_arg);
-
-                }
-
-                let new_term = Composite {
-                    sort: composite.sort.clone(),
-                    arguments,
-                    alias: None, // composite.alias.clone(), skip the alias is fine.
-                }.into();
-
-                Some(Arc::new(new_term))
-            },
-            // The function only applies to composite term.
-            Term::Variable(v) => { None },
-            Term::Atom(a) => { None }
-        };
-
-        new_term
     }
 
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
@@ -598,9 +594,7 @@ impl Term {
             _ => {
                 None                
             }
-
         }
-
     }
 
     /// Find the subterm of a composite term when given a variable term with fragments.

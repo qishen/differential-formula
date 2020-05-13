@@ -105,9 +105,9 @@ impl FormulaModule for Transformation {
         // Rename terms in all model params and merge them together.
         let mut merged_terms = HashSet::new();
 
-        for (id, model) in self.input_model_map.iter() {
-            let rename_model = model.rename(id.clone());
-            merged_terms.extend(rename_model.terms);
+        for (id, mut model) in self.input_model_map.clone().into_iter() {
+            model.rename(id);
+            merged_terms.extend(model.terms);
         }
 
         // Some additional terms may be defined in transform even with some %id that need to be replaced.
@@ -311,33 +311,28 @@ impl Model {
         model
     }
 
-    pub fn rename(&self, scope: String) -> Model {
+    pub fn rename(&mut self, scope: String) {
         let renamed_domain = self.domain.rename(scope.clone());
+
         let mut renamed_terms = HashSet::new();
-        let mut renamed_alias_map = HashMap::new();
 
-        for term_arc in self.terms.iter() {
-            let term: Term = term_arc.as_ref().clone();
-            let renamed_term = term.rename(scope.clone());
-            renamed_terms.insert(Arc::new(renamed_term));
+        // IterMut does not work for HashSet.
+        for mut term_arc in self.terms.clone().into_iter() {
+            let term = Arc::make_mut(&mut term_arc);
+            term.rename(scope.clone());
+            renamed_terms.insert(term_arc);
         }
 
-        //  Update alias map while keep the same variables.
-        for (key, term_arc) in self.alias_map.iter() {
-            let term: Term = term_arc.as_ref().clone();
-            let renamed_term = term.rename(scope.clone());
-            let renamed_key = key.rename(scope.clone());
-            renamed_alias_map.insert(Arc::new(renamed_key), Arc::new(renamed_term));
+        for (mut key_arc, mut val_arc) in self.alias_map.clone().into_iter() {
+            let key = Arc::make_mut(&mut key_arc);
+            let val = Arc::make_mut(&mut val_arc);
+            key.rename(scope.clone());
+            val.rename(scope.clone());
         }
+
+        self.terms = renamed_terms;
 
         // TODO: reverse alias map.
-
-        Model::new(
-            format!("{}.{}", scope.clone(), self.model_name),
-            renamed_domain,
-            renamed_terms,
-            renamed_alias_map,
-        )
     }
 
     pub fn get_term_by_name(&self, name: &str) -> &Term {

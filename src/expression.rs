@@ -151,7 +151,14 @@ impl Display for SetCompreOp {
 }
 
 impl SetCompreOp {
-    pub fn aggregate(&self, terms: Vec<(Arc<Term>, &isize)>) -> BigInt {
+    pub fn aggregate<'a, I, T>(&self, terms: T) -> BigInt 
+    where 
+        // `T` represents an iterator of a tuple that the first thing is a reference 
+        // and the second thing is the count.
+        T: Iterator<Item=&'a(&'a I, isize)>,
+        // `I` represents a reference of Formula Term.
+        I: Borrow<Term> + Sized + 'static, 
+    {
         match self {
             SetCompreOp::Count => {
                 let mut num = BigInt::from_i64(0 as i64).unwrap();
@@ -163,7 +170,7 @@ impl SetCompreOp {
             SetCompreOp::Sum => {
                 let mut sum = BigInt::from_i64(0).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = term.borrow();
+                    let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match atom {
@@ -181,7 +188,7 @@ impl SetCompreOp {
             SetCompreOp::MaxAll => {
                 let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = term.borrow();
+                    let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match atom {
@@ -198,7 +205,7 @@ impl SetCompreOp {
             _ => {
                 let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = term.borrow();
+                    let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match atom {

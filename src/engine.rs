@@ -505,34 +505,39 @@ impl DDEngine {
                 // Inner scope and outer scope have no shared variables then use the stream produced by set
                 // comprehension to aggregate the terms in the set and return an integer.
                 let aggregation_stream = ordered_inner_collection
-                    .map(|x| { ((), x) })
-                    .reduce(move |key, input, output| {
+                    .map(move |binding| {
                         let mut terms = vec![];
-                        for (binding, count) in input.iter() {
-                            for head_term in head_terms.iter() {
-                                let term = match head_term {
-                                    Term::Composite(c) => { head_term.propagate_bindings(*binding).unwrap() },
-                                    Term::Variable(v) => { binding.gget(head_term).unwrap().clone() },
-                                    Term::Atom(a) => { Arc::new(head_term.clone()) }
-                                };
-                                terms.push((term, count));
-                            }
+                        for head_term in head_terms.iter() {
+                            let term = match head_term {
+                                Term::Composite(c) => { head_term.propagate_bindings(&binding).unwrap() },
+                                Term::Variable(v) => { binding.gget(head_term).unwrap().clone() },
+                                Term::Atom(a) => { Arc::new(head_term.clone()) }
+                            };
+                            terms.push(term);
                         }
-
-                        let aggregated_result = setcompre_op.aggregate(terms);
-                        output.push((vec![aggregated_result], 1));
+                        terms
+                    })
+                    .flat_map(|term_list| term_list)
+                    .distinct()
+                    .map(|x| ((), x))
+                    .reduce(move |_key, input, output| {
+                        let input_iter = input.iter();
+                        let aggre_result = setcompre_op.aggregate(input_iter);
+                        output.push((vec![aggre_result], 1));
                     });
-                
-                // A production of two streams from inner scope and outer scope.
+
+                // Don't have to do joins between inner and outer scope because they have no shared variables,
+                // only return a collection of binding that maps variable to aggregation result and drop others.
                 ordered_outer_collection
                     .map(|x| { ((), x) })
                     .join(&aggregation_stream)
                     .map(move |(_, (mut binding, nums))| {
                         // Take the first element in num list when operator is count, sum, maxAll, minAll.
-                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
+                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
                         binding.insert(setcompre_var.clone(), Arc::new(num_term));
                         binding
                     })
+                    //.inspect(|x| { println!("No variable sharing after reduce: {:?}", x); })
             },
             // When inner scope and outer scope share some same variables.
             true => {
@@ -546,14 +551,16 @@ impl DDEngine {
                     &ordered_inner_collection
                 );
 
-                println!("Split: outer_vars={:?}, inner_vars={:?}", outer_vars, inner_vars);
+                // println!("Split: outer_vars={:?}, inner_vars={:?}", outer_vars, inner_vars);
 
                 // Take binding in the outer scope as key and bindings in inner scope are grouped by the key.
                 let binding_and_aggregation_stream = self.split_binding(
                         &join_stream, outer_vars.clone(), inner_vars.clone()
                     )
-                    .inspect(|x| println!("Before reduce: {:?}", x))
+                    //.inspect(|x| println!("Before reduce: {:?}", x))
                     .reduce(move |key, input, output| {
+                        // Different bindings may derive the same head term multiple times but the same one
+                        // is counted only once.
                         let mut terms = vec![];
                         for (binding, count) in input.iter() {
                             for head_term in head_terms.iter() {
@@ -562,16 +569,19 @@ impl DDEngine {
                                     Term::Variable(_) => { binding.gget(head_term).unwrap().clone() },
                                     Term::Atom(_) => { Arc::new(head_term.clone()) }
                                 };
-                                terms.push((term, count));
+                                terms.push((term, *count));
                             }
                         }
 
-                        let aggregated_result = setcompre_op.aggregate(terms);
+                        let ref_terms: Vec<(&Arc<Term>, isize)> = terms.iter().map(|(term, count)| {
+                            (term, *count)
+                        }).collect();
+
+                        let aggregated_result = setcompre_op.aggregate(ref_terms.iter());
                         output.push((vec![aggregated_result], 1));
                     })
-                    .inspect(|x| {
-                        println!("After reduce: {:?}", x);
-                    });
+                    //.inspect(|x| { println!("Sharing variable after reduce: {:?}", x); })
+                    ;
 
                 let binding_with_aggregation_stream = binding_and_aggregation_stream
                     .map(move |(mut binding, nums)| {
@@ -600,6 +610,7 @@ impl DDEngine {
                 binding_with_aggregation_stream.concat(&binding_with_default_stream)
             }
         }
+        //.inspect(|x| { println!("Aggregation result: {:?}", x); })
     }
 
     pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, Arc<Term>>, rule: &Rule) 
