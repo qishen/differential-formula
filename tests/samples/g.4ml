@@ -1,4 +1,5 @@
 domain Hello {
+   X ::= {"Hello", 1.123, 2, 4 .. 7, Con, NIL }.
    Hi ::= new (id: Integer).
    Hi(b) :- Hi(a), b = a + 1, b < 10.
 }
@@ -34,7 +35,6 @@ transform SpecialCopy (v: GraphIn.V, GraphIn:: DAGs) returns (GraphOut:: DAGs) {
    GraphOut.V(x) :- GraphIn.V(x), x = v.
    GraphOut.E(x, y) :- GraphIn.E(x, y).
 }
-
 
 domain TwoDAGs extends left:: DAGs, right:: DAGs {
    CrossThing ::= left.Thing + right.Thing.

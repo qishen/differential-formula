@@ -36,8 +36,8 @@ use timely::communication::*;
 fn main() {
     println!("{:?}", std::env::args());
 
-    transitive();
-    transitive_formula();
+    //transitive();
+    //transitive_formula();
 
     /*
     hops();
@@ -54,6 +54,8 @@ fn main() {
         |edges| transitive_closure_dataflow(&edges)
     );*/
 }
+
+/*
 
 fn parse_program() {
 
@@ -350,11 +352,8 @@ fn hops_formula() {
         }
 
         // Parse string and install program in the engine.
-        let env = DDEngine::parse_string(program);
-        engine.install(env);
-        let domain = engine.get_domain("Graph".to_string()).unwrap().clone();
-        let edge = domain.get_type(&"Edge".to_string());
-        let node = domain.get_type(&"Node".to_string());
+        engine.install(program);
+        let domain = engine.env.get_domain_by_name("Graph");
 
         let seed: &[_] = &[1, 2, 3, index];
         let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
@@ -363,6 +362,7 @@ fn hops_formula() {
         for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
             let num1 = rng1.gen_range(0, nodes);
             let num2 = rng1.gen_range(0, nodes);
+            let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
             //println!("{:?}, {:?}", num1, num2);
             let atom1: Term = Atom::Int(BigInt::from(num1)).into();
             let atom2: Term = Atom::Int(BigInt::from(num2)).into();
@@ -421,39 +421,28 @@ fn hops_differential_formula() {
     }
 
     // Parse string and install program in the engine.
-    let env = DDEngine::parse_string(program);
-    engine.install(env);
-    let domain = engine.get_domain("Graph".to_string()).unwrap().clone();
-    let edge = domain.get_type(&"Edge".to_string());
-    let node = domain.get_type(&"Node".to_string());
+    engine.install(program);
+    let domain = engine.env.get_domain_by_name("Graph").unwrap().clone();
+    let m1 = engine.create_empty_model("m1", "Graph").clone();
 
     let seed: &[_] = &[1, 2, 3, index];
     let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
-    //let mut rng2: StdRng = SeedableRng::from_seed(seed);    // rng for edge deletions
 
-    let mut session = engine.create_session("Graph", Some("m"));
+    let mut session = Session::new(m1, &engine);
     let mut terms: Vec<Arc<Term>> = vec![];
 
     // Load up graph data. Round-robin among workers.
     for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
         let num1 = rng1.gen_range(0, nodes);
         let num2 = rng1.gen_range(0, nodes);
-        //println!("{:?}, {:?}", num1, num2);
-        let atom1: Term = Atom::Int(BigInt::from(num1)).into();
-        let atom2: Term = Atom::Int(BigInt::from(num2)).into();
-        let node1: Term = Composite::new(node.clone(), vec![Arc::new(atom1)], None).into();
-        let node2: Term = Composite::new(node.clone(), vec![Arc::new(atom2)], None).into();
-
-        let edge_term: Term = Composite::new(
-            edge.clone(), 
-            vec![Arc::new(node1), Arc::new(node2)], 
-            None).into();
+        let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
+        let edge_term_arc = session.create_term(&edge_str).unwrap();
 
         if inspect {
-            println!("Initial term: {:?}", edge_term);
+            println!("Initial term: {:?}", edge_term_arc);
         }
 
-        terms.insert(0, Arc::new(edge_term));
+        terms.insert(0, edge_term_arc);
     }
     
     let timer = std::time::Instant::now();
@@ -592,7 +581,7 @@ fn transitive_formula() {
         
 
     }).unwrap();
-}
+} */
 
 
 /*fn test_term() {

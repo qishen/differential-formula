@@ -84,8 +84,11 @@ fn test_term_bindings() {
     assert_eq!(e1, e1x);
     assert_eq!(e2, e2x);
 
-    // Add random alias to `n1y` and see if it's still equal to `n1`.
+    // Without alias.
     let mut n1y = session.create_term("Node(1)").unwrap();
+    assert_eq!(n1, &n1y);
+
+    // Add random alias to `n1y` and see if it's still equal to `n1`.
     if let Term::Composite(c) = &mut n1y {
         c.alias = Some("hello".to_string());
     }

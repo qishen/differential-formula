@@ -31,7 +31,7 @@ readonly = "0.1"
 petgraph = "0.5"
 num-iter = "0.1"
 derivative = "1"
-z3 = "0.4.0"
+z3 = {version="0.5.0", features = ["static-link-z3"]}
 
 # clap = "2.33.0"
 # clap v3 is not quite compatible with clap v2 while the documentation is still on v2.
