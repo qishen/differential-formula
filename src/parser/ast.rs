@@ -643,23 +643,27 @@ impl ProgramAst {
                 }
             );
 
-            match &term {
+            // Remove alias from term and return alias.
+            let alias = match &mut term {
                 Term::Composite(c) => {
-                    match &c.alias {
-                        None => {
-                            // if term does not have alias, add it to model store.
-                            raw_terms.push(term);
-                        },
-                        Some(alias) => {
-                            // alias here shouldn't have fragments and add term to model store later.
-                            let vterm: Term = Variable::new(alias.clone(), vec![]).into();
-                            raw_alias_map.insert(Arc::new(vterm), Arc::new(term));
-                        }
-                    }
+                    let alias = c.alias.clone();
+                    c.alias = None;
+                    alias
                 },
-                _ => {},
-            }
+                _ => { None },
+            };
 
+            match alias {
+                None => {
+                    // if term does not have alias, add it to model store.
+                    raw_terms.push(term);
+                },
+                Some(alias) => {
+                    // alias here shouldn't have fragments and add term to model store later.
+                    let vterm: Term = Variable::new(alias, vec![]).into();
+                    raw_alias_map.insert(Arc::new(vterm), Arc::new(term));
+                }
+            }
         }
 
         // TODO: Need to check if they are duplicates from sub-models.

@@ -29,17 +29,18 @@ impl TermEnum for Composite {}
 #[derive(Derivative)]
 #[derivative(Hash)]
 #[derivative(PartialEq)]
+#[derivative(PartialOrd)]
 #[derivative(Eq)]
-//#[derivative(PartialOrd)]
-//#[derivative(Ord)]
-#[derive(Debug, Clone, PartialOrd, Ord, Serialize, Deserialize)]
+#[derivative(Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Composite {
     pub sort: Arc<Type>,
     pub arguments: Vec<Arc<Term>>,
     // Ignore `alias` when check equality or compute hash as one term may have multiple alias.
     #[derivative(Hash="ignore")]
     #[derivative(PartialEq="ignore")]
-    //#[derivative(Eq="ignore")]
+    #[serde(skip)]
+    #[derivative(PartialOrd="ignore")]
     pub alias: Option<String>
 }
 

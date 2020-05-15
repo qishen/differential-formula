@@ -386,6 +386,10 @@ impl DDEngine {
         let pos_preds = temp_rule.predicate_constraints();
 
         let default_vars: OrdSet<Term> = OrdSet::new();
+
+        //let temp_rule2 = temp_rule.clone();
+        //models.inspect(move |x| println!("Model for rule {}: {:?}", temp_rule2, x));
+
         // TODO: find a better way to create an empty collection.
         let default_col = models
             .filter(|x| false)
@@ -394,7 +398,7 @@ impl DDEngine {
             });
 
         // Join all positive predicate terms by their shared variables one by one in order.
-        let (mut vars, mut collection) = pos_preds.into_iter()
+        let (mut vars, collection) = pos_preds.into_iter()
             .fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
                 let pred: Predicate = pred_constraint.clone().try_into().unwrap();
                 let term = pred.term.clone();
@@ -406,10 +410,15 @@ impl DDEngine {
                     vars.insert(vterm);
                 }
                 
+                // let constraint = pred_constraint.clone();
+                // models.inspect(move |x| println!("Models before enter {}: {:?}", constraint, x));
+
                 let col = self.dataflow_filtered_by_positive_predicate_constraint(
                     models, 
                     pred_constraint.clone(),
                 );
+                
+                // col.inspect(move |x| println!("Changed matches for {}: {:?}", constraint, x));
 
                 if prev_vars.len() != 0 {
                     return self.join_two_bindings(prev_vars, &prev_col, vars, &col);
@@ -419,59 +428,64 @@ impl DDEngine {
                 }
             });
 
-        for bin_constraint in temp_rule.ordered_declaration_constraints().into_iter() {
-            let binary: Binary = bin_constraint.clone().try_into().unwrap();
-            // Let's assume every set comprehension must be explicitly declared with a variable on the left side of binary constraint.
-            // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.
+        // Let's assume every set comprehension must be explicitly declared with a variable on the left side 
+        // of binary constraint.
+        // e.g. x = count({a| a is A(b, c)}) before the aggregation result is used else where like x + 2 = 3.
+        // Every derived variable must be declared once before used in other constraints 
+        // e.g. y = (x + x) * x.
+        let updated_collection = temp_rule.ordered_declaration_constraints().into_iter()
+            .fold(collection, |outer_col, constraint| {
+                let binary: Binary = constraint.clone().try_into().unwrap();
+                let left_base_expr: BaseExpr = binary.left.try_into().unwrap();
+                let var_term: Term = left_base_expr.try_into().unwrap();
+                let var_term_arc = Arc::new(var_term.clone());
 
-            // Every derived variable must be declared once before used in other constraints 
-            // e.g. y = (x + x) * x.
-            let left_base_expr: BaseExpr = binary.left.try_into().unwrap();
-            let var_term: Term = left_base_expr.try_into().unwrap();
-            let var_term_arc = Arc::new(var_term.clone());
+                match binary.right {
+                    Expr::BaseExpr(right_base_expr) => {
+                        match right_base_expr {
+                            BaseExpr::SetComprehension(setcompre) => {
+                                let updated_col = self.dataflow_from_set_comprehension(
+                                    var_term.clone(),
+                                    vars.clone(),
+                                    &outer_col, 
+                                    &models, 
+                                    &setcompre
+                                );
 
-            // Add the definition term into the list of all variable terms in current rule.
-            //vars.insert(var_term.clone());
+                                // Add declaration variable into the set of all vars after evaluation of setcompre
+                                vars.insert(var_term.clone());
+                                return updated_col;
+                            },
+                            _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
+                        }
+                    },
+                    Expr::ArithExpr(right_base_expr) => {
+                        // Evaluate arithmetic expression to derive new term and add it to existing binding.
+                        let updated_col = outer_col.map(move |mut binding| {
+                            let num = right_base_expr.evaluate(&binding).unwrap();
+                            let atom_term: Term = Atom::Int(num).into();
+                            binding.insert(var_term_arc.clone(), Arc::new(atom_term));
+                            binding
+                        });
 
-            match binary.right {
-                Expr::BaseExpr(right_base_expr) => {
-                    match right_base_expr {
-                        BaseExpr::SetComprehension(setcompre) => {
-                            collection = self.dataflow_from_set_comprehension(
-                                var_term.clone(),
-                                vars.clone(),
-                                &collection, 
-                                models, 
-                                &setcompre
-                            );
-
-                            // Add declaration variable into the set of all vars after evaluation of setcompre
-                            vars.insert(var_term.clone());
-                        },
-                        _ => {}, // Ignored because it does not make sense to derive new term from single variable term.
+                        vars.insert(var_term.clone());
+                        return updated_col;
                     }
-                },
-                Expr::ArithExpr(right_base_expr) => {
-                    // Evaluate arithmetic expression to derive new term and add it to existing binding.
-                    collection = collection.map(move |mut binding| {
-                        let num = right_base_expr.evaluate(&binding).unwrap();
-                        let atom_term: Term = Atom::Int(num).into();
-                        binding.insert(var_term_arc.clone(), Arc::new(atom_term));
-                        binding
-                    });
                 }
-            }
-        }
 
+                return outer_col;
+            });
+            
         // Since there are no derived terms then directly evaluate the expression to filter binding collection.
-        for bin_constraint in temp_rule.pure_constraints().into_iter() {
-            let binary: Binary = bin_constraint.clone().try_into().unwrap();
-            collection = collection.filter(move |binding| {
+        let final_collection = temp_rule.pure_constraints().into_iter().fold(updated_collection, |col, constraint| {
+            let binary: Binary = constraint.clone().try_into().unwrap();
+            let updated_col = col.filter(move |binding| {
                 binary.evaluate(binding).unwrap()
             });
-        }
+            return updated_col;
+        });
 
-        (vars, collection)
+        (vars, final_collection)
     }
 
     
@@ -498,6 +512,11 @@ impl DDEngine {
         
         // Evaluate constraints in set comprehension and return ordered binding collection.
         let (inner_vars, ordered_inner_collection) = self.dataflow_from_constraints(models, constraints);
+        
+        // models.inspect(|x| println!("Models for inner constraints: {:?}", x));
+        // ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
+        //ordered_inner_collection.inspect(|x| println!("Inner collection {:?}", x));
+        //ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
 
         // If inner scope and outer scope don't have shared variables then it means they can be handled separately.
         match Term::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
@@ -518,29 +537,41 @@ impl DDEngine {
                         terms
                     })
                     .flat_map(|term_list| term_list)
-                    .distinct()
+                    .distinct() // Consolidate the terms derived in the head and remove duplicates.
                     .map(|x| ((), x))
                     .reduce(move |_key, input, output| {
                         let input_iter = input.iter();
                         let aggre_result = setcompre_op.aggregate(input_iter);
                         output.push((vec![aggre_result], 1));
                     });
-
-                // Don't have to do joins between inner and outer scope because they have no shared variables,
-                // only return a collection of binding that maps variable to aggregation result and drop others.
-                ordered_outer_collection
-                    .map(|x| { ((), x) })
-                    .join(&aggregation_stream)
-                    .map(move |(_, (mut binding, nums))| {
-                        // Take the first element in num list when operator is count, sum, maxAll, minAll.
-                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
-                        binding.insert(setcompre_var.clone(), Arc::new(num_term));
-                        binding
-                    })
-                    //.inspect(|x| { println!("No variable sharing after reduce: {:?}", x); })
+                
+                // Don't do joins if the outer scope has no constraints or doesn't generate a binding
+                // because joins with empty collection always return empty.
+                match outer_vars.len() == 0 {
+                    true => {
+                        aggregation_stream.map(move |(_, nums)| {
+                            let mut binding = OrdMap::new();
+                            let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
+                            binding.insert(setcompre_var.clone(), Arc::new(num_term));
+                            binding
+                        })
+                    },
+                    false => {
+                        ordered_outer_collection
+                            .map(|x| { ((), x) })
+                            .join(&aggregation_stream)
+                            .map(move |(_, (mut binding, nums))| {
+                                // Take the first element in num list when operator is count, sum, maxAll, minAll.
+                                let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
+                                binding.insert(setcompre_var.clone(), Arc::new(num_term));
+                                binding
+                            })
+                    }
+                }
+                //.inspect(|x| { println!("No variable sharing after reduce: {:?}", x); })
             },
-            // When inner scope and outer scope share some same variables.
             true => {
+                // When inner scope and outer scope share some same variables.
                 setcompre_var = Arc::new(var.clone());
                 setcompre_default = setcompre.default.clone();
 
@@ -551,6 +582,8 @@ impl DDEngine {
                     &ordered_inner_collection
                 );
 
+                //join_stream.inspect(|x| println!("Joins result: {:?}", x));
+
                 // println!("Split: outer_vars={:?}, inner_vars={:?}", outer_vars, inner_vars);
 
                 // Take binding in the outer scope as key and bindings in inner scope are grouped by the key.
@@ -559,9 +592,7 @@ impl DDEngine {
                     )
                     //.inspect(|x| println!("Before reduce: {:?}", x))
                     .reduce(move |key, input, output| {
-                        // Different bindings may derive the same head term multiple times but the same one
-                        // is counted only once.
-                        let mut terms = vec![];
+                        // Each outer binidng as key has points a list of derived terms from inner scope.
                         for (binding, count) in input.iter() {
                             for head_term in head_terms.iter() {
                                 let term = match head_term {
@@ -569,16 +600,19 @@ impl DDEngine {
                                     Term::Variable(_) => { binding.gget(head_term).unwrap().clone() },
                                     Term::Atom(_) => { Arc::new(head_term.clone()) }
                                 };
-                                terms.push((term, *count));
+                                output.push((term, *count));
                             }
                         }
-
-                        let ref_terms: Vec<(&Arc<Term>, isize)> = terms.iter().map(|(term, count)| {
-                            (term, *count)
-                        }).collect();
-
-                        let aggregated_result = setcompre_op.aggregate(ref_terms.iter());
-                        output.push((vec![aggregated_result], 1));
+                        // Reduce to tuples of (outer_binding, head_term)
+                    })
+                    //.inspect(|x| { println!("Before distinct: {:?}", x); })
+                    .distinct()
+                    //.inspect(|x| { println!("After distinct: {:?}", x); })
+                    .reduce(move |_key, input, output| {
+                        let input_iter = input.iter();
+                        let aggre_result = setcompre_op.aggregate(input_iter);
+                        output.push((vec![aggre_result], 1));
+                        // Reduce to tuples of (outer_binding, aggregation_result).
                     })
                     //.inspect(|x| { println!("Sharing variable after reduce: {:?}", x); })
                     ;
@@ -590,7 +624,7 @@ impl DDEngine {
                         binding.insert(setcompre_var.clone(), Arc::new(num_term));
                         binding
 
-                        // When operator is topk or bottomk.
+                        // When operator is top_k or bottom_k.
                         // TODO: return a list of numeric values but how?
                     });
 
@@ -623,7 +657,9 @@ impl DDEngine {
         let constraints = rule.get_body();
 
         models
+            // .inspect(|x| println!("Model changes: {:?}", x))
             .iterate(|inner| {
+                //inner.inspect(|x| println!("Inner model changes: {:?}", x));
                 //let models = models.enter(&inner.scope());
                 let (_, binding_collection) = self.dataflow_from_constraints(&inner, &constraints);
                 let derived_terms = binding_collection
