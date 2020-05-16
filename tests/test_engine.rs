@@ -200,8 +200,9 @@ fn test_ddengine_9() {
     // There are 5 nodes and 4 edges, so aggr1 should be 9 while the actual number of bindings derived from
     // constraints inside set comprehension is 40 rather than 9 if not consolidated.
     let rule = "TwoEdge(x, x, num) :- x is Edge(c, d), 
-    aggr1 = count({ n, e | e is Edge(_, _), n is Node(_), aggr2 = 4, aggr2 = maxAll(1000, { b | x is Node(b) }) }), 
+    aggr1 = count({ n, e | aggr2 = maxAll(1000, { b | x is Node(b) }), e is Edge(d, _), n is Node(_), aggr2 = 4 }), 
     num = aggr1 * 100 .";
+
     let mut engine = load_program("./tests/testcase/p0.4ml");
     engine.add_rule("m", rule);
     let m = engine.env.get_model_by_name("m").unwrap().clone();
@@ -330,11 +331,18 @@ fn test_incremental_transitive_closure() {
     let edges: usize = std::env::args().nth(4).unwrap_or("50".to_string()).parse().unwrap();
     let updated_edges: usize = std::env::args().nth(5).unwrap_or("20".to_string()).parse().unwrap();
 
-    let m1 = engine.create_empty_model("m1", "Graph").clone();
+    let m1 = engine.create_empty_model("m1", "Graph");
+    engine.install_model(m1);
+    // Add a rule separately into model `m1` to compute transitive closure.
+    let rule0 = "Path(a, b) :- Edge(a, b).";
+    let rule1 = "Path(a, c) :- Path(a, b), Path(b, c).";
+    engine.add_rule("m1", rule0);
+    engine.add_rule("m1", rule1);
+    let m1 = engine.env.get_model_by_name("m1").unwrap().clone();
     let mut session = Session::new(m1, &engine);
     let mut terms = vec![];
 
-    for i in 0 .. edges {
+    for _ in 0 .. edges {
         let num1 = rng1.gen_range(0, nodes);
         let num2 = rng1.gen_range(0, nodes);
         let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
