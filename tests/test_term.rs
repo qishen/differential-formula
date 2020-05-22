@@ -1,5 +1,4 @@
-extern crate differential_formula;
-
+#![type_length_limit="1120927"]
 use std::borrow::Borrow;
 use std::sync::Arc;
 use std::hash::{Hash, Hasher};

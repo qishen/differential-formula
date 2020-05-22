@@ -1,25 +1,28 @@
+#![type_length_limit="1120927"]
 extern crate rand;
-extern crate timely;
-extern crate differential_dataflow;
 
 use std::marker::*;
 use std::sync::Arc;
 use std::hash::Hash;
+use std::collections::BTreeMap;
 use rand::{Rng, SeedableRng, StdRng};
 use num::*;
 use im::OrdMap;
 
 use differential_dataflow::*;
 use differential_dataflow::input::Input;
+use differential_dataflow::operators::Consolidate;
 use differential_dataflow::operators::Iterate;
 use differential_dataflow::operators::Join;
 use differential_dataflow::operators::Threshold;
 use differential_dataflow::operators::arrange::*;
 use differential_dataflow::operators::join::*;
 use differential_dataflow::lattice::Lattice;
+use differential_dataflow::hashable::*;
 
 use differential_formula::term::*;
 use differential_formula::engine::*;
+use differential_formula::util::*;
 
 use timely::dataflow::*;
 use timely::dataflow::scopes::*;
@@ -33,7 +36,7 @@ fn main() {
     //transitive();
     //transitive_formula();
 
-    // RUST_TEST_NOCAPTURE=1 cargo test main -- 500 300 2 false
+    // RUST_TEST_NOCAPTURE=1 cargo test main -- 500 3000 2 false
     hops();
     hops_formula();
     hops_formula_hashmap();
@@ -53,7 +56,7 @@ fn hops_dataflow<G, N>(edges: &Collection<G, (N, N)>, hops: i32) -> Collection<G
 where
     G: Scope,
     G::Timestamp: Lattice+Ord,
-    N: ExchangeData+Hash,
+    N: ExchangeData+Hashable,
 {
     let edges_arranged_by_key = edges.arrange_by_key();
     // Find all starting points and see how far they reach within n hops.
@@ -150,7 +153,11 @@ fn hops() {
 
         let (mut input, probe) = worker.dataflow(|scope| {
             let (input, edges) = scope.new_collection();
-            let probe = hops_dataflow(&edges, hops).probe();
+            let output = hops_dataflow(&edges, hops);
+            if inspect {
+                output.inspect(|x| println!("The output: {:?}", x));
+            }
+            let probe = output.probe();
             (input, probe)
         });
 
@@ -160,9 +167,10 @@ fn hops() {
 
         // Load up graph data. Round-robin among workers.
         for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
-            let num1 = rng1.gen_range(0, nodes);
-            let num2 = rng1.gen_range(0, nodes);
-            input.update((num1, num2), 1);
+            // Using BigInt is slower than primitive integer.
+            let num1 = BigInt::from(rng1.gen_range(0, nodes));
+            let num2 = BigInt::from(rng1.gen_range(0, nodes));
+            input.update((num1.clone(), num2.clone()), 1);
             if inspect {
                 println!("Initial tuple {:?}", (num1, num2));
             }
@@ -182,6 +190,87 @@ fn hops() {
 
 }
 
+// Use a tuple of two Formula terms as data structure but still run on native differential dataflow.
+fn hops_formula() {
+    timely::execute_from_args(std::env::args(), move |worker| {
+
+        let index = worker.index();
+        let peers = worker.peers();
+
+        let nodes: usize = std::env::args().nth(2).unwrap_or("100".to_string()).parse().unwrap_or(100);
+        let edges: usize = std::env::args().nth(3).unwrap_or("200".to_string()).parse().unwrap_or(200);
+        let hops: i32 = std::env::args().nth(4).unwrap_or("2".to_string()).parse().unwrap_or(2);
+        let inspect: bool = std::env::args().nth(5).unwrap_or("false".to_string()).parse().unwrap_or(false);
+
+        let (mut input, probe) = worker.dataflow(|scope| {
+            let (input, edges) = scope.new_collection();
+            let output = hops_dataflow(&edges, hops);
+            if inspect {
+                output.inspect(|x| println!("The output: {:?}", x));
+            }
+            let probe = output.probe();
+            (input, probe)
+        });
+
+        let program = "
+            domain Graph {
+                Node ::= new(name: Integer).
+                Edge ::= new(src: Node, dst: Node).
+                Path ::= new(src: Node, dst: Node).
+                Line ::= new(a: Node, b: Node, c: Node, d: Node).
+                Nocycle ::= new(node: Node).
+                TwoEdge ::= new(first: Edge, second: Edge).
+
+                Edge(x, z) :- Edge(x, y), Edge(y, z).
+            }
+            ".to_string();
+
+        let mut engine = DDEngine::new();
+
+        // Parse string and install program in the engine.
+        engine.install(program);
+        let m = engine.create_empty_model("m", "Graph");
+        let session = Session::new(m, &engine);
+
+        let seed: &[_] = &[1, 2, 3, index];
+        let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
+
+        // Load up graph data. Round-robin among workers.
+        for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
+            let num1 = rng1.gen_range(0, nodes);
+            let num2 = rng1.gen_range(0, nodes);
+
+            let node1 = session.create_term(&format!("Node({})", num1)).unwrap();
+            let node2 = session.create_term(&format!("Node({})", num2)).unwrap();
+
+            let node1_with_hash: HashableWrapper<Term> = node1.clone().into();
+            let node2_with_hash: HashableWrapper<Term> = node2.clone().into();
+            // println!("{:?}", node1_with_hash);
+            let wrapped_node1 = OrdWrapper { item: node1_with_hash };
+            let wrapped_node2 = OrdWrapper { item: node2_with_hash };
+
+            // let edge_tuple = (node1, node2);
+            let edge_tuple = (wrapped_node1, wrapped_node2);
+
+            if inspect {
+                println!("Initial term tuple {:?}", edge_tuple);
+            }
+
+            input.insert(edge_tuple);
+        }
+
+        let timer = ::std::time::Instant::now();
+
+        input.advance_to(1);
+        input.flush();
+        worker.step_while(|| probe.less_than(input.time()));
+
+        if index == 0 {
+            println!("Compute hops in terms finished after {:?}", timer.elapsed());
+        }
+
+    }).unwrap();
+}
 
 // Use native differential formula but each node is a hashmap with formula terms.
 fn hops_formula_hashmap() {
@@ -197,7 +286,11 @@ fn hops_formula_hashmap() {
 
         let (mut input, probe) = worker.dataflow(|scope| {
             let (input, edges) = scope.new_collection();
-            let probe = hops_dataflow(&edges, hops).probe();
+            let output = hops_dataflow(&edges, hops);
+            if inspect {
+                output.inspect(|x| println!("The output: {:?}", x));
+            }
+            let probe = output.probe();
             (input, probe)
         });
 
@@ -231,7 +324,9 @@ fn hops_formula_hashmap() {
         let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
 
         let _x: Term = Variable::new("x".to_string(), vec![]).into();
+        let _y: Term = Variable::new("y".to_string(), vec![]).into();
         let x = Arc::new(_x);
+        let y = Arc::new(_y);
 
         // Load up graph data. Round-robin among workers.
         for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
@@ -242,13 +337,26 @@ fn hops_formula_hashmap() {
             let node1: Term = Composite::new(node.clone(), vec![Arc::new(atom1)], None).into();
             let node2: Term = Composite::new(node.clone(), vec![Arc::new(atom2)], None).into();
 
-            let mut map1 = OrdMap::new();
+            let mut map1 = BTreeMap::new();
             map1.insert(x.clone(), Arc::new(node1.clone()));
+            map1.insert(y.clone(), Arc::new(node1.clone()));
+            //println!("Hash of {:?} is {}", map1, map1.hashed());
+            let wrapped_map1: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map1.into();
 
-            let mut map2 = OrdMap::new();
+            let mut map2 = BTreeMap::new();
             map2.insert(x.clone(), Arc::new(node2.clone()));
+            map2.insert(y.clone(), Arc::new(node2.clone()));
+            //println!("Hash of {:?} is {}", map2, map2.hashed());
+            let wrapped_map2: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map2.into();
 
-            let edge_tuple = (map1, map2);
+            // let map1_with_hash: HashableWrapper<OrdMap<Term, Term>> = map1.clone().into();
+            // let map2_with_hash: HashableWrapper<OrdMap<Term, Term>> = map2.clone().into();
+            // println!("{:?}", node1_with_hash);
+            // let wrapped_map1 = OrdWrapper { item: map1_with_hash };
+            // let wrapped_map2 = OrdWrapper { item: map2_with_hash };
+
+            let edge_tuple = (wrapped_map1, wrapped_map2);
+            // let edge_tuple = (wrapped_map1, wrapped_map2);
 
             if inspect {
                 println!("Initial term tuple {:?}", edge_tuple);
@@ -266,84 +374,6 @@ fn hops_formula_hashmap() {
         if index == 0 {
             println!("Compute hops in hashmaps finished after {:?}", timer.elapsed());
         }
-    }).unwrap();
-}
-
-
-// Use Formula term as data structure but still run on native differential dataflow.
-fn hops_formula() {
-    timely::execute_from_args(std::env::args(), move |worker| {
-
-        let index = worker.index();
-        let peers = worker.peers();
-
-        let nodes: usize = std::env::args().nth(2).unwrap_or("100".to_string()).parse().unwrap_or(100);
-        let edges: usize = std::env::args().nth(3).unwrap_or("200".to_string()).parse().unwrap_or(200);
-        let hops: i32 = std::env::args().nth(4).unwrap_or("2".to_string()).parse().unwrap_or(2);
-        let inspect: bool = std::env::args().nth(5).unwrap_or("false".to_string()).parse().unwrap_or(false);
-
-        let (mut input, probe) = worker.dataflow(|scope| {
-            let (input, edges) = scope.new_collection();
-            let probe = hops_dataflow(&edges, hops).probe();
-            (input, probe)
-        });
-
-        let program = "
-            domain Graph {
-                Node ::= new(name: Integer).
-                Edge ::= new(src: Node, dst: Node).
-                Path ::= new(src: Node, dst: Node).
-                Line ::= new(a: Node, b: Node, c: Node, d: Node).
-                Nocycle ::= new(node: Node).
-                TwoEdge ::= new(first: Edge, second: Edge).
-
-                Edge(x, z) :- Edge(x, y), Edge(y, z).
-            }
-            ".to_string();
-
-        let mut engine = DDEngine::new();
-
-        if inspect {
-            engine.inspect = true;
-        } else {
-            engine.inspect = false;
-        }
-
-        // Parse string and install program in the engine.
-        engine.install(program);
-        let m = engine.create_empty_model("m", "Graph");
-        let session = Session::new(m, &engine);
-
-        let seed: &[_] = &[1, 2, 3, index];
-        let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
-
-        // Load up graph data. Round-robin among workers.
-        for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
-            let num1 = rng1.gen_range(0, nodes);
-            let num2 = rng1.gen_range(0, nodes);
-
-            let node1 = session.create_term(&format!("Node({})", num1)).unwrap();
-            let node2 = session.create_term(&format!("Node({})", num2)).unwrap();
-
-            let edge_tuple = (Arc::new(node1.clone()), Arc::new(node2.clone()));
-
-            if inspect {
-                println!("Initial term tuple {:?}", edge_tuple);
-            }
-
-            input.insert(edge_tuple);
-        }
-
-        let timer = ::std::time::Instant::now();
-
-        input.advance_to(1);
-        input.flush();
-        worker.step_while(|| probe.less_than(input.time()));
-
-        if index == 0 {
-            println!("Compute hops in terms finished after {:?}", timer.elapsed());
-        }
-
     }).unwrap();
 }
 

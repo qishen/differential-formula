@@ -1,7 +1,5 @@
 extern crate num;
 extern crate rand;
-extern crate timely;
-extern crate differential_dataflow;
 
 use std::borrow::*;
 use std::convert::TryInto;

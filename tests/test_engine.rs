@@ -1,5 +1,4 @@
-extern crate differential_formula;
-
+#![type_length_limit="1120927"]
 use differential_formula::term::*;
 use differential_formula::engine::*;
 use differential_formula::module::*;
@@ -199,6 +198,21 @@ fn test_ddengine_9() {
     // Let's try a nested aggregation.
     // There are 5 nodes and 4 edges, so aggr1 should be 9 while the actual number of bindings derived from
     // constraints inside set comprehension is 40 rather than 9 if not consolidated.
+    let rule = "TwoEdge(x, x, num) :- x is Edge(c, d), 
+    aggr1 = count({ n, e | aggr2 = maxAll(1000, { b | x is Node(b) }), e is Edge(_, _), n is Node(_), aggr2 = 4 }), 
+    num = aggr1 * 100 .";
+
+    let mut engine = load_program("./tests/testcase/p0.4ml");
+    engine.add_rule("m", rule);
+    let m = engine.env.get_model_by_name("m").unwrap().clone();
+    let mut session = Session::new(m, &engine);
+    session.load();
+}
+
+#[test]
+fn test_ddengine_9x() {
+    // Let's try a nested aggregation that has shared variable between inner and outer scope.
+    // `e is Edge(d, _)` in which `d` is used in the outer scope as `x is Edge(c, d)`.
     let rule = "TwoEdge(x, x, num) :- x is Edge(c, d), 
     aggr1 = count({ n, e | aggr2 = maxAll(1000, { b | x is Node(b) }), e is Edge(d, _), n is Node(_), aggr2 = 4 }), 
     num = aggr1 * 100 .";

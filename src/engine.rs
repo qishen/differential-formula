@@ -1,24 +1,17 @@
-extern crate rand;
-extern crate timely;
-extern crate differential_dataflow;
-extern crate serde;
-
 use std::borrow::Borrow;
 use std::sync::Arc;
 use std::iter::*;
 use std::vec::Vec;
-use std::convert::TryInto;
-use std::string::String;
-use std::collections::{HashSet, HashMap};
+use std::convert::*;
+use std::collections::{BTreeMap, HashSet, HashMap};
 
-use im::{OrdMap, OrdSet};
+use im::OrdSet;
 
-use timely::dataflow::Scope;
-use timely::dataflow::operators::*;
+use timely::dataflow::*;
 
-use differential_dataflow::{Collection, ExchangeData};
-use differential_dataflow::input::{Input, InputSession};
-use differential_dataflow::operators::join::{Join, JoinCore};
+use differential_dataflow::*;
+use differential_dataflow::input::InputSession;
+use differential_dataflow::operators::join::*;
 use differential_dataflow::operators::*;
 
 use crate::constraint::*;
@@ -26,9 +19,8 @@ use crate::term::*;
 use crate::expression::*;
 use crate::module::*;
 use crate::rule::*;
-use crate::type_system::*;
 use crate::parser::combinator::*;
-use crate::util::GenericMap;
+use crate::util::*;
 
 
 pub struct Session<FM: FormulaModule> {
@@ -59,6 +51,7 @@ impl<FM: FormulaModule> Session<FM> {
         self.input.advance_to(self.step_count);
         self.input.flush();
         while self.probe.less_than(&self.input.time()) {
+            // println!("Current timestamp: {:?}", self.input.time());
             self.worker.step();
         }
         self.step_count += 1;
@@ -217,7 +210,7 @@ impl DDEngine {
         &self,
         terms: &Collection<G, Arc<Term>>, 
         pos_pred_constraint: Constraint,
-    ) -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>> 
+    ) -> Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>> 
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
@@ -252,37 +245,36 @@ impl DDEngine {
 
         binding_collection
     }
-
+    
     pub fn split_binding<G>(
         &self,
-        bindings: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, 
+        bindings: &Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>, 
         left_keys:  OrdSet<Term>,
         right_keys: OrdSet<Term>,
-    ) -> Collection<G, (OrdMap<Arc<Term>, Arc<Term>>, OrdMap<Arc<Term>, Arc<Term>>)>
+    ) -> Collection<G, (QuickHashOrdMap<Arc<Term>, Arc<Term>>, QuickHashOrdMap<Arc<Term>, Arc<Term>>)>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let map_tuple_collection = bindings.map(move |mut binding| {
-            let mut first = OrdMap::new();
-            let mut second = OrdMap::new();
+        bindings.map(move |mut binding| {
+            let mut first = BTreeMap::new();
+            let mut second = BTreeMap::new();
 
-            for var in left_keys.clone().iter() {
-                if let Some((k, v)) = binding.remove_with_key(var) {
-                    first.insert(k, v);
+            let mut btree_map: BTreeMap<Arc<Term>, Arc<Term>> = binding.into();
+            for k in left_keys.clone().into_iter() {
+                if let Some(v) = btree_map.remove(&k) {
+                    first.insert(Arc::new(k), v);
                 }
             }
 
-            for var in right_keys.clone().iter() {
-                if let Some((k, v)) = binding.remove_with_key(var) {
-                    second.insert(k, v);
+            for k in right_keys.clone().into_iter() {
+                if let Some(v) = btree_map.remove(&k) {
+                    second.insert(Arc::new(k), v);
                 }
             }
 
-            (first, second)
-        });
-
-        map_tuple_collection
+            (first.into(), second.into())
+        })
     }
 
     /// Join two binding (OrdMap) collections by considering the same or related variable terms. Split each binding into
@@ -292,11 +284,11 @@ impl DDEngine {
     /// have `x` because you can't derive parent term from subterm backwards. On the other hand binding2 must have `x.y` too.
     pub fn join_two_bindings<G>(&self, 
         prev_vars: OrdSet<Term>,
-        prev_col: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, 
+        prev_col: &Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>, 
         new_vars: OrdSet<Term>,
-        new_col: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
+        new_col: &Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>
     ) 
-    -> (OrdSet<Term>, Collection<G, OrdMap<Arc<Term>, Arc<Term>>>)
+    -> (OrdSet<Term>, Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>)
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -352,22 +344,29 @@ impl DDEngine {
 
         let (lvars, mvars, rvars) = Term::two_sets_intersection(updated_prev_vars, updated_new_vars);
 
+
         // Turn collection of [binding] into collection of [(middle, right)] for joins.
         let m_r_col = self.split_binding(&updated_new_col, mvars.clone(), rvars.clone());
+        // m_r_col.inspect(|x| println!("m_r_col: {:?}", x));
 
         // Turn collection of [binding] into collection of [(middle, left)] for joins.
         let m_l_col = self.split_binding(&updated_prev_col, mvars.clone(), lvars.clone());
+        // m_l_col.inspect(|x| println!("m_l_col: {:?}", x));
 
         let joint_collection = m_l_col
                         .join(&m_r_col)
             .map(move |(inter, (left, right))| {
-                let mut binding = OrdMap::new();
-                binding.extend(left);
-                binding.extend(right);
-                binding.extend(inter);
-                binding
+                let mut binding = BTreeMap::new();
+                let btree_inter: BTreeMap<Arc<Term>, Arc<Term>> = inter.into();
+                let btree_left: BTreeMap<Arc<Term>, Arc<Term>> = left.into();
+                let btree_right: BTreeMap<Arc<Term>, Arc<Term>> = right.into();
+                binding.extend(btree_inter);
+                binding.extend(btree_left);
+                binding.extend(btree_right);
+                binding.into()
             });
 
+        // joint_collection.inspect(|x| println!("Join result: {:?}", x));
         (all_vars, joint_collection)
     } 
 
@@ -376,7 +375,7 @@ impl DDEngine {
         models: &Collection<G, Arc<Term>>, 
         constraints: &Vec<Constraint>
     ) 
-    -> (OrdSet<Term>, Collection<G, OrdMap<Arc<Term>, Arc<Term>>>)
+    -> (OrdSet<Term>, Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>)
     where
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -394,7 +393,9 @@ impl DDEngine {
         let default_col = models
             .filter(|x| false)
             .map(|x| {
-                OrdMap::new()
+                let empty_map = BTreeMap::new();
+                let quick_hash_map: QuickHashOrdMap<Arc<Term>, Arc<Term>> = empty_map.into();
+                quick_hash_map
             });
 
         // Join all positive predicate terms by their shared variables one by one in order.
@@ -461,11 +462,12 @@ impl DDEngine {
                     },
                     Expr::ArithExpr(right_base_expr) => {
                         // Evaluate arithmetic expression to derive new term and add it to existing binding.
-                        let updated_col = outer_col.map(move |mut binding| {
+                        let updated_col = outer_col.map(move |binding_wrapper| {
+                            let mut binding: BTreeMap<Arc<Term>, Arc<Term>> = binding_wrapper.into();
                             let num = right_base_expr.evaluate(&binding).unwrap();
                             let atom_term: Term = Atom::Int(num).into();
                             binding.insert(var_term_arc.clone(), Arc::new(atom_term));
-                            binding
+                            binding.into()
                         });
 
                         vars.insert(var_term.clone());
@@ -493,10 +495,10 @@ impl DDEngine {
         &self,
         var: Term,
         outer_vars: OrdSet<Term>,
-        ordered_outer_collection: &Collection<G, OrdMap<Arc<Term>, Arc<Term>>>, // Binding collection from outer scope of set comprehension.
+        ordered_outer_collection: &Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>, // Binding collection from outer scope of set comprehension.
         models: &Collection<G, Arc<Term>>, // Existing model collection.
         setcompre: &SetComprehension,
-    ) -> Collection<G, OrdMap<Arc<Term>, Arc<Term>>>
+    ) -> Collection<G, QuickHashOrdMap<Arc<Term>, Arc<Term>>>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
@@ -550,21 +552,22 @@ impl DDEngine {
                 match outer_vars.len() == 0 {
                     true => {
                         aggregation_stream.map(move |(_, nums)| {
-                            let mut binding = OrdMap::new();
+                            let mut binding = BTreeMap::new();
                             let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
                             binding.insert(setcompre_var.clone(), Arc::new(num_term));
-                            binding
+                            binding.into()
                         })
                     },
                     false => {
                         ordered_outer_collection
                             .map(|x| { ((), x) })
                             .join(&aggregation_stream)
-                            .map(move |(_, (mut binding, nums))| {
+                            .map(move |(_, (binding_wrapper, nums))| {
                                 // Take the first element in num list when operator is count, sum, maxAll, minAll.
+                                let mut binding: BTreeMap<Arc<Term>, Arc<Term>> = binding_wrapper.into();
                                 let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
                                 binding.insert(setcompre_var.clone(), Arc::new(num_term));
-                                binding
+                                binding.into()
                             })
                     }
                 }
@@ -593,7 +596,7 @@ impl DDEngine {
                     //.inspect(|x| println!("Before reduce: {:?}", x))
                     .reduce(move |key, input, output| {
                         // Each outer binidng as key has points a list of derived terms from inner scope.
-                        for (binding, count) in input.iter() {
+                        for (binding, count) in input.into_iter() {
                             for head_term in head_terms.iter() {
                                 let term = match head_term {
                                     Term::Composite(_) => { head_term.propagate_bindings(*binding).unwrap() },
@@ -606,7 +609,9 @@ impl DDEngine {
                         // Reduce to tuples of (outer_binding, head_term)
                     })
                     //.inspect(|x| { println!("Before distinct: {:?}", x); })
-                    .distinct()
+                    // TODO: Fix the trait bound of Hashable for tuples.
+                    //.distinct() 
+                    //.consolidate()
                     //.inspect(|x| { println!("After distinct: {:?}", x); })
                     .reduce(move |_key, input, output| {
                         let input_iter = input.iter();
@@ -618,11 +623,12 @@ impl DDEngine {
                     ;
 
                 let binding_with_aggregation_stream = binding_and_aggregation_stream
-                    .map(move |(mut binding, nums)| {
+                    .map(move |(binding_wrapper, nums)| {
+                        let mut binding: BTreeMap<Arc<Term>, Arc<Term>> = binding_wrapper.into();
                         // Take the first element in num list when operator is count, sum, maxAll, minAll.
                         let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
                         binding.insert(setcompre_var.clone(), Arc::new(num_term));
-                        binding
+                        binding.into()
 
                         // When operator is top_k or bottom_k.
                         // TODO: return a list of numeric values but how?
@@ -634,11 +640,12 @@ impl DDEngine {
                 // Then simply add default aggregation value into the binding.
                 let binding_with_default_stream = ordered_outer_collection.map(|x| (x, true))
                     .antijoin(&binding_and_aggregation_stream.map(|(x, aggregation)| { x }))
-                    .map(move |(mut outer, _)| {
+                    .map(move |(mut outer_wrapper, _)| {
                         // Add default value of set comprehension to each binding.
+                        let mut outer: BTreeMap<Arc<Term>, Arc<Term>> = outer_wrapper.into();
                         let num_term: Term = Atom::Int(setcompre_default.clone()).into();
                         outer.insert(setcompre_var.clone(), Arc::new(num_term));
-                        outer 
+                        outer.into()
                     });
 
                 binding_with_aggregation_stream.concat(&binding_with_default_stream)
@@ -657,12 +664,13 @@ impl DDEngine {
         let constraints = rule.get_body();
 
         models
-            // .inspect(|x| println!("Model changes: {:?}", x))
+            //.inspect(|x| println!("Model changes: {:?}", x))
             .iterate(|inner| {
-                //inner.inspect(|x| println!("Inner model changes: {:?}", x));
-                //let models = models.enter(&inner.scope());
+                // inner.inspect(|x| println!("Inner model changes: {:?}", x));
+                // let models = models.enter(&inner.scope());
                 let (_, binding_collection) = self.dataflow_from_constraints(&inner, &constraints);
                 let derived_terms = binding_collection
+                    //.inspect(|x| println!("A binding map derived from constraints: {:?}", x))
                     .map(move |binding| {
                         let mut new_terms: Vec<Arc<Term>> = vec![];
                         for head_term in head_terms.iter() {
@@ -678,10 +686,13 @@ impl DDEngine {
                         }
                         new_terms
                     })
-                    .flat_map(|x| x);
+                    .flat_map(|x| x)
+                    // .inspect(|x| println!("Derived head term: {:?}", x))
+                    ;
 
                 inner.concat(&derived_terms).distinct()
             })
+            // .inspect(|x| println!("All terms derived in rule: {:?}", x))
     }
 
     pub fn create_dataflow<FM: FormulaModule>(
@@ -695,15 +706,18 @@ impl DDEngine {
         let stratified_rules = module.stratified_rules();
 
         let probe = worker.dataflow(|scope| {
-            // models are updated after execution of rules from each stratum.
-            let models = input.to_collection(scope).distinct();
+            // Make sure there are no model duplicates.
+            let models = input.to_collection(scope)
+                //.inspect(|x| println!("Model Input: {:?}", x))
+                .distinct();
+
             let mut new_models = models.map(|x| x);
 
             for (i, stratum) in stratified_rules.into_iter().enumerate() {
                 // Rules to be executed are from the same stratum and independent from each other.
                 for rule in stratum.iter() {
                     if self.inspect {
-                        println!("Stratum {}: {}", i, rule);
+                        println!("Rule at Stratum {}: {}", i, rule);
                     }
                     
                     let models_after_rule_execution = self.dataflow_from_single_rule(

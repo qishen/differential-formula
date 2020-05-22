@@ -7,12 +7,19 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::string::String;
+use std::hash::{Hash, Hasher};
 
+use abomonation::Abomonation;
+use fasthash::xx;
 use derivative::*;
 use enum_dispatch::enum_dispatch;
 use im::{OrdMap, OrdSet};
 use num::*;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::ser::*;
+use differential_dataflow::hashable::Hashable;
+use differential_dataflow::hashable::{HashableWrapper, OrdWrapper};
+
 
 use crate::type_system::*;
 use crate::expression::*;
@@ -27,21 +34,52 @@ impl TermEnum for Composite {}
 
 
 #[derive(Derivative)]
-#[derivative(Hash)]
+//#[derivative(Hash)]
 #[derivative(PartialEq)]
 #[derivative(PartialOrd)]
 #[derivative(Eq)]
 #[derivative(Ord)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Composite {
+    // Stash the hash and compare the hash first for ordering.
+    // pub sort: Arc<OrdWrapper<HashableWrapper<Type>>>,
+    // #[derivative(PartialEq="ignore")]
+    // #[derivative(PartialOrd="ignore")]
     pub sort: Arc<Type>,
+
     pub arguments: Vec<Arc<Term>>,
+
+    // TODO: It will go wrong if serialize a rule that has composite with alias.
     // Ignore `alias` when check equality or compute hash as one term may have multiple alias.
-    #[derivative(Hash="ignore")]
+    // #[derivative(Hash="ignore")]
     #[derivative(PartialEq="ignore")]
     #[serde(skip)]
     #[derivative(PartialOrd="ignore")]
     pub alias: Option<String>
+}
+
+/*
+impl Serialize for Composite {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer
+    {
+        let mut s = serializer.serialize_struct("Composite", 3)?;
+        s.serialize_field("sort", &**self.sort)?;
+        s.serialize_field("arguments", &self.arguments)?;
+        s.serialize_field("alias", &self.alias)?;
+        s.end()
+    }
+}
+*/
+
+impl Hash for Composite {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.sort.hash(state);
+        for arg in self.arguments.iter() {
+            arg.hash(state);
+        }
+    }
 }
 
 impl Display for Composite {
@@ -76,12 +114,20 @@ impl Composite {
 
 }
 
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Variable {
     pub root: String,
     pub fragments: Vec<String>,
     pub base_term: Option<Arc<Term>>,
+}
+
+impl Hash for Variable {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.root.hash(state);
+        for elt in self.fragments.iter() {
+            elt.hash(state);
+        }
+    }
 }
 
 impl Display for Variable {
@@ -125,6 +171,39 @@ pub enum Atom {
     Float(BigRational),
 }
 
+/*
+impl Hashable for Atom {
+    type Output = u64;
+    fn hashed(&self) -> Self::Output {
+        let mut hasher: xx::Hasher64 = xx::Hasher64::default();
+        match self {
+            Atom::Int(i) => { 
+                let (sign, byte_vec) = i.to_bytes_be();
+                hasher.write(&byte_vec);
+            },
+            Atom::Str(s) => { hasher.write(&s.into_bytes()) },
+            Atom::Bool(b) => { 
+                if *b { hasher.write("true".as_bytes()); } 
+                else { hasher.write("false".as_bytes()); } 
+            },
+            Atom::Float(f) => { 
+                let (s1, bvec1) = f.denom().to_bytes_be();
+                let (s2, bvec2) = f.numer().to_bytes_be();
+                if let s1 = num::bigint::Sign::Minus {
+                    hasher.write("-".as_bytes());
+                }
+                if let s2 = num::bigint::Sign::Minus {
+                    hasher.write("-".as_bytes());
+                }
+                hasher.write(&bvec1);
+                hasher.write(&bvec2);
+            }
+        }
+        hasher.finish()
+    }
+}
+*/
+
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let atom_str = match self {
@@ -144,6 +223,19 @@ pub enum Term {
     Variable,
     Atom
 }
+
+/*
+impl Hashable for Term {
+    type Output = u64;
+    fn hashed(&self) -> Self::Output {
+        match self {
+            Term::Atom(a) => { a.hashed() },
+            Term::Variable(v) => { v.hashed() },
+            Term::Composite(c) => { c.hashed() }
+        }
+    }
+}
+*/
 
 pub trait FormulaTerm {
     fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
@@ -476,12 +568,13 @@ impl Term {
         }
     }
 
-    /// Use OrdMap to store the binding derived from term matching.
-    pub fn get_ordered_bindings(&self, term: &Arc<Term>) -> Option<OrdMap<Arc<Term>, Arc<Term>>> {
-        let mut bindings= OrdMap::new();
+    /// Use `QuickHashOrdMap` to store the binding derived from term matching. The main advantage of 
+    /// `QuickHashOrdMap` is to stash the hash of the internal hash map and use hash to decide the ordering.
+    pub fn get_ordered_bindings(&self, term: &Arc<Term>) -> Option<QuickHashOrdMap<Arc<Term>, Arc<Term>>> {
+        let mut bindings= BTreeMap::new();
         let has_binding = self.get_bindings_in_place(&mut bindings, term);
         if has_binding {
-            Some(bindings)
+            Some(bindings.into())
         } else {
             None
         }

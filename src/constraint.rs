@@ -1,6 +1,4 @@
 extern crate rand;
-extern crate timely;
-extern crate differential_dataflow;
 extern crate abomonation_derive;
 extern crate abomonation;
 

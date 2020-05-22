@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate nom;
 extern crate num;
-
 extern crate abomonation_derive;
 extern crate abomonation;
 

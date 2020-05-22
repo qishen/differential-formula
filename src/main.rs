@@ -1,6 +1,5 @@
-extern crate differential_formula;
-extern crate clap;
-
+// Give up finding out why and just add what compiler tells me to add.
+#![type_length_limit="1120927"]
 use std::fs;
 use std::io;
 use std::io::Write;
