@@ -13,14 +13,23 @@ exclude = [
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
+
+
 # Enable `bincode` feature to use serde instead of Abomonation for serialization.
-timely = { version = "0.11", features = ["bincode"] } 
+# timely = { version = "0.11.1", features = ["bincode"] } 
+# timely = { path = "../timely-dataflow/timely/", features = ["bincode"] }
+# timely = { path = "../timely-dataflow/timely/" }
+timely = { git = "https://github.com/TimelyDataflow/timely-dataflow", features = ["bincode"] }
+# timely = { git = "https://github.com/TimelyDataflow/timely-dataflow" }
 timely_sort = "0.1.6"
-differential-dataflow = "0.11"
+
+# Internally differential-dataflow use timely as a dependency and they have to be at the same version.
+# differential-dataflow = "0.11.0"
+differential-dataflow = { path = "../differential-dataflow" }
+# differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git" }
 rand = "0.4"
 enum_dispatch = "0.2.0"
 nom = "5"
@@ -31,9 +40,12 @@ readonly = "0.1"
 petgraph = "0.5"
 num-iter = "0.1"
 derivative = "2"
-z3 = {version="0.5.0", features = ["static-link-z3"]}
+# z3 = {version="0.5.0", features = ["static-link-z3"]}
+fasthash = "0.4"
+fnv = "1"
 
 # clap = "2.33.0"
 # clap v3 is not quite compatible with clap v2 while the documentation is still on v2.
 # Here we use the github repo to get the latest clap v3.  
-clap = { git = "https://github.com/clap-rs/clap" }
+# clap = { git = "https://github.com/clap-rs/clap" }
+clap = "3.0.0-beta.1"
