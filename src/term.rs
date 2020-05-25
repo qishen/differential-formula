@@ -1,5 +1,6 @@
 use std::borrow::*;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
@@ -9,22 +10,20 @@ use std::fmt::{Debug, Display};
 use std::string::String;
 use std::hash::{Hash, Hasher};
 
-use abomonation::Abomonation;
-use fasthash::xx;
+use num::*;
+use im::OrdSet;
 use derivative::*;
 use enum_dispatch::enum_dispatch;
-use im::{OrdMap, OrdSet};
-use num::*;
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::ser::*;
-use differential_dataflow::hashable::Hashable;
-use differential_dataflow::hashable::{HashableWrapper, OrdWrapper};
-
+use serde::{Serialize, Deserialize};
+use differential_dataflow::hashable::*;
 
 use crate::type_system::*;
 use crate::expression::*;
 use crate::util::*;
 
+
+// A wrapped Term that cache the hash and use hash to compare ordering first.
+pub type HashedTerm = OrdHashableWrapper<Term>;
 
 #[enum_dispatch(Term)]
 pub trait TermEnum {}
@@ -34,17 +33,14 @@ impl TermEnum for Composite {}
 
 
 #[derive(Derivative)]
-//#[derivative(Hash)]
-#[derivative(PartialEq)]
-#[derivative(PartialOrd)]
-#[derivative(Eq)]
-#[derivative(Ord)]
+// #[derivative(PartialEq)]
+// #[derivative(PartialOrd)]
+// #[derivative(Eq)]
+// #[derivative(Ord)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Composite {
     // Stash the hash and compare the hash first for ordering.
     // pub sort: Arc<OrdWrapper<HashableWrapper<Type>>>,
-    // #[derivative(PartialEq="ignore")]
-    // #[derivative(PartialOrd="ignore")]
     pub sort: Arc<Type>,
 
     pub arguments: Vec<Arc<Term>>,
@@ -52,30 +48,35 @@ pub struct Composite {
     // TODO: It will go wrong if serialize a rule that has composite with alias.
     // Ignore `alias` when check equality or compute hash as one term may have multiple alias.
     // #[derivative(Hash="ignore")]
-    #[derivative(PartialEq="ignore")]
     #[serde(skip)]
-    #[derivative(PartialOrd="ignore")]
+    // #[derivative(PartialEq="ignore")]
+    // #[derivative(PartialOrd="ignore")]
     pub alias: Option<String>
 }
 
-/*
-impl Serialize for Composite {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer
-    {
-        let mut s = serializer.serialize_struct("Composite", 3)?;
-        s.serialize_field("sort", &**self.sort)?;
-        s.serialize_field("arguments", &self.arguments)?;
-        s.serialize_field("alias", &self.alias)?;
-        s.end()
+impl Eq for Composite {} 
+
+impl PartialEq for Composite {
+    fn eq(&self, other: &Self) -> bool {
+        (self.sort.name(), &self.arguments) == (self.sort.name(), &other.arguments)
     }
 }
-*/
+
+impl Ord for Composite {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.sort.name(), &self.arguments).cmp(&(other.sort.name(), &other.arguments))
+    }
+}
+
+impl PartialOrd for Composite {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl Hash for Composite {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.sort.hash(state);
+        self.sort.name().hash(state);
         for arg in self.arguments.iter() {
             arg.hash(state);
         }
@@ -100,7 +101,8 @@ impl Display for Composite {
 }
 
 impl Composite {
-    pub fn new(sort: Arc<Type>, arguments: Vec<Arc<Term>>, alias: Option<String>) -> Self {
+    pub fn new(sort: Arc<Type>, arguments: Vec<Arc<Term>>, alias: Option<String>) -> Self 
+    {
         Composite {
             sort,
             arguments,
@@ -114,10 +116,16 @@ impl Composite {
 
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Derivative)]
+#[derivative(PartialOrd)]
+#[derivative(PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, Serialize, Deserialize)]
 pub struct Variable {
     pub root: String,
     pub fragments: Vec<String>,
+
+    #[derivative(PartialEq="ignore")]
+    #[derivative(PartialOrd="ignore")]
     pub base_term: Option<Arc<Term>>,
 }
 
@@ -161,7 +169,6 @@ impl Variable {
     }
 }
 
-
 #[enum_dispatch]
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Atom {
@@ -170,39 +177,6 @@ pub enum Atom {
     Bool(bool),
     Float(BigRational),
 }
-
-/*
-impl Hashable for Atom {
-    type Output = u64;
-    fn hashed(&self) -> Self::Output {
-        let mut hasher: xx::Hasher64 = xx::Hasher64::default();
-        match self {
-            Atom::Int(i) => { 
-                let (sign, byte_vec) = i.to_bytes_be();
-                hasher.write(&byte_vec);
-            },
-            Atom::Str(s) => { hasher.write(&s.into_bytes()) },
-            Atom::Bool(b) => { 
-                if *b { hasher.write("true".as_bytes()); } 
-                else { hasher.write("false".as_bytes()); } 
-            },
-            Atom::Float(f) => { 
-                let (s1, bvec1) = f.denom().to_bytes_be();
-                let (s2, bvec2) = f.numer().to_bytes_be();
-                if let s1 = num::bigint::Sign::Minus {
-                    hasher.write("-".as_bytes());
-                }
-                if let s2 = num::bigint::Sign::Minus {
-                    hasher.write("-".as_bytes());
-                }
-                hasher.write(&bvec1);
-                hasher.write(&bvec2);
-            }
-        }
-        hasher.finish()
-    }
-}
-*/
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -238,8 +212,59 @@ impl Hashable for Term {
 */
 
 pub trait FormulaTerm {
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
-    where T: GenericMap<Arc<Term>, Arc<Term>>;
+    /// Compare two Formula terms and return a binding if every variable in the first term `a` including 
+    /// itself can match to the terms in the second term `b` at exact the same position. Fail if a conflict
+    /// is detected or two terms have different types. This methods can be called by any borrowed term like
+    /// Box<Term>, Rc<Term> or Arc<Term> that implementes Borrow<Term> and the binding map accepts those
+    /// types too. `K` and `V` must implement trait `From<Term>` because a clone is made and then automatically
+    /// converted to the instance of `K` or `V`.
+    fn get_bindings_in_place<M, K, V, T>(&self, binding: &mut M, term: T) -> bool 
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term> + From<Term> + Clone,
+        V: Borrow<Term> + From<Term> + Clone,
+        T: Borrow<Term> + Clone;
+    
+    /// Simply return a hash map that maps variables to terms.
+    fn get_bindings<T>(&self, term: T) -> Option<HashMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone;
+
+    /// Use `BTreeMap` when there is additional requirement that the map needs to implement `Ord` trait.
+    fn get_ordered_bindings<T>(&self, term: T) -> Option<BTreeMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone;
+
+    /// The same `BTreeMap` wrapped in `OrdHashableWrappr` that stashs the hash of the map and use the
+    /// cached hash to decide the ordering of two maps. Only decide the ordering of two maps by recursively
+    /// digging into two maps when the two hashes are equal in case of hash collision.
+    fn get_cached_bindings<T>(&self, term: T) -> Option<QuickHashOrdMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone;
+    
+    /// Clone itself and mutate the cloned term by replacing variables with terms in the map.
+    fn propagate_bindings<M, K, V>(&self, map: &M) -> Term
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>;
+        
+    /// Find the subterm of a composite term when given a variable term with fragments.
+    fn find_subterm<T>(&self, var_term: T) -> Option<Term> 
+    where 
+        T: Borrow<Term>;
+
+    /// A similar method as find_subterm() method but given a list of labels as the argument to derive subterm.
+    fn find_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term>;
+
+    /// Update the binidng if the term (in borrowed form) is the subterm of one of the variable in the binding,
+    /// e.g. `x.y.z` wants to update the binding with variable `x.y` as key in the binding. A subterm in the term
+    /// that `x.y` points to will be derived and `x.y.z` -> `subterm` will be added into the current binding.
+    fn update_binding<M, K, V>(&self, binding: &mut M) -> bool
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term> + From<Term>,
+        V: Borrow<Term> + From<Term>;
 }
 
 impl Display for Term {
@@ -298,44 +323,56 @@ impl FormulaExpr for Term {
     }
 }
 
-impl FormulaTerm for Arc<Term> {
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
+impl<B> FormulaTerm for B where B: Borrow<Term> {
+    fn get_bindings_in_place<M, K, V, T>(&self, binding: &mut M, term: T) -> bool 
     where 
-        T: GenericMap<Arc<Term>, Arc<Term>>
+        M: GenericMap<K, V>,
+        K: Borrow<Term> + From<Term> + Clone,
+        V: Borrow<Term> + From<Term> + Clone,
+        T: Borrow<Term> + Clone,
     {
         match self.borrow() {
             Term::Atom(sa) => { false }, // Atom cannot be a pattern.
             Term::Variable(sv) => { 
                 // Detect a conflict in variable binding and return false.
-                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
+                if binding.contains_gkey(self.borrow()) && 
+                   binding.gget(self.borrow()).unwrap().borrow() != term.borrow() {
                     return false;
                 } 
-                // Skip the don't-care variable represented by underscore.
-                if !self.is_dc_variable() {
-                    // Yep no deep copy here but the code is redundant.
-                    binding.ginsert(self.clone(), term.clone());
+
+                // Skip the do-not-care variable represented by underscore.
+                if !self.borrow().is_dc_variable() {
+                    // Some deep clones happen here and could affect performance when converting
+                    // borrowed data to owned data.
+                    
+                    // TODO: if K and V are Arc<Term> then don't need to gain ownership and simply make
+                    // a reference copy. While in reality we don't know what are the exact types of 
+                    // B, K, V, T and that's why I have to turn them into owned data first.
+                    let k: K = self.borrow().to_owned().into();
+                    let v: V = term.borrow().to_owned().into();
+                    binding.ginsert(k, v);
                 }
 
                 return true;
             },
             Term::Composite(sc) => {
                 match term.borrow() {
-                    Term::Composite(c) => {
-                        if sc.sort != c.sort {
+                    Term::Composite(tc) => {
+                        if sc.sort != tc.sort || sc.arguments.len() != tc.arguments.len() {
                             return false;
                         }
 
                         for i in 0..sc.arguments.len() {
-                            let x = sc.arguments.get(i).unwrap();
-                            let y = c.arguments.get(i).unwrap();
+                            let x = sc.arguments.get(i).unwrap().clone();
+                            let y = tc.arguments.get(i).unwrap().clone();
     
                             match x.borrow() {
                                 Term::Atom(xa) => {
-                                    // Atom arguments need to be equal.
+                                    // Atom arguments need to be equal otherwise fail.
                                     if x != y { return false; }
                                 },
                                 _ => {
-                                    let has_binding = x.get_bindings_in_place(binding, y);
+                                    let has_binding = x.get_bindings_in_place(binding, y.borrow());
                                     if !has_binding { return false; }
                                 }
                             }
@@ -348,58 +385,136 @@ impl FormulaTerm for Arc<Term> {
             },
         }
     }
-}
 
-impl FormulaTerm for Term {
-    fn get_bindings_in_place<T>(&self, binding: &mut T, term: &Arc<Term>) -> bool 
-    where 
-        T: GenericMap<Arc<Term>, Arc<Term>>
+    fn get_bindings<T>(&self, term: T) -> Option<HashMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone
     {
-        match self {
-            Term::Atom(sa) => { false }, // Atom cannot be a pattern.
-            Term::Variable(sv) => { 
-                // Detect a conflict in variable binding and return false.
-                if binding.contains_gkey(self) && binding.gget(self).unwrap() != term {
-                    return false;
-                } 
-                // Skip the don't-care variable represented by underscore.
-                if !self.is_dc_variable() {
-                    // This is bad and need to implement the same method for Arc<Term>
-                    // to avoid deep clone of the variable.
-                    let var: &Term = self.borrow();
-                    binding.ginsert(Arc::new(var.clone()), term.clone());
+        let mut bindings = HashMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding { Some(bindings) } else { None }
+    }
+
+    fn get_ordered_bindings<T>(&self, term: T) -> Option<BTreeMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone
+    {
+        let mut bindings= BTreeMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding { Some(bindings) } else { None }
+    }
+
+    fn get_cached_bindings<T>(&self, term: T) -> Option<QuickHashOrdMap<Term, Term>>
+    where
+        T: Borrow<Term> + Clone
+    {
+        let mut bindings= BTreeMap::new();
+        let has_binding = self.get_bindings_in_place(&mut bindings, term);
+        if has_binding { Some(bindings.into()) } else { None }
+    }
+
+    fn propagate_bindings<M, K, V>(&self, map: &M) -> Term
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>,
+    {
+        // Make a clone and mutate the term when patterns are matched.
+        let mut term = self.borrow().clone();
+        term.traverse_mut(
+            &|term| {
+                if map.contains_gkey(term) || map.contains_gkey(term.root()) { return true; } 
+                else { return false; }
+            },
+            &mut |mut term| {
+                if map.contains_gkey(term) {
+                    let replacement: &Term = map.gget(term).unwrap().borrow();
+                    *term = replacement.clone();
+                } else {
+                    // The term here must be a variable term and have fragments like inside A(x.id, y.name).
+                    // Dig into the root term to find the subterm by labels. 
+                    let root = term.root();
+                    let root_term = map.gget(root).unwrap();
+                    let val = root_term.borrow().find_subterm(term.borrow()).unwrap();
+                    *term = val;
                 }
+            }
+        );
 
-                return true;
-            },
-            Term::Composite(sc) => {
-                match term.borrow() {
-                    Term::Composite(c) => {
-                        if sc.sort != c.sort {
-                            return false;
-                        }
+        term
+    }
 
-                        for i in 0..sc.arguments.len() {
-                            let x = sc.arguments.get(i).unwrap();
-                            let y = c.arguments.get(i).unwrap();
-    
-                            match x.borrow() {
-                                Term::Atom(xa) => {
-                                    // Atom arguments need to be equal.
-                                    if x != y { return false; }
-                                },
-                                _ => {
-                                    let has_binding = x.get_bindings_in_place(binding, y);
-                                    if !has_binding { return false; }
-                                }
-                            }
-                        }
-                    },
-                    _ => { return false; } // Composite pattern won't match atom or variable.
-                };
-        
-                return true;
+    fn find_subterm<T>(&self, var_term: T) -> Option<Term> 
+    where 
+        T: Borrow<Term>,
+    {
+        if let Term::Variable(v) = var_term.borrow() {
+            return self.find_subterm_by_labels(&v.fragments);
+        } else { return None; }
+    }
+
+    fn find_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
+        // Only apply to composite term and param must be a variable term.
+        if let Term::Composite(c) = self.borrow() {
+            if let Type::CompositeType(init_ctype) = c.sort.base_type().clone() {
+                let initial_term = self.borrow().clone();
+                let result = labels.iter().fold(Some((init_ctype,initial_term)), |state, label| {
+                    if let Some((ctype, subterm)) = state {
+                        ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
+                            if let Some(arg_label) = arg_label_opt {
+                                if arg_label == label {
+                                    match subterm.borrow() {
+                                        Term::Composite(cterm) => {
+                                            // Update the composite type for the next round. Note that `t` could 
+                                            // be a renamed type wrapping a composite type.
+                                            let new_ctype: CompositeType = t.base_type().clone().try_into().unwrap();
+                                            let cterm_arg: &Term = cterm.arguments.get(i).unwrap().borrow();
+                                            Some((new_ctype, cterm_arg.clone()))
+                                        },
+                                        _ => { None }
+                                    }
+                                } else { None }
+                            } 
+                            else { None }
+                        })
+                    } else { None }
+                });
+
+                if let Some((_, found_term)) = result {
+                    return Some(found_term);
+                }
+            }
+        }
+        return None;
+    }
+
+    fn update_binding<M, K, V>(&self, binding: &mut M) -> bool
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term> + From<Term>,
+        V: Borrow<Term> + From<Term>
+    {
+        let var_ref: &Term = self.borrow();
+        match var_ref {
+            Term::Variable(_) => {
+                // Let's say `var` is `x.y.z` and the binding does not have root term of `x` as key 
+                // but has some subterms of root term like `x.y` as key, then we only need to find
+                // the subterm from `x.y` by looking up label `z`. Traverse the keys and find the 
+                // first one that `var` is its subterm.
+                for key_borrowed in binding.gkeys() {
+                    let key: &Term = key_borrowed.borrow();
+                    if key.has_subterm(var_ref).unwrap() {
+                        let value = binding.gget(key).unwrap();
+                        // find the fragments difference between `var` and `key`.
+                        let labels = key.fragments_difference(var_ref).unwrap();
+                        let sub_value = value.borrow().find_subterm_by_labels(&labels).unwrap();
+                        binding.ginsert(self.borrow().clone().into(), sub_value.into());
+                        return true;
+                    }
+                }
+                return false;
             },
+            _ => { return false; }
         }
     }
 }
@@ -413,6 +528,7 @@ impl Term {
             arguments: vec![],
         }.into();
         
+        // let wrapped_nullary_type = OrdHashableWrapper::new(nullary_type);
         Composite::new(Arc::new(nullary_type), vec![], None).into()
     }
 
@@ -435,6 +551,7 @@ impl Term {
                     Term::Composite(c) => {
                         // TODO: A deep copy of type in every term looks bad.
                         let new_type = c.sort.rename_type(scope.clone());
+                        // let wrapped_new_type = OrdHashableWrapper::new(new_type);
                         c.sort = Arc::new(new_type);
                     },
                     _ => {}
@@ -530,54 +647,34 @@ impl Term {
     }
 
     // Check if two binding map has conflits in variable mappings.
-    pub fn has_conflit<T>(outer: &T, inner: &T) -> bool 
+    pub fn has_conflit<M, K, V>(outer: &M, inner: &M) -> bool 
     where 
-        T: GenericMap<Arc<Term>, Arc<Term>>,
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>
     {
         // Filter out conflict binding tuple of outer and inner scope.
         for inner_key in inner.gkeys() {
-            let key_root = inner_key.root();
-            let inner_val = inner.gget(inner_key).unwrap();
-            if outer.contains_gkey(inner_key) {
-                let outer_val = outer.gget(inner_key).unwrap().borrow();
-                if inner_val != outer_val {
+            let key_root = inner_key.borrow().root();
+            let inner_val = inner.gget(inner_key.borrow()).unwrap();
+            if outer.contains_gkey(inner_key.borrow()) {
+                let outer_val = outer.gget(inner_key.borrow()).unwrap().borrow();
+                if inner_val.borrow() != outer_val {
                     return true;
                 }
             }
+
             // outer variable: x (won't be x.y...), inner variable: x.y.z...
             else if outer.contains_gkey(key_root) {
                 let outer_val = outer.gget(key_root).unwrap();
-                let outer_sub_val = Term::find_subterm(outer_val.clone(), inner_key).unwrap();
-                if inner_val != &outer_sub_val {
+                let outer_sub_val = outer_val.find_subterm(inner_key.borrow()).unwrap();
+                if inner_val.borrow() != &outer_sub_val {
                     return true;
                 }
             }
         }
 
         false
-    }
-
-    /// Use HashMap to store the binding derived from term matching but the keys are not ordered.
-    pub fn get_bindings(&self, term: &Arc<Term>) -> Option<HashMap<Arc<Term>, Arc<Term>>> {
-        let mut bindings = HashMap::new();
-        let has_binding = self.get_bindings_in_place(&mut bindings, term);
-        if has_binding {
-            Some(bindings)
-        } else {
-            None
-        }
-    }
-
-    /// Use `QuickHashOrdMap` to store the binding derived from term matching. The main advantage of 
-    /// `QuickHashOrdMap` is to stash the hash of the internal hash map and use hash to decide the ordering.
-    pub fn get_ordered_bindings(&self, term: &Arc<Term>) -> Option<QuickHashOrdMap<Arc<Term>, Arc<Term>>> {
-        let mut bindings= BTreeMap::new();
-        let has_binding = self.get_bindings_in_place(&mut bindings, term);
-        if has_binding {
-            Some(bindings.into())
-        } else {
-            None
-        }
     }
 
     // Traverse the term recursively to find the pattern without mutating the found term.
@@ -621,36 +718,6 @@ impl Term {
         };
     }
 
-
-    pub fn propagate_bindings<T>(&self, map: &T) -> Option<Arc<Term>>
-    where T: GenericMap<Arc<Term>, Arc<Term>>
-    {
-        // Make a clone and mutate the term when pattern matched.
-        let mut term = self.clone();
-        term.traverse_mut(
-            &|term| {
-                if map.contains_gkey(term) || map.contains_gkey(term.root()) { return true; } 
-                else { return false; }
-            },
-            &mut |mut term| {
-                if map.contains_gkey(term) {
-                    let replacement: &Term = map.gget(term).unwrap().borrow();
-                    *term = replacement.clone();
-                } else {
-                    // The term here must be a variable term and have fragments like inside A(x.id, y.name).
-                    // Dig into the root term to find the subterm by labels. 
-                    let root = term.root();
-                    let root_term = map.gget(root).unwrap();
-                    let val_arc = Term::find_subterm(root_term.clone(), &term).unwrap();
-                    let val: &Term = val_arc.borrow();
-                    *term = val.clone();
-                }
-            }
-        );
-
-        Some(Arc::new(term))
-    }
-
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
     pub fn propagate_reverse_bindings<T: GenericMap<Arc<Term>, String>>(&self, reverse_map: &T) -> Option<Arc<Term>> {
         match self {
@@ -688,36 +755,6 @@ impl Term {
             _ => {
                 None                
             }
-        }
-    }
-
-    /// Find the subterm of a composite term when given a variable term with fragments.
-    pub fn find_subterm<T>(composite_term: Arc<Term>, var_term: &T) -> Option<Arc<Term>> 
-    where 
-        T: Borrow<Term>,
-    {
-        // Only apply to composite term and param must be a variable term.
-        match composite_term.borrow() {
-            Term::Composite(c) => {
-                match var_term.borrow() {
-                    Term::Variable(v) => {
-                        c.sort.find_subterm(&composite_term, &v.fragments)
-                    },
-                    _ => { None }
-                }
-            },
-            _ => { None }
-        }
-    }
-
-    /// A shortcut for find_subterm() method with only labels as the argument.
-    /// 
-    pub fn find_subterm_by_labels(composite_term: Arc<Term>, labels: &Vec<String>) -> Option<Arc<Term>> {
-        match composite_term.borrow() {
-            Term::Composite(c) => {
-                c.sort.find_subterm(&composite_term, labels)
-            },
-            _ => { None }
         }
     }
 
@@ -772,40 +809,4 @@ impl Term {
             _ => { None }
         }
     }
-
-    /// Update the binidng if a variable term is the subterm of one of the variable terms in the binding,
-    /// e.g. `x.y.z` wants to update binding with variable `x.y` as key in the binding, then derive the value
-    /// for the subterm and add `x.y.z` to the binding too. Retrun true if binding is successfully updated with
-    /// new derived subterm as the key.
-    pub fn update_binding<T>(var: &Arc<Term>, binding: &mut T) -> bool
-    where T: GenericMap<Arc<Term>, Arc<Term>>
-    {
-        let var_ref: &Term = var.borrow();
-        match var_ref {
-            Term::Variable(_) => {
-                /*
-                Let's say `var` is `x.y.z` and the binding does not have root term of `x` as key 
-                but has some subterms of root term like `x.y` as key, then we only need to find
-                the subterm from `x.y` by looking up label `z`. Traverse the keys and find the 
-                first one that `var` is its subterm.
-                */ 
-                for key_arc in binding.gkeys() {
-                    let key: &Term = key_arc.borrow();
-                    if key.has_subterm(var_ref).unwrap() {
-                        let value = binding.gget(key).unwrap();
-                        // find the fragments difference between `var` and `key`.
-                        let labels = key.fragments_difference(var_ref).unwrap();
-                        let sub_value = Term::find_subterm_by_labels(value.clone(), &labels).unwrap();
-                        binding.ginsert(var.clone(), sub_value);
-                        return true;
-                    }
-                }
-                return false;
-            },
-            _ => { 
-                return false; 
-            }
-        }
-    }
-    
 }

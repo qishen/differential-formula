@@ -1,18 +1,10 @@
-use std::borrow::*;
 use std::sync::Arc;
 use std::vec::Vec;
-use std::collections::*;
-use std::convert::TryInto;
 use std::fmt::*;
 use std::string::String;
-
-use enum_dispatch::enum_dispatch;
+use enum_dispatch::*;
 use serde::{Serialize, Deserialize};
-
-use crate::expression::*;
 use crate::term::*;
-use crate::rule::*;
-use crate::util::*;
 
 
 #[enum_dispatch]
@@ -28,56 +20,14 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn find_subterm(&self, term: &Arc<Term>, labels: &Vec<String>) -> Option<Arc<Term>> 
-    {   
-        // Note that self could be a renamed type too.
-        match self.base_type() {
-            Type::CompositeType(c) => {
-                let mut ctype = c;
-                let aggregated_term = labels.iter().fold(Some(term.clone()), |subterm_opt, label| {
-                    subterm_opt.map(|subterm| {
-                        // Find the first match or return None when none of them are matched.
-                        ctype.arguments.iter().enumerate().find_map(|(i, (l_opt, t))| {
-                            match l_opt {
-                                Some(l) => {
-                                    if label == l {
-                                        match subterm.borrow() {
-                                            Term::Composite(cterm) => {
-                                                // Update the composite type for the next round.
-                                                // Note that `t` could be a renamed type wrapping composite type.
-                                                match t.base_type() {
-                                                    Type::CompositeType(tc) => {
-                                                        ctype = tc;
-                                                    },
-                                                    _ => {}
-                                                }
-                                                let cterm_arc = cterm.arguments.get(i).unwrap();
-                                                Some(cterm_arc.clone())
-                                            },
-                                            _ => { None }
-                                        }
-                                    }
-                                    else { None }
-                                },
-                                _ => { None }
-                            }
-                        })
-                    }).unwrap()
-                });
-                
-                aggregated_term
-            },
-            // This function only applies to composite type.
-            _ => { None }
-        }
-    }
-
-    // Wrap the base type to create a new type with an additional prefix.
+    /// Wrap the base type to create a new type with an additional prefix.
     pub fn rename_type(&self, scope: String) -> Type {
         let base = self.clone();
-        RenamedType {
-            scope,
-            base: Arc::new(base),
+        let new_name = format!("{}.{}", scope, base.name());
+        RenamedType { 
+            name: new_name, 
+            scope, 
+            base: Arc::new(base) 
         }.into()
     }
 
@@ -88,16 +38,14 @@ impl Type {
             Type::RenamedType(rtype) => {
                 rtype.base.base_type()
             },
-            _ => {
-                self
-            }
+            _ => { self }
         }
     }
 }
 
 #[enum_dispatch(Type)]
 pub trait FormulaType {
-    fn name(&self) -> String;
+    fn name(&self) -> &String;
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -107,46 +55,52 @@ pub struct EnumType {
 }
 
 impl FormulaType for EnumType {
-    fn name(&self) -> String {
-        return format!("{:?}", self.name);
+    fn name(&self) -> &String {
+        return &self.name;
     }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RenamedType {
+    pub name: String,
     pub scope: String,
     pub base: Arc<Type>,
 }
 
 impl FormulaType for RenamedType {
-    fn name(&self) -> String {
-        return format!("{}.{}", self.scope, self.base.name());
+    fn name(&self) -> &String {
+        return &self.name;
     }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-pub struct Undefined {}
+pub struct Undefined {
+    pub name: String,
+}
 
 impl FormulaType for Undefined {
-    fn name(&self) -> String {
-        "undefined".to_string()
+    fn name(&self) -> &String {
+        //"undefined".to_string()
+        return &self.name;
     }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RangeType {
-    pub low: Term,
-    pub high: Term,
+    pub name: String,
+    low: Term,
+    high: Term,
 }
 
 impl FormulaType for RangeType {
-    fn name(&self) -> String {
-        return format!("({} .. {})", self.low, self.high);
+    fn name(&self) -> &String {
+        //return format!("({} .. {})", self.low, self.high);
+        return &self.name;
     }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-pub enum BaseType {
+pub enum BaseTypeEnum {
     Boolean,
     String,
     Integer,
@@ -155,9 +109,29 @@ pub enum BaseType {
     Rational,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct BaseType {
+    pub name: String,
+    pub base: BaseTypeEnum,
+}
+
+impl BaseType {
+    pub fn new(name: &str) -> Self {
+        match name {
+            "Boolean" => BaseType { name: "Boolean".to_string(), base: BaseTypeEnum::Boolean },
+            "String" => BaseType { name: "String".to_string(), base: BaseTypeEnum::String },
+            "Integer" => BaseType { name: "Integer".to_string(), base: BaseTypeEnum::Integer },
+            "PosInteger" => BaseType { name: "PosInteger".to_string(), base: BaseTypeEnum::PosInteger },
+            "NegInteger" => BaseType { name: "NegInteger".to_string(), base: BaseTypeEnum::NegInteger },
+            _ => BaseType { name: "Rational".to_string(), base: BaseTypeEnum::Rational },
+        }
+    }
+}
+
 impl FormulaType for BaseType {
-    fn name(&self) -> String {
-        return format!("{:?}", self);
+    fn name(&self) -> &String {
+        // return format!("{:?}", self);
+        return &self.name;
     }
 }
 
@@ -168,8 +142,8 @@ pub struct CompositeType {
 }
 
 impl FormulaType for CompositeType {
-    fn name(&self) -> String {
-        self.name.clone()
+    fn name(&self) -> &String {
+        return &self.name;
     }
 }
 
@@ -180,7 +154,7 @@ pub struct UnionType {
 }
 
 impl FormulaType for UnionType {
-    fn name(&self) -> String {
-        self.name.clone()
+    fn name(&self) -> &String {
+        return &self.name;
     }
 }

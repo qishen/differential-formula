@@ -2,6 +2,7 @@ extern crate rand;
 extern crate abomonation_derive;
 extern crate abomonation;
 
+use std::borrow::Borrow;
 use std::sync::Arc;
 use std::collections::*;
 use std::fmt;
@@ -210,8 +211,10 @@ impl Binary {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
-    pub fn evaluate<T>(&self, binding: &T) -> Option<bool> 
-    where T: GenericMap<Arc<Term>, Arc<Term>>
+    pub fn evaluate<M, T>(&self, binding: &M) -> Option<bool>
+    where 
+        M: GenericMap<T, T>,
+        T: Borrow<Term>
     {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 

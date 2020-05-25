@@ -162,7 +162,7 @@ where
     }
 }
 
-/// `QuickHashOrdMap is actually an `OrdMap` wrapped twice to stash the hash of the map
+/// `QuickHashOrdMap is actually an `BTreeMap` wrapped twice to stash the hash of the map
 /// and compare the hash first when deciding the ordering of two maps.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct QuickHashOrdMap<K, V> 
@@ -173,6 +173,7 @@ where
     map: OrdWrapper<HashableWrapper<BTreeMap<K, V>>>
 }
 
+// Use default FNV hasher to implement `Hashable` trait given `Hash` is implemented for BTreeMap.
 impl<K, V> Hashable for QuickHashOrdMap<K, V> 
 where
     K: Hash + Ord,
@@ -209,21 +210,6 @@ where
         }
     }
 }
-
-// impl<K, V> Serialize for QuickHashOrdMap<K, V> 
-// where 
-//     K: Clone + Hash + Ord + Serialize, 
-//     V: Clone + Hash + Ord + Serialize
-// {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer,
-//     {
-//         let mut s = serializer.serialize_struct("QuickHashOrdMap", 3)?;
-//         s.serialize_field("map", &**self.map)?;
-//         s.end()
-//     }
-// }
 
 impl<K, V> GenericMap<K, V> for QuickHashOrdMap<K, V>
 where

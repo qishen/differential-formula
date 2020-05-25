@@ -66,7 +66,7 @@ fn test_ddengine_4() {
     let mut session = Session::new(m, &engine);
     session.load();
 
-    let edge00 = Arc::new(session.create_term("Edge(Node(0), Node(0))").unwrap());
+    let edge00 = session.create_term("Edge(Node(0), Node(0))").unwrap();
     //let node100 = Arc::new(session.create_term("Node(100)").unwrap());
     session.add_term(edge00);
     //session.add_terms(vec![node100, edge00]);
@@ -86,12 +86,12 @@ fn test_ddengine_4x() {
     let mut session = Session::new(m, &engine);
     session.load();
 
-    let edge00 = Arc::new(session.create_term("Edge(Node(0), Node(0))").unwrap());
-    let edge22 = Arc::new(session.create_term("Edge(Node(2), Node(2))").unwrap());
-    let edge45 = Arc::new(session.create_term("Edge(Node(4), Node(5))").unwrap());
+    let edge00 = session.create_term("Edge(Node(0), Node(0))").unwrap();
+    let edge22 = session.create_term("Edge(Node(2), Node(2))").unwrap();
+    let edge45 = session.create_term("Edge(Node(4), Node(5))").unwrap();
 
     // Explicitly declare Node(5) to use even though edge45 has it as argument.
-    let node5 = Arc::new(session.create_term("Node(5)").unwrap());
+    let node5 = session.create_term("Node(5)").unwrap();
     
     //session.add_terms(vec![node5, edge45]);
     //session.add_terms(vec![edge00.clone(), edge22]);
@@ -299,7 +299,7 @@ fn test_transform_del() {
     session.load();
 
     let v4 = session.create_term("GraphIn.V(4)").unwrap();
-    session.add_term(Arc::new(v4))
+    session.add_term(v4);
 }
 
 #[test]
@@ -361,7 +361,7 @@ fn test_incremental_transitive_closure() {
         let num2 = rng1.gen_range(0, nodes);
         let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
         let edge = session.create_term(&edge_str).unwrap();
-        terms.push(Arc::new(edge));
+        terms.push(edge);
     }
 
     println!("Compute transitive closure with {} nodes and {} edges", nodes, edges);
@@ -375,7 +375,7 @@ fn test_incremental_transitive_closure() {
         let num2 = rng1.gen_range(0, nodes);
         let edge_str = format!("Edge(Node({}), Node({}))", num1, num2);
         let edge = session.create_term(&edge_str).unwrap();
-        updated_terms.push(Arc::new(edge));
+        updated_terms.push(edge);
     }
     let timer = std::time::Instant::now();
     session.add_terms(updated_terms.clone());

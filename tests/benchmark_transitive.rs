@@ -7,11 +7,9 @@ use std::hash::Hash;
 use std::collections::BTreeMap;
 use rand::{Rng, SeedableRng, StdRng};
 use num::*;
-use im::OrdMap;
 
 use differential_dataflow::*;
 use differential_dataflow::input::Input;
-use differential_dataflow::operators::Consolidate;
 use differential_dataflow::operators::Iterate;
 use differential_dataflow::operators::Join;
 use differential_dataflow::operators::Threshold;
@@ -339,13 +337,13 @@ fn hops_formula_hashmap() {
 
             let mut map1 = BTreeMap::new();
             map1.insert(x.clone(), Arc::new(node1.clone()));
-            map1.insert(y.clone(), Arc::new(node1.clone()));
+            //map1.insert(y.clone(), Arc::new(node1.clone()));
             //println!("Hash of {:?} is {}", map1, map1.hashed());
             let wrapped_map1: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map1.into();
 
             let mut map2 = BTreeMap::new();
             map2.insert(x.clone(), Arc::new(node2.clone()));
-            map2.insert(y.clone(), Arc::new(node2.clone()));
+            //map2.insert(y.clone(), Arc::new(node2.clone()));
             //println!("Hash of {:?} is {}", map2, map2.hashed());
             let wrapped_map2: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map2.into();
 
@@ -415,7 +413,7 @@ fn hops_differential_formula() {
     let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
 
     let mut session = Session::new(m1, &engine);
-    let mut terms: Vec<Arc<Term>> = vec![];
+    let mut terms: Vec<Term> = vec![];
 
     // Load up graph data. Round-robin among workers.
     for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
@@ -428,7 +426,7 @@ fn hops_differential_formula() {
             println!("Initial term: {:?}", edge_term);
         }
 
-        terms.insert(0, Arc::new(edge_term));
+        terms.insert(0, edge_term);
     }
 
     let timer = std::time::Instant::now();
@@ -525,7 +523,7 @@ fn transitive_formula() {
 
         let empty_model = engine.create_empty_model("m", "Graph");
         let mut session = Session::new(empty_model, &engine);
-        let mut terms: Vec<Arc<Term>> = vec![];
+        let mut terms: Vec<Term> = vec![];
 
         // Load up graph data. Round-robin among workers.
         for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
@@ -546,7 +544,7 @@ fn transitive_formula() {
                 vec![Arc::new(node1), Arc::new(node2)], 
                 None).into();
 
-            terms.insert(0, Arc::new(edge_term));
+            terms.insert(0, edge_term);
         }
 
         let timer = ::std::time::Instant::now();

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::convert::TryInto;
 use std::borrow::Borrow;
 use enum_dispatch::enum_dispatch;
+use differential_dataflow::hashable::*;
 use num::*;
 
 use crate::term::*;
@@ -381,9 +382,12 @@ impl ProgramAst {
 
     pub fn import_builtin_types(&self, type_map: &mut HashMap<String, Arc<Type>>) {
         // TODO: There are more types to add here.
-        type_map.insert("String".to_string(), Arc::new(BaseType::String.into()));
-        type_map.insert("Integer".to_string(), Arc::new(BaseType::Integer.into()));
-        type_map.insert("Boolean".to_string(), Arc::new(BaseType::Boolean.into()));
+        let string_type: Type = BaseType::new("String").into();
+        let integer_type: Type = BaseType::new("Integer").into();
+        let bool_type: Type = BaseType::new("Boolean").into();
+        type_map.insert("String".to_string(), Arc::new(string_type));
+        type_map.insert("Integer".to_string(), Arc::new(integer_type));
+        type_map.insert("Boolean".to_string(), Arc::new(bool_type));
     }
 
     pub fn create_transform(
@@ -462,7 +466,7 @@ impl ProgramAst {
                     Type::BaseType(_) => {},
                     _ => {
                         let renamed_type = formula_type.rename_type(tag.clone());
-                        type_map.insert(renamed_type.name(), Arc::new(renamed_type));
+                        type_map.insert(renamed_type.name().clone(), Arc::new(renamed_type.into()));
                     }
                 }
             }
@@ -501,7 +505,7 @@ impl ProgramAst {
         // Add terms that defined in the transform.
         let mut terms = HashSet::new();
         for term_ast in transform_ast.terms.iter() {
-            let term = Arc::new(term_ast.to_term(&temp_transform_domain));
+            let term = term_ast.to_term(&temp_transform_domain);
             terms.insert(term);
         }
 
@@ -554,7 +558,7 @@ impl ProgramAst {
                     Type::BaseType(_) => {},
                     _ => {
                         let renamed_type = formula_type.rename_type(scope.clone());
-                        type_map.insert(renamed_type.name(), Arc::new(renamed_type));
+                        type_map.insert(renamed_type.name().clone(), Arc::new(renamed_type.into()));
                     }
                 }
             }
@@ -695,22 +699,22 @@ impl ProgramAst {
             alias_map.extend(submodel.alias_map);
         }
 
-        /* 
-        Alias in the raw term is treated as variables and needs to be replaced with the real term.
-        Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
-        prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
-        */
+        
+        // Alias in the raw term is treated as variables and needs to be replaced with the real term.
+        // Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
+        //prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
         for key in raw_alias_map.keys() {
-            self.propagate_alias_map(key, &raw_alias_map, &mut alias_map);
+            self.propagate_alias_map(key.clone(), &raw_alias_map, &mut alias_map);
         }
 
         // Propagate binding to composite terms that don't have alias associated with them.
         for term in raw_terms {
-            let new_term = term.propagate_bindings(&alias_map).unwrap();
+            let new_term = term.propagate_bindings(&alias_map);
             model_store.insert(new_term);
         }
 
-        for (key, term) in alias_map.iter() {
+        for (_, term_arc) in alias_map.iter() {
+            let term: &Term = term_arc.borrow();
             model_store.insert(term.clone());
         }
 
@@ -724,23 +728,27 @@ impl ProgramAst {
         model_map.insert(model_name.clone(), model);
     }
 
-    fn propagate_alias_map<T>(
-        &self, var: &Term, 
-        raw_alias_map: &T, 
-        alias_map: &mut T
-    ) where T: GenericMap<Arc<Term>, Arc<Term>>
+    fn propagate_alias_map<M, K, V, T>(&self, var: T, raw_alias_map: &M, alias_map: &mut M) 
+    where 
+        M: GenericMap<K, V>,
+        K: Borrow<Term> + From<Term> + Clone,
+        V: Borrow<Term> + From<Term> + Clone,
+        T: Borrow<Term>
     {
-        let raw_term = raw_alias_map.gget(var).unwrap();
+        let raw_term = raw_alias_map.gget(var.borrow()).unwrap();
         // if current term has variables inside then propagate binding to them first.
-        let raw_term_vars = raw_term.variables();
+        let raw_term_vars = raw_term.borrow().variables();
         for raw_term_var in raw_term_vars {
             if raw_alias_map.contains_gkey(&raw_term_var) {
                 self.propagate_alias_map(&raw_term_var, raw_alias_map, alias_map);
             }
         }
-    
-        let new_term = raw_term.propagate_bindings(alias_map).unwrap();
-        alias_map.ginsert(Arc::new(var.clone()), new_term);
+        
+        // Make a little clone here but that's ok for a tradeoff between elegancy and unnecessary clone.
+        let new_term = raw_term.propagate_bindings(alias_map);
+        let k: K = var.borrow().to_owned().into();
+        let v: V = new_term.to_owned().into();
+        alias_map.ginsert(k, v);
     }
 }
 

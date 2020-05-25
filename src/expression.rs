@@ -369,9 +369,11 @@ impl ExprBehavior for BaseExpr {
         setcompres
     }
 
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<M, K, V>(&self, binding: &M) -> Option<BigInt> 
     where 
-        T: GenericMap<Arc<Term>, Arc<Term>>,
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>
     {
         match self {
             BaseExpr::Term(term) => {
@@ -390,13 +392,12 @@ impl ExprBehavior for BaseExpr {
                         let root_var = term.root();
                         let val_term = match root_var == term {
                             true => { 
-                                binding.gget(term).unwrap().clone() 
+                                binding.gget(term).unwrap().borrow().clone() 
                             },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
                                 let val_term = binding.gget(root_var).unwrap();
-                                let val_subterm = Term::find_subterm(val_term.clone(), term).unwrap().clone();
-                                val_subterm
+                                val_term.find_subterm(term).unwrap()
                             }
                         };
 
@@ -416,7 +417,6 @@ impl ExprBehavior for BaseExpr {
                     },
                     _ => { return None; }
                 }
-
             },
             _ => { return None; } // Can't directly evaluate set comprehension.
         }
@@ -519,9 +519,11 @@ impl ExprBehavior for ArithExpr {
         list
     }
 
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<M, K, V>(&self, binding: &M) -> Option<BigInt> 
     where 
-        T: GenericMap<Arc<Term>, Arc<Term>>, 
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>
     {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
@@ -541,10 +543,11 @@ impl ExprBehavior for ArithExpr {
 pub trait ExprBehavior {
     fn has_set_comprehension(&self) -> bool;
     fn set_comprehensions(&self) -> Vec<SetComprehension>;
-    fn evaluate<T>(&self, binding: &T) -> Option<BigInt> 
+    fn evaluate<M, K, V>(&self, binding: &M) -> Option<BigInt> 
     where 
-        T: GenericMap<Arc<Term>, Arc<Term>>,
-    ;
+        M: GenericMap<K, V>,
+        K: Borrow<Term>,
+        V: Borrow<Term>;
 }
 
 #[enum_dispatch]

@@ -126,22 +126,22 @@ fn test_term_bindings() {
     println!("// -------- Test Term Bindings -------- //");
 
     // Node(x) -> Node(1)
-    let binding1 = nv1.get_bindings(&Arc::new(n1.clone())).unwrap();
+    let binding1 = nv1.get_bindings(n1).unwrap();
     // Edge(x, y) -> Edge(n1, n2)
-    let mut binding2 = ev1.get_bindings(&Arc::new(e1.clone())).unwrap();
+    let mut binding2 = ev1.get_bindings(e1).unwrap();
     // Edge(Node(a), Node(b)) -> Edge(Node(1), Node(2))
-    let binding3 = ev2.get_bindings(&Arc::new(e1.clone())).unwrap();
+    let binding3 = ev2.get_bindings(e1).unwrap();
     // Edge(_, Node(b)) -> Edge(n1, n2)
-    let binding4 = ev3.get_bindings(&Arc::new(e1.clone())).unwrap();
+    let binding4 = ev3.get_bindings(e1).unwrap();
     // TwoEdge(x, y) -> TwoEdge(Edge(n1, n2), Edge(n2, n3))
-    let mut binding5 = tev1.get_bindings(&Arc::new(te1.clone())).unwrap();
+    let mut binding5 = tev1.get_bindings(te1).unwrap();
     // 
     let edge_uu = session.create_term("Edge(u, u)").unwrap();
-    let binding6 = edge_uu.get_bindings(&Arc::new(e1.clone()));
+    let binding6 = edge_uu.get_bindings(e1);
     assert_eq!(binding6.clone(), None);
 
-    let new_n1 = nv1.propagate_bindings(&binding1).unwrap();
-    let new_e1 = ev1.propagate_bindings(&binding2).unwrap();
+    let new_n1 = nv1.propagate_bindings(&binding1);
+    let new_e1 = ev1.propagate_bindings(&binding2);
 
     assert_eq!(n1, new_n1.borrow());
     assert_eq!(e1, new_e1.borrow());
@@ -165,7 +165,7 @@ fn test_term_bindings() {
     Term::update_binding(&Arc::new(var.clone()), &mut binding2);
     let atom1 = session.create_term("1").unwrap();
 
-    assert_eq!(binding2.get(&var).unwrap(), &Arc::new(atom1));
+    assert_eq!(binding2.get(&var).unwrap(), &atom1);
     println!("Updated binding: {:?}", binding2);
 
     let var1 = session.create_term("x.src").unwrap();
@@ -219,8 +219,8 @@ fn test_subterm() {
 
     println!("// -------- Test Finding Subterm -------- //");
 
-    let subterm1_arc = Term::find_subterm(Arc::new(te1.clone()), &v0).unwrap();
-    let subterm1x_arc = Term::find_subterm_by_labels(Arc::new(te1.clone()), &vec!["one".to_string()]).unwrap();
+    let subterm1_arc = te1.find_subterm(&v0).unwrap();
+    let subterm1x_arc = te1.find_subterm_by_labels(&vec!["one".to_string()]).unwrap();
     let subterm1: &Term = subterm1_arc.borrow();
     let subterm1x: &Term = subterm1x_arc.borrow();
 
@@ -230,23 +230,23 @@ fn test_subterm() {
     assert_eq!(subterm1x, x1);
     println!("Use {:?} to find subterm in {} and the result is {}", vec!["one"], te1, subterm1x);
 
-    let subterm2_arc = Term::find_subterm(Arc::new(te1.clone()), &v1).unwrap();
+    let subterm2_arc = te1.find_subterm(&v1).unwrap();
     let subterm2: &Term = subterm2_arc.borrow();
     println!("Use {} to find subterm in {} and the result is {}", v1, te1, subterm2);
     assert_eq!(subterm2, n1);
 
-    let subterm3_arc = Term::find_subterm(Arc::new(te2.clone()), &v2).unwrap();
+    let subterm3_arc = te2.find_subterm(&v2).unwrap();
     let subterm3: &Term = subterm3_arc.borrow();
     println!("Use {} to find subterm in {} and the result is {}", v2, te2, subterm3);
     assert_eq!(subterm3, n2);
 
     // Given unmatched label at the beginning.
-    let subterm4_arc = Term::find_subterm(Arc::new(te1.clone()), &v0x);
+    let subterm4_arc = te1.find_subterm(&v0x);
     println!("Use {} to find subterm in {} and the result is {:?}", v0x, te1, subterm4_arc);
     assert_eq!(subterm4_arc, None);
 
     // Given unmatched label at the end.
-    let subterm5_arc = Term::find_subterm(Arc::new(te1.clone()), &v2x);
+    let subterm5_arc = te1.find_subterm(&v2x);
     println!("Use {} to find subterm in {} and the result is {:?}", v2x, te1, subterm5_arc);
     assert_eq!(subterm5_arc, None);
 
