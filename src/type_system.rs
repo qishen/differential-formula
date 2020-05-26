@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::fmt::*;
@@ -8,7 +9,7 @@ use crate::term::*;
 
 
 #[enum_dispatch]
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 pub enum Type {
     BaseType,
     CompositeType,
@@ -17,6 +18,27 @@ pub enum Type {
     RenamedType,
     UnionType,
     Undefined
+}
+
+impl Eq for Type {} 
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+
+impl Ord for Type {
+    /// Use the unique name to compare ordering because that's fast!
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name().cmp(other.name())
+    }
+}
+
+impl PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Type {
@@ -45,6 +67,7 @@ impl Type {
 
 #[enum_dispatch(Type)]
 pub trait FormulaType {
+    /// Each type should have an unique name that will be used to compare ordering.
     fn name(&self) -> &String;
 }
 

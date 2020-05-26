@@ -208,6 +208,8 @@ impl DDEngine {
 
     }
 
+    /// Match a stream of terms to predicate constraint and return a stream of hash maps
+    /// that map variables to terms as the result of matching.
     pub fn dataflow_filtered_by_positive_predicate_constraint<G>(
         &self,
         terms: &Collection<G, HashedTerm>, 
@@ -311,7 +313,7 @@ impl DDEngine {
         let prev_vars_extra_copy = prev_vars_extra.clone();
         let updated_prev_col = prev_col.map(move |mut binding| {
             for prev_var in prev_vars_extra_copy.iter() {
-                Term::update_binding(&prev_var.clone(), &mut binding);
+                prev_var.update_binding(&mut binding);
             }
             binding
         });
@@ -319,7 +321,7 @@ impl DDEngine {
         let new_vars_extra_copy = new_vars_extra.clone();
         let updated_new_col = new_col.map(move |mut binding| {
             for new_var in new_vars_extra_copy.iter() {
-                Term::update_binding(&new_var.clone(), &mut binding);
+                new_var.update_binding(&mut binding);
             }
             binding
         });

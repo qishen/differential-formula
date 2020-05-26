@@ -1,9 +1,8 @@
+use std::cmp::Ordering;
+use std::fmt::*;
 use std::hash::{Hash, Hasher};
-use std::iter::*;
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
-use std::collections::btree_map::*;
-use im::OrdMap;
 use differential_dataflow::hashable::*;
 use serde::*;
 use fnv;
@@ -126,51 +125,39 @@ where
     }
 }
 
-impl<K, V> GenericMap<K, V> for OrdMap<K, V>
-where
-    K: Eq + Hash + Ord + Clone,
-    V: Clone,
-{
-    fn gkeys(&self) -> Vec<&K> {
-        let mut list = vec![];
-        let keys = OrdMap::keys(self);
-        for key in keys {
-            list.push(key);
-        }
-        list
-    }
-
-    fn contains_gkey<Q>(&self, k: &Q) -> bool
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        OrdMap::contains_key(self, k)
-    }
-
-    fn gget<Q>(&self, k: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        OrdMap::get(self, k)
-    }
-
-    fn ginsert(&mut self, k: K, v: V) -> Option<V> 
-    {
-        OrdMap::insert(self, k, v)
-    }
-}
-
 /// `QuickHashOrdMap is actually an `BTreeMap` wrapped twice to stash the hash of the map
-/// and compare the hash first when deciding the ordering of two maps.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+/// and compare the hash first when deciding the ordering of two maps. When two maps have
+/// the same hash, compare the unique forms of the maps instead of recursively
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuickHashOrdMap<K, V> 
 where 
     K: Hash + Ord, 
     V: Hash + Ord,
 {
+    // A string to represent the content in the hash map.
+    unique_form: String,
     map: OrdWrapper<HashableWrapper<BTreeMap<K, V>>>
+}
+
+impl<K: Ord+Hash, V: Ord+Hash> Eq for QuickHashOrdMap<K, V> {} 
+
+impl<K: Ord+Hash, V: Ord+Hash> PartialEq for QuickHashOrdMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.unique_form == other.unique_form
+    }
+}
+
+impl<K: Ord+Hash, V: Ord+Hash> Ord for QuickHashOrdMap<K, V> {
+    /// Use the unique name to compare ordering because that's fast!
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.unique_form.cmp(&other.unique_form)
+    }
+}
+
+impl<K: Hash+Ord, V: Hash+Ord> PartialOrd for QuickHashOrdMap<K, V> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 // Use default FNV hasher to implement `Hashable` trait given `Hash` is implemented for BTreeMap.
@@ -200,12 +187,18 @@ where
 
 impl<K, V> From<BTreeMap<K, V>> for QuickHashOrdMap<K, V> 
 where
-    K: Hash + Ord,
-    V: Hash + Ord
+    K: Hash + Ord + Display,
+    V: Hash + Ord + Display,
 {
     fn from(item: BTreeMap<K, V>) -> QuickHashOrdMap<K, V> {
+        let mut pairs = vec![];
+        for (k, v) in item.iter() {
+            pairs.push(format!("{}: {}", k, v));
+        }
+        let unique_form = format!("{{ {} }}", pairs.join(", "));
         let map_with_hash: HashableWrapper<BTreeMap<K, V>> = item.into();
         QuickHashOrdMap {
+            unique_form,
             map: OrdWrapper { item: map_with_hash }
         }
     }
