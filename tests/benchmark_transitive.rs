@@ -330,20 +330,22 @@ fn hops_formula_hashmap() {
         for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
             let num1 = rng1.gen_range(0, nodes);
             let num2 = rng1.gen_range(0, nodes);
-            let atom1: Term = Atom::Int(BigInt::from(num1)).into();
-            let atom2: Term = Atom::Int(BigInt::from(num2)).into();
+            let atom1: Term = AtomEnum::Int(BigInt::from(num1)).into();
+            let atom2: Term = AtomEnum::Int(BigInt::from(num2)).into();
             let node1: Term = Composite::new(node.clone(), vec![Arc::new(atom1)], None).into();
             let node2: Term = Composite::new(node.clone(), vec![Arc::new(atom2)], None).into();
 
+            // Each map has an unique form that is used to compare ordering when two maps have the same
+            // hash then just check if they have same unique form.
             let mut map1 = BTreeMap::new();
             map1.insert(x.clone(), Arc::new(node1.clone()));
-            //map1.insert(y.clone(), Arc::new(node1.clone()));
+            map1.insert(y.clone(), Arc::new(node1.clone()));
             //println!("Hash of {:?} is {}", map1, map1.hashed());
             let wrapped_map1: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map1.into();
 
             let mut map2 = BTreeMap::new();
             map2.insert(x.clone(), Arc::new(node2.clone()));
-            //map2.insert(y.clone(), Arc::new(node2.clone()));
+            map2.insert(y.clone(), Arc::new(node2.clone()));
             //println!("Hash of {:?} is {}", map2, map2.hashed());
             let wrapped_map2: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map2.into();
 
@@ -399,11 +401,8 @@ fn hops_differential_formula() {
 
     let mut engine = DDEngine::new();
 
-    if inspect {
-        engine.inspect = true;
-    } else {
-        engine.inspect = false;
-    }
+    if inspect { engine.inspect = true; } 
+    else { engine.inspect = false; }
 
     // Parse string and install program in the engine.
     engine.install(program);
@@ -530,8 +529,8 @@ fn transitive_formula() {
             let num1 = rng1.gen_range(0, nodes);
             let num2 = rng1.gen_range(0, nodes);
             //println!("{:?}, {:?}", num1, num2);
-            let atom1: Term = Atom::Int(BigInt::from(num1)).into();
-            let atom2: Term = Atom::Int(BigInt::from(num2)).into();
+            let atom1: Term = AtomEnum::Int(BigInt::from(num1)).into();
+            let atom2: Term = AtomEnum::Int(BigInt::from(num2)).into();
             let node1: Term = Composite::new(node.clone(), vec![Arc::new(atom1)], None).into();
             let node2: Term = Composite::new(node.clone(), vec![Arc::new(atom2)], None).into();
 
