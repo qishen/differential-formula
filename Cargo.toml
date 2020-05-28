@@ -28,10 +28,10 @@ timely_sort = "0.1.6"
 
 # Internally differential-dataflow use timely as a dependency and they have to be at the same version.
 # differential-dataflow = "0.11.0"
-differential-dataflow = { path = "../differential-dataflow" }
-# differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git" }
+# differential-dataflow = { path = "../differential-dataflow" }
+differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git", branch = "add-serde-fields" }
 rand = "0.4"
-enum_dispatch = "0.2.0"
+enum_dispatch = "0.3.0"
 nom = "5"
 num = { version = "0.2", features = ["serde"] }
 im = { version = "14", features = ["serde"] }
