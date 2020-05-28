@@ -38,6 +38,7 @@ impl<FM: FormulaModule> Session<FM> {
         let allocator = timely::communication::allocator::Thread::new();
         let mut worker = timely::worker::Worker::new(allocator);
         let (mut input, probe) = engine.create_dataflow(&module, &mut worker);
+        input.advance_to(0);
 
         Session {
             worker,
@@ -466,7 +467,7 @@ impl DDEngine {
                         let updated_col = outer_col.map(move |binding_wrapper| {
                             let mut binding: BTreeMap<Term, Term> = binding_wrapper.into();
                             let num = right_base_expr.evaluate(&binding).unwrap();
-                            let atom_term: Term = Atom::Int(num).into();
+                            let atom_term: Term = AtomEnum::Int(num).into();
                             binding.insert(var_term.clone(), atom_term);
                             binding.into()
                         });
@@ -518,8 +519,8 @@ impl DDEngine {
         
         // models.inspect(|x| println!("Models for inner constraints: {:?}", x));
         // ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
-        //ordered_inner_collection.inspect(|x| println!("Inner collection {:?}", x));
-        //ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
+        // ordered_inner_collection.inspect(|x| println!("Inner collection {:?}", x));
+        // ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
 
         // If inner scope and outer scope don't have shared variables then it means they can be handled separately.
         match Term::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
@@ -554,7 +555,7 @@ impl DDEngine {
                     true => {
                         aggregation_stream.map(move |(_, nums)| {
                             let mut binding = BTreeMap::new();
-                            let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
+                            let num_term: Term = AtomEnum::Int(nums.get(0).unwrap().clone().into()).into();
                             binding.insert(setcompre_var.clone(), num_term);
                             binding.into()
                         })
@@ -566,7 +567,7 @@ impl DDEngine {
                             .map(move |(_, (binding_wrapper, nums))| {
                                 // Take the first element in num list when operator is count, sum, maxAll, minAll.
                                 let mut binding: BTreeMap<Term, Term> = binding_wrapper.into();
-                                let num_term: Term = Atom::Int(nums.get(0).unwrap().clone().into()).into();
+                                let num_term: Term = AtomEnum::Int(nums.get(0).unwrap().clone().into()).into();
                                 binding.insert(setcompre_var.clone(), num_term);
                                 binding.into()
                             })
@@ -627,7 +628,7 @@ impl DDEngine {
                     .map(move |(binding_wrapper, nums)| {
                         let mut binding: BTreeMap<Term, Term> = binding_wrapper.into();
                         // Take the first element in num list when operator is count, sum, maxAll, minAll.
-                        let num_term: Term = Atom::Int(nums.get(0).unwrap().clone()).into();
+                        let num_term: Term = AtomEnum::Int(nums.get(0).unwrap().clone()).into();
                         binding.insert(setcompre_var.clone(), num_term);
                         binding.into()
 
@@ -644,7 +645,7 @@ impl DDEngine {
                     .map(move |(mut outer_wrapper, _)| {
                         // Add default value of set comprehension to each binding.
                         let mut outer: BTreeMap<Term, Term> = outer_wrapper.into();
-                        let num_term: Term = Atom::Int(setcompre_default.clone()).into();
+                        let num_term: Term = AtomEnum::Int(setcompre_default.clone()).into();
                         outer.insert(setcompre_var.clone(), num_term);
                         outer.into()
                     });
@@ -671,7 +672,7 @@ impl DDEngine {
                 // let models = models.enter(&inner.scope());
                 let (_, binding_collection) = self.dataflow_from_constraints(&inner, &constraints);
                 let derived_terms = binding_collection
-                    //.inspect(|x| println!("A binding map derived from constraints: {:?}", x))
+                    //.inspect(|x| println!("A binding map derived from constraints: {:#?}", x))
                     .map(move |binding| {
                         let mut new_terms: Vec<HashedTerm> = vec![];
                         for head_term in head_terms.iter() {
@@ -688,7 +689,7 @@ impl DDEngine {
                         new_terms
                     })
                     .flat_map(|x| x)
-                    // .inspect(|x| println!("Derived head term: {:?}", x))
+                    //.inspect(|x| println!("Derived head term: {:?}", x))
                     ;
 
                 inner.concat(&derived_terms).distinct()

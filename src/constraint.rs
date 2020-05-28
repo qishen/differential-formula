@@ -103,7 +103,7 @@ impl Predicate {
         };
 
         let big_zero = BigInt::from_i64(0 as i64).unwrap();
-        let zero_term: Term = Atom::Int(big_zero).into();
+        let zero_term: Term = AtomEnum::Int(big_zero).into();
         let zero_base_expr: BaseExpr = zero_term.into();
         let binary2 = Binary {
             op: BinOp::Eq,

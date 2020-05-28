@@ -38,11 +38,7 @@ impl TermAst {
                 }
                 let sort_name = cterm_ast.sort.name().unwrap();
                 let sort = module.type_map().get(&sort_name).unwrap().clone();
-                Composite {
-                    sort,
-                    arguments: term_arguments,
-                    alias: cterm_ast.alias.clone(),
-                }.into()
+                Composite::new(sort, term_arguments, cterm_ast.alias.clone()).into()
             },
             TermAst::Term(term) => {
                 term.clone()

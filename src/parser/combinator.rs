@@ -676,8 +676,8 @@ fn parse_setcompre(
         Some(term) => {
             // The term has to be an integer as default value.
             let atom: Atom = term.try_into().unwrap();
-            let num = match atom {
-                Atom::Int(num) => Some(num),
+            let num = match atom.val {
+                AtomEnum::Int(num) => Some(num),
                 _ => None,
             };
 
@@ -866,7 +866,7 @@ named!(atom_integer<&str, Term>,
                 Some(sign_char) => { sign_char.to_string() + &num_str.to_string() },
                 None => { num_str.to_string() }
             };
-            Atom::Int(BigInt::from_str(&num[..]).unwrap()).into() 
+            AtomEnum::Int(BigInt::from_str(&num[..]).unwrap()).into() 
         }
     )
 );
@@ -876,7 +876,7 @@ named!(atom_string<&str, Term>,
         delimited!(char!('"'), many0!(none_of("\"")), char!('"')), 
         |char_vec| { 
             let s: String = char_vec.into_iter().collect();
-            Atom::Str(s).into() 
+            AtomEnum::Str(s).into() 
         }
     )
 );
@@ -887,10 +887,10 @@ named!(atom_float<&str, Term>,
         recognize!(float), 
         |float_str| { 
             if let Ok(i) = BigInt::from_str(float_str) {
-                return Atom::Int(i).into();
+                return AtomEnum::Int(i).into();
             } else {
                 let num = f32::from_str(float_str).unwrap();
-                return Atom::Float(BigRational::from_f32(num).unwrap()).into(); 
+                return AtomEnum::Float(BigRational::from_f32(num).unwrap()).into(); 
             }
         }
     )
@@ -901,8 +901,8 @@ named!(atom_bool<&str, Term>,
         alt!(tag!("true") | tag!("false")), 
         |x| {
             match x {
-                "true" => Atom::Bool(true).into(),
-                _ => Atom::Bool(false).into(),
+                "true" => AtomEnum::Bool(true).into(),
+                _ => AtomEnum::Bool(false).into(),
             }
         }
     )

@@ -171,8 +171,8 @@ impl SetCompreOp {
                     let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
-                            match atom {
-                                Atom::Int(i) => { 
+                            match &atom.val {
+                                AtomEnum::Int(i) => { 
                                     sum += i.clone() * count;
                                 },
                                 _ => {}
@@ -189,8 +189,8 @@ impl SetCompreOp {
                     let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
-                            match atom {
-                                Atom::Int(i) => { if i > &max { max = i.clone(); } },
+                            match &atom.val {
+                                AtomEnum::Int(i) => { if i > &max { max = i.clone(); } },
                                 _ => {}
                             }
                         },
@@ -206,8 +206,8 @@ impl SetCompreOp {
                     let term_ref: &Term = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
-                            match atom {
-                                Atom::Int(i) => { 
+                            match &atom.val {
+                                AtomEnum::Int(i) => { 
                                     if i < &min { min = i.clone(); } 
                                 },
                                 _ => {}
@@ -380,8 +380,8 @@ impl ExprBehavior for BaseExpr {
                 match term {
                     Term::Atom(atom) => {
                         // The expression is a term of integer type.
-                        match atom {
-                            Atom::Int(num) => {
+                        match &atom.val {
+                            AtomEnum::Int(num) => {
                                 return Some(num.clone());
                             },
                             _ => { return None; },
@@ -405,8 +405,8 @@ impl ExprBehavior for BaseExpr {
                         let val_term_ref: &Term = val_term.borrow();
                         match val_term_ref {
                             Term::Atom(atom) => {
-                                match atom {
-                                    Atom::Int(num) => {
+                                match &atom.val {
+                                    AtomEnum::Int(num) => {
                                         return Some(num.clone())
                                     },
                                     _ => { None }

@@ -12,7 +12,6 @@ use std::hash::{Hash, Hasher};
 
 use num::*;
 use im::OrdSet;
-use derivative::*;
 use enum_dispatch::enum_dispatch;
 use serde::{Serialize, Deserialize};
 use differential_dataflow::hashable::*;
@@ -25,32 +24,86 @@ use crate::util::*;
 // A wrapped Term that cache the hash and use hash to compare ordering first.
 pub type HashedTerm = OrdHashableWrapper<Term>;
 
-#[enum_dispatch(Term)]
-pub trait TermEnum {}
-impl TermEnum for Atom {}
-impl TermEnum for Variable {}
-impl TermEnum for Composite {}
+#[enum_dispatch]
+pub trait UniqueForm {
+    /// Each Formula term has an unique form as a string but can be changed to regular
+    /// types in the future. This method provides easy access to the unique form.
+    fn unique_form(&self) -> &String;
 
+    /// Generate an unique form of the term as string.
+    fn create_unique_form(&self) -> String;
 
-#[derive(Derivative)]
-// #[derivative(PartialEq)]
-// #[derivative(PartialOrd)]
-// #[derivative(Eq)]
-// #[derivative(Ord)]
+    /// The term is not immutable and when unique form needs to be updated when it is
+    /// internally mutated.
+    fn update(&mut self);
+}
+
+impl UniqueForm for Atom {
+    fn unique_form(&self) -> &String {
+        &self.unique_form
+    }
+
+    fn create_unique_form(&self) -> String {
+        let unique_form = match &self.val {
+            AtomEnum::Int(i) => format!("{}", i),
+            AtomEnum::Bool(b) => format!("{:?}", b),
+            AtomEnum::Str(s) => format!("\"{:?}\"", s),
+            AtomEnum::Float(f) => format!("{}", f),
+        };
+        unique_form
+    }
+
+    fn update(&mut self) {
+        let new_form = self.create_unique_form();
+        self.unique_form = new_form;
+    }
+}
+
+impl UniqueForm for Variable {
+    fn unique_form(&self) -> &String {
+        &self.unique_form
+    }
+    
+    fn create_unique_form(&self) -> String {
+        format!("{}.{}", self.root, self.fragments.join("."))
+    }
+
+    fn update(&mut self) {
+        let new_form = self.create_unique_form();
+        self.unique_form = new_form;
+    }
+}
+
+impl UniqueForm for Composite {
+    fn unique_form(&self) -> &String {
+        &self.unique_form
+    }
+
+    fn create_unique_form(&self) -> String {
+        let mut args = vec![];
+        for arg in self.arguments.iter() {
+            args.push(format!("{}", arg));
+        }
+
+        let args_str = args.join(", ");
+        let unique_form = format!("{}({})", self.sort.name(), args_str);
+        return unique_form;
+    }
+
+    fn update(&mut self) {
+        let new_form = self.create_unique_form();
+        self.unique_form = new_form;
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Composite {
-    // Stash the hash and compare the hash first for ordering.
-    // pub sort: Arc<OrdWrapper<HashableWrapper<Type>>>,
+    pub unique_form: String,
+
     pub sort: Arc<Type>,
 
     pub arguments: Vec<Arc<Term>>,
 
-    // TODO: It will go wrong if serialize a rule that has composite with alias.
-    // Ignore `alias` when check equality or compute hash as one term may have multiple alias.
-    // #[derivative(Hash="ignore")]
-    #[serde(skip)]
-    // #[derivative(PartialEq="ignore")]
-    // #[derivative(PartialOrd="ignore")]
     pub alias: Option<String>
 }
 
@@ -58,13 +111,13 @@ impl Eq for Composite {}
 
 impl PartialEq for Composite {
     fn eq(&self, other: &Self) -> bool {
-        (self.sort.name(), &self.arguments) == (self.sort.name(), &other.arguments)
+        self.unique_form == other.unique_form
     }
 }
 
 impl Ord for Composite {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.sort.name(), &self.arguments).cmp(&(other.sort.name(), &other.arguments))
+        self.unique_form.cmp(&other.unique_form)
     }
 }
 
@@ -85,29 +138,25 @@ impl Hash for Composite {
 
 impl Display for Composite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut args = vec![];
-        for arg in self.arguments.iter() {
-            args.push(format!("{}", arg));
-        }
-
-        let args_str = args.join(", ");
         let alias_str = match &self.alias {
             None => "".to_string(),
             Some(name) => format!("{} is ", name)
         };
-
-        write!(f, "{}{}({})", alias_str, self.sort.name(), args_str)
+        write!(f, "{}{}", alias_str, self.unique_form)
     }
 }
 
 impl Composite {
     pub fn new(sort: Arc<Type>, arguments: Vec<Arc<Term>>, alias: Option<String>) -> Self 
     {
-        Composite {
+        let mut composite = Composite {
+            unique_form: "".to_string(),
             sort,
             arguments,
             alias,
-        }
+        };
+        composite.update();
+        return composite;
     }
 
     pub fn validate(&self) -> bool {
@@ -116,17 +165,32 @@ impl Composite {
 
 }
 
-#[derive(Derivative)]
-#[derivative(PartialOrd)]
-#[derivative(PartialEq)]
-#[derive(Clone, Debug, Eq, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Variable {
+    pub unique_form: String,
     pub root: String,
     pub fragments: Vec<String>,
-
-    #[derivative(PartialEq="ignore")]
-    #[derivative(PartialOrd="ignore")]
     pub base_term: Option<Arc<Term>>,
+}
+
+impl Eq for Variable {} 
+
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        self.unique_form == other.unique_form
+    }
+}
+
+impl Ord for Variable {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.unique_form.cmp(&other.unique_form)
+    }
+}
+
+impl PartialOrd for Variable {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Hash for Variable {
@@ -150,66 +214,141 @@ impl Display for Variable {
 
 impl Variable {
     pub fn new(root: String, fragments: Vec<String>) -> Self {
-        if fragments.len() == 0 {
-            Variable {
-                root,
-                fragments,
-                base_term: None,
+        let mut var = match fragments.len() == 0 {
+            true => {
+                Variable {
+                    unique_form: "".to_string(),
+                    root,
+                    fragments,
+                    base_term: None,
+                }
+            },
+            false => {
+                // Create a base term with same root but no fragments so base term can be easily 
+                // accessed later without clones.
+                let base_term: Term = Variable::new(root.clone(), vec![]).into();
+                Variable {
+                    unique_form: "".to_string(),
+                    root,
+                    fragments,
+                    base_term: Some(Arc::new(base_term))
+                }
+
             }
-        }
-        else {
-            // Create a base term with same root but no fragments so base term can be easily accessed later without clones.
-            let base_term: Term = Variable::new(root.clone(), vec![]).into();
-            Variable {
-                root,
-                fragments,
-                base_term: Some(Arc::new(base_term))
-            }
-        }
+        };
+        var.update();
+        return var;
     }
 }
 
-#[enum_dispatch]
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Atom {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AtomEnum {
     Int(BigInt),
     Str(String),
     Bool(bool),
     Float(BigRational),
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Atom {
+    pub unique_form: String,
+    pub val: AtomEnum,
+}
+
+impl From<AtomEnum> for Atom {
+    fn from(val: AtomEnum) -> Self {
+        Atom::new(val)
+    }
+}
+
+impl From<AtomEnum> for Term {
+    fn from(val: AtomEnum) -> Self {
+        Atom::new(val).into()
+    }
+}
+
+impl Atom {
+    pub fn new(val: AtomEnum) -> Self {
+        let mut atom = Atom { 
+            unique_form: "".to_string(), 
+            val 
+        };
+        atom.update();
+        atom
+    }
+}
+
+impl Eq for Atom {} 
+
+impl PartialEq for Atom {
+    fn eq(&self, other: &Self) -> bool {
+        self.unique_form == other.unique_form
+    }
+}
+
+impl Ord for Atom {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.unique_form.cmp(&other.unique_form)
+    }
+}
+
+impl PartialOrd for Atom {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Hash for Atom {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.unique_form.hash(state);
+    }
+}
+
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let atom_str = match self {
-            Atom::Int(i) => format!("{}", i),
-            Atom::Bool(b) => format!("{:?}", b),
-            Atom::Str(s) => format!("{:?}", s),
-            Atom::Float(f) => format!("{}", f),
+        let atom_str = match &self.val {
+            AtomEnum::Int(i) => format!("{}", i),
+            AtomEnum::Bool(b) => format!("{:?}", b),
+            AtomEnum::Str(s) => format!("\"{:?}\"", s),
+            AtomEnum::Float(f) => format!("{}", f),
         };
         write!(f, "{}", atom_str)
     }
 }
 
-#[enum_dispatch]
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[enum_dispatch(UniqueForm)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Term {
     Composite,
     Variable,
     Atom
 }
 
-/*
-impl Hashable for Term {
-    type Output = u64;
-    fn hashed(&self) -> Self::Output {
-        match self {
-            Term::Atom(a) => { a.hashed() },
-            Term::Variable(v) => { v.hashed() },
-            Term::Composite(c) => { c.hashed() }
-        }
+impl Eq for Term {} 
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        self.unique_form() == other.unique_form()
     }
 }
-*/
+
+impl Ord for Term {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.unique_form().cmp(&other.unique_form())
+    }
+}
+
+impl PartialOrd for Term {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Hash for Term {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.unique_form().hash(state);
+    }
+}
 
 pub trait FormulaTerm {
     /// Compare two Formula terms and return a binding if every variable in the first term `a` including 
@@ -313,8 +452,11 @@ impl FormulaExpr for Term {
     fn replace(&mut self, pattern: &Term, replacement: &Term) {
         self.traverse_mut(
             &|term| { return term == pattern; }, 
-            &mut |mut term| { *term = replacement.clone(); }
+            &mut |mut term| { 
+                *term = replacement.clone(); 
+            }
         );
+        println!("After replacement: {}", self);
     }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Term, SetComprehension> {
@@ -520,6 +662,47 @@ impl<B> FormulaTerm for B where B: Borrow<Term> {
 }
 
 impl Term {
+    // Traverse the term recursively to find the pattern without mutating the found term.
+    pub fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
+    where F1: Fn(&Term) -> bool, F2: Fn(&Term)
+    {
+        if pattern(self) {
+            logic(self);
+        }
+
+        // Recursively match all arguments in the composite term even the term is already matched.
+        // For example: List ::= new (content: Integer, next: List + {NIL}). We can write a pattern 
+        // like List(a, b) that not only match List(1, List(2, NIL)) but also match its child List(2, NIL).
+        match self {
+            Term::Composite(c) => {
+                for arg in c.arguments.iter() {
+                    arg.traverse(pattern, logic);
+                }
+            },
+            _ => {}
+        };
+    }
+
+    /// Traverse the term recursively from root to find the term that satifies the pattern
+    /// and then apply the logic to the mutable term.
+    pub fn traverse_mut<F1, F2>(&mut self, pattern: &F1, logic: &mut F2) 
+    where F1: Fn(&Term) -> bool, F2: FnMut(&mut Term)
+    {
+        if pattern(self) {
+            logic(self);
+        }
+
+        if let Term::Composite(c) = self {
+            for arg in c.arguments.iter_mut() {
+                let arg_term = Arc::make_mut(arg);
+                arg_term.traverse_mut(pattern, logic);
+            }
+        }
+
+        // Need to change the unique form since the term is modified.
+        self.update();
+    }
+
     /// Given a string create a nullary composite type with no arguments inside
     /// and return the singleton term or constant in other words.
     pub fn create_constant(constant: String) -> Term {
@@ -677,47 +860,6 @@ impl Term {
         false
     }
 
-    // Traverse the term recursively to find the pattern without mutating the found term.
-    pub fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
-    where F1: Fn(&Term) -> bool, F2: Fn(&Term)
-    {
-        if pattern(self) {
-            logic(self);
-        }
-
-        // Recursively match all arguments in the composite term even the term is already matched.
-        // For example: List ::= new (content: Integer, next: List + {NIL}). We can write a pattern 
-        // like List(a, b) that not only match List(1, List(2, NIL)) but also match its child List(2, NIL).
-        match self {
-            Term::Composite(c) => {
-                for arg in c.arguments.iter() {
-                    arg.traverse(pattern, logic);
-                }
-            },
-            _ => {}
-        };
-    }
-
-    /// Traverse the term recursively from root to find the term that satifies the pattern
-    /// and then apply the logic to the mutable term.
-    pub fn traverse_mut<F1, F2>(&mut self, pattern: &F1, logic: &mut F2) 
-    where F1: Fn(&Term) -> bool, F2: FnMut(&mut Term)
-    {
-        if pattern(self) {
-            logic(self);
-        }
-
-        match self {
-            Term::Composite(c) => {
-                for arg_arc in c.arguments.iter_mut() {
-                    let arg_term = Arc::make_mut(arg_arc);
-                    arg_term.traverse_mut(pattern, logic);
-                }
-            },
-            _ => {}
-        };
-    }
-
     // Add alias to the term and its subterms recursively if a match is found in reversed map.
     pub fn propagate_reverse_bindings<T: GenericMap<Arc<Term>, String>>(&self, reverse_map: &T) -> Option<Arc<Term>> {
         match self {
@@ -735,11 +877,7 @@ impl Term {
                 }
 
                 // The new term does not contain alias but will change it later if a match is found in reverse alias map.
-                let mut new_composite_term: Term = Composite {
-                    sort: composite.sort.clone(),
-                    arguments: new_arguments,
-                    alias: None,
-                }.into();
+                let mut new_composite_term: Term = Composite::new(composite.sort.clone(), new_arguments, None).into();
 
                 // if the raw term is matched in reverse map with a string alias, add the alias to this composite term.
                 if reverse_map.contains_gkey(&new_composite_term) {
@@ -750,11 +888,8 @@ impl Term {
                 }
 
                 Some(Arc::new(new_composite_term))
-
             },
-            _ => {
-                None                
-            }
+            _ => { None }
         }
     }
 

@@ -139,6 +139,12 @@ where
     map: OrdWrapper<HashableWrapper<BTreeMap<K, V>>>
 }
 
+impl<K: Ord+Hash, V: Ord+Hash> Display for QuickHashOrdMap<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.unique_form)
+    }
+}
+
 impl<K: Ord+Hash, V: Ord+Hash> Eq for QuickHashOrdMap<K, V> {} 
 
 impl<K: Ord+Hash, V: Ord+Hash> PartialEq for QuickHashOrdMap<K, V> {
