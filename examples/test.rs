@@ -2,36 +2,36 @@ use differential_dataflow::input::{Input, InputSession};
 use differential_dataflow::operators::join::{Join, JoinCore};
 use differential_dataflow::operators::*;
 
-use z3::ast::Ast;
-use z3::*;
+// use z3::ast::Ast;
+// use z3::*;
 
 fn main() {
-    test_solver();
+    // test_solver();
     test_dd();
 }
 
-fn test_solver() {
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let a = ast::BV::new_const(&ctx, "a", 64);
-    let b = ast::BV::new_const(&ctx, "b", 64);
-    let two = ast::BV::from_i64(&ctx, 2, 64);
+// fn test_solver() {
+//     let cfg = Config::new();
+//     let ctx = Context::new(&cfg);
+//     let a = ast::BV::new_const(&ctx, "a", 64);
+//     let b = ast::BV::new_const(&ctx, "b", 64);
+//     let two = ast::BV::from_i64(&ctx, 2, 64);
 
-    let solver = Solver::new(&ctx);
-    solver.assert(&a.bvsgt(&b)); // a > b
-    solver.assert(&b.bvsgt(&two)); // a > 2
-    let b_plus_two = b.bvadd(&two); 
-    solver.assert(&b_plus_two.bvsgt(&a)); // b + 2 > a
-    assert_eq!(solver.check(), SatResult::Sat);
+//     let solver = Solver::new(&ctx);
+//     solver.assert(&a.bvsgt(&b)); // a > b
+//     solver.assert(&b.bvsgt(&two)); // a > 2
+//     let b_plus_two = b.bvadd(&two); 
+//     solver.assert(&b_plus_two.bvsgt(&a)); // b + 2 > a
+//     assert_eq!(solver.check(), SatResult::Sat);
 
-    let model = solver.get_model();
-    let av = model.eval(&a).unwrap().as_i64().unwrap();
-    let bv = model.eval(&b).unwrap().as_i64().unwrap();
-    assert!(av > bv);
-    assert!(bv > 2);
-    assert!(bv + 2 > av);
-    println!("{:?}, {:?}", av, bv);
-}
+//     let model = solver.get_model();
+//     let av = model.eval(&a).unwrap().as_i64().unwrap();
+//     let bv = model.eval(&b).unwrap().as_i64().unwrap();
+//     assert!(av > bv);
+//     assert!(bv > 2);
+//     assert!(bv + 2 > av);
+//     println!("{:?}, {:?}", av, bv);
+// }
 
 fn test_dd() {
     timely::execute_from_args(std::env::args(), move |worker| {

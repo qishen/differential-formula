@@ -449,13 +449,13 @@ impl DDEngine {
         let temp_rule = Rule::new(vec![], constraints.clone());
         let pos_preds = temp_rule.predicate_constraints();
 
-        let default_vars: OrdSet<Term> = OrdSet::new();
+        let init_vars: OrdSet<Term> = OrdSet::new();
 
         //let temp_rule2 = temp_rule.clone();
         //models.inspect(move |x| println!("Model for rule {}: {:?}", temp_rule2, x));
 
         // TODO: find a better way to create an empty collection.
-        let default_col = models
+        let init_col = models
             .filter(|_wrapped_term| false)
             .map(|_wrapped_term| {
                 let empty_map = BTreeMap::new();
@@ -465,7 +465,7 @@ impl DDEngine {
 
         // Join all positive predicate terms by their shared variables one by one in order.
         let (mut vars, collection) = pos_preds.into_iter()
-            .fold((default_vars, default_col), |(prev_vars, prev_col), pred_constraint| {
+            .fold((init_vars, init_col), |(prev_vars, prev_col), pred_constraint| {
                 let pred: Predicate = pred_constraint.clone().try_into().unwrap();
                 let term = pred.term.clone();
                 let mut vars: OrdSet<Term> = OrdSet::new();

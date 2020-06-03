@@ -41,7 +41,7 @@ petgraph = "0.5"
 num-iter = "0.1"
 derivative = "2"
 # z3 = {version="0.5.0", features = ["static-link-z3"]}
-fasthash = "0.4"
+# fasthash = "0.4"
 fnv = "1"
 
 # clap = "2.33.0"
