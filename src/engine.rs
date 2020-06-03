@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashSet, HashMap};
 use im::OrdSet;
 
 use timely::dataflow::*;
+use timely::dataflow::scopes::child::Child;
 
 use differential_dataflow::*;
 use differential_dataflow::input::InputSession;
@@ -38,6 +39,7 @@ impl<FM: FormulaModule> Session<FM> {
         let allocator = timely::communication::allocator::Thread::new();
         let mut worker = timely::worker::Worker::new(allocator);
         let (mut input, probe) = engine.create_dataflow(&module, &mut worker);
+
         input.advance_to(0);
 
         Session {
@@ -98,9 +100,35 @@ impl<FM: FormulaModule> Session<FM> {
 }
 
 
+pub struct StreamIndex<G> 
+where
+    G: Scope,
+    G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
+{
+    pub indexes: HashMap<Term, Collection<G, QuickHashOrdMap<Term, Term>>>,
+}
+
+// impl<G> StreamIndex<G> 
+// where
+//     G: Scope,
+//     G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
+// {
+//     pub fn enter(&self, scope: Scope) 
+//     -> StreamChildIndex<G>
+//     {
+//         let mut new_map = HashMap::new();
+//         for (k, v) in self.indexes.iter() {
+//             new_map.insert(k.clone(), v.enter(scope));
+//         }
+
+//         StreamIndex { indexes: new_map }
+//     }
+// }
+
 pub struct DDEngine {
     pub env: Env,
     pub inspect: bool,
+    // pub indexes: HashMap<Term, Collection<G, QuickHashOrdMap<Term, Term>>>
 }
 
 impl DDEngine {
@@ -108,6 +136,7 @@ impl DDEngine {
         DDEngine {
             env: Env::new(),
             inspect: false,
+            // indexes: HashMap::new(),
         }
     }
 
@@ -204,9 +233,39 @@ impl DDEngine {
             })
     }
 
-    // TODO: Some predicates in the rule may have the same pattern.
-    pub fn dataflow_filtered_by_pattern() {
+    pub fn dataflow_filtered_by_pattern<G>(
+        &self,
+        terms: &Collection<G, HashedTerm>, 
+        pattern: &Term,
+    ) -> Collection<G, QuickHashOrdMap<Term, Term>>
+    where 
+        G: Scope,
+        G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
+    {
+        let (normalized_pattern, _) = pattern.normalize();
+        let binding_collection = self.dataflow_filtered_by_type(terms, pattern.clone()) 
+            .map(move |wrapped_term| {
+                let binding_opt = normalized_pattern.get_cached_bindings((**wrapped_term).borrow());
+                (wrapped_term, binding_opt)
+            })
+            .filter(|(_, binding_opt)| {
+                match binding_opt {
+                    None => false,
+                    _ => true,
+                }
+            })
+            .map(move |(wrapped_term, binding_opt)| {
+                // Create a variable to represent term itself.Predicate
+                // TODO: what if alias variable is already in existing variables.
+                let mut binding = binding_opt.unwrap();
+                let term = &**wrapped_term;
+                let vterm: Term = Variable::new("~self".to_string(), vec![]).into();
+                binding.ginsert(vterm, term.clone()); // A deep clone occurs here.
+                return binding;
+            });
+            //.inspect(|x| { println!("Initial bindings for the first constraint is {:?}", x); });
 
+        binding_collection
     }
 
     /// Match a stream of terms to predicate constraint and return a stream of hash maps
@@ -373,10 +432,13 @@ impl DDEngine {
         (all_vars, joint_collection)
     } 
 
+
+
     pub fn dataflow_from_constraints<G>(
         &self, 
         models: &Collection<G, HashedTerm>, 
-        constraints: &Vec<Constraint>
+        constraints: &Vec<Constraint>,
+        cache: &mut Option<StreamIndex<G>>,
     ) 
     -> (OrdSet<Term>, Collection<G, QuickHashOrdMap<Term, Term>>)
     where
@@ -414,14 +476,34 @@ impl DDEngine {
                     vars.insert(vterm);
                 }
                 
-                // let constraint = pred_constraint.clone();
-                // models.inspect(move |x| println!("Models before enter {}: {:?}", constraint, x));
+                let (normalized_pattern, vmap) = term.normalize();
 
-                let col = self.dataflow_filtered_by_positive_predicate_constraint(
-                    models, 
-                    pred_constraint.clone(),
-                );
-                
+                // Get bindings derived from all terms or use the cached stream.
+                let col = cache.as_ref().map_or_else(
+                    || {
+                        self.dataflow_filtered_by_positive_predicate_constraint(
+                            models, 
+                            pred_constraint.clone(),
+                        )
+                    }, 
+                    |cache| {
+                        let col = match cache.indexes.contains_key(&normalized_pattern) {
+                            true => {
+                                cache.indexes.get(&normalized_pattern).unwrap().clone()
+                            },
+                            false => {
+                                self.dataflow_filtered_by_positive_predicate_constraint(
+                                    models, 
+                                    pred_constraint.clone(),
+                                )
+                            }
+                        };
+                        return col;
+                    }
+                )
+                //.inspect(|x| println!("col: {:?}", x))
+                ;
+
                 // col.inspect(move |x| println!("Changed matches for {}: {:?}", constraint, x));
 
                 if prev_vars.len() != 0 {
@@ -453,7 +535,8 @@ impl DDEngine {
                                     vars.clone(),
                                     &outer_col, 
                                     &models, 
-                                    &setcompre
+                                    &setcompre,
+                                    cache
                                 );
                                 // Add declaration variable into the set of all vars after evaluation of setcompre
                                 vars.insert(var_term.clone());
@@ -500,6 +583,7 @@ impl DDEngine {
         ordered_outer_collection: &Collection<G, QuickHashOrdMap<Term, Term>>, // Binding collection from outer scope of set comprehension.
         models: &Collection<G, HashedTerm>, // Existing model collection.
         setcompre: &SetComprehension,
+        cache: &mut Option<StreamIndex<G>>,
     ) -> Collection<G, QuickHashOrdMap<Term, Term>>
     where 
         G: Scope,
@@ -515,7 +599,11 @@ impl DDEngine {
         let mut setcompre_var = var.clone();
         
         // Evaluate constraints in set comprehension and return ordered binding collection.
-        let (inner_vars, ordered_inner_collection) = self.dataflow_from_constraints(models, constraints);
+        let (inner_vars, ordered_inner_collection) = self.dataflow_from_constraints(
+            models, 
+            constraints,
+            cache,
+        );
         
         // models.inspect(|x| println!("Models for inner constraints: {:?}", x));
         // ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
@@ -656,22 +744,36 @@ impl DDEngine {
         //.inspect(|x| { println!("Aggregation result: {:?}", x); })
     }
 
-    pub fn dataflow_from_single_rule<G>(&self, models: &Collection<G, HashedTerm>, rule: &Rule) 
+    pub fn dataflow_from_single_rule<G>(
+        &self, terms: &Collection<G, HashedTerm>, 
+        rule: &Rule,
+        cache: &mut Option<StreamIndex<G>>,
+    ) 
     -> Collection<G, HashedTerm>
     where 
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let head_terms = rule.get_head();
+        let head_terms: Vec<Term> = rule.get_head().into_iter().map(|term| {
+            let (pattern, _) = term.normalize();
+            return pattern;
+        }).collect();
+
         let constraints = rule.get_body();
 
-        models
+        let (_, binding_collection) = self.dataflow_from_constraints(
+            &terms, 
+            &constraints, 
+            cache,
+        );
+
+        binding_collection.inspect(|x| println!("From cached stream: {:?}", x));
+
+        terms
             //.inspect(|x| println!("Model changes: {:?}", x))
             .iterate(|inner| {
-                // inner.inspect(|x| println!("Inner model changes: {:?}", x));
-                // let models = models.enter(&inner.scope());
-                let (_, binding_collection) = self.dataflow_from_constraints(&inner, &constraints);
-                let derived_terms = binding_collection
+                let mut inner_binding_collection = binding_collection.enter(&inner.scope());
+                let derived_terms = inner_binding_collection
                     //.inspect(|x| println!("A binding map derived from constraints: {:#?}", x))
                     .map(move |binding| {
                         let mut new_terms: Vec<HashedTerm> = vec![];
@@ -682,16 +784,22 @@ impl DDEngine {
                                 let constant = Term::create_constant(constant_name);
                                 new_terms.push(constant.into());
                             } else {
+                                println!("Binding for head term: {:?}", binding);
                                 let new_term = head_term.propagate_bindings(&binding);
                                 new_terms.push(new_term.into());
                             }
                         }
                         new_terms
                     })
-                    .flat_map(|x| x)
-                    //.inspect(|x| println!("Derived head term: {:?}", x))
-                    ;
+                    .flat_map(|x| x);
 
+                let (_, additional_binding_collection) = self.dataflow_from_constraints(
+                    &derived_terms, 
+                    &constraints, 
+                    &mut None,
+                );
+
+                inner_binding_collection = inner_binding_collection.concat(&additional_binding_collection);
                 inner.concat(&derived_terms).distinct()
             })
             // .inspect(|x| println!("All terms derived in rule: {:?}", x))
@@ -706,7 +814,6 @@ impl DDEngine {
     {
         let mut input = InputSession::<i32, HashedTerm, isize>::new();
         let stratified_rules = module.stratified_rules();
-
         let probe = worker.dataflow(|scope| {
             // Make sure there are no model duplicates.
             let models = input.to_collection(scope)
@@ -714,6 +821,8 @@ impl DDEngine {
                 .distinct();
 
             let mut new_models = models.map(|x| x);
+            
+            let mut stream_cache = Some(StreamIndex { indexes: HashMap::new() });
 
             for (i, stratum) in stratified_rules.into_iter().enumerate() {
                 // Rules to be executed are from the same stratum and independent from each other.
@@ -722,9 +831,27 @@ impl DDEngine {
                         println!("Rule at Stratum {}: {}", i, rule);
                     }
                     
+                    // let map_collection = self.dataflow_from_constraints(&new_models, &rule.get_body());
+                    // if self.inspect {
+                    //     map_collection.inspect(|x| { println!("Matches from constraints: {:?}", x); });
+                    // }
+
+                    if let Some(mut cache) = stream_cache {
+                        for constraint in rule.get_body().iter() {
+                            if let Constraint::Predicate(predicate) = constraint {
+                                let (normalized_term, _) = predicate.term.normalize();
+                                let stream = self.dataflow_filtered_by_pattern(&new_models, &predicate.term);
+                                // stream.inspect(|x| println!("Cached stream: {:?}", x));
+                                cache.indexes.insert(normalized_term, stream);
+                            }
+                        }
+                        stream_cache = Some(cache);
+                    }
+
                     let models_after_rule_execution = self.dataflow_from_single_rule(
                         &new_models, 
-                        rule
+                        rule,
+                        &mut stream_cache,
                     );
 
                     new_models = new_models

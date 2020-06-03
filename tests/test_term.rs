@@ -53,12 +53,16 @@ fn test_term_bindings() {
             ev1 is Edge(x, y).
             ev2 is Edge(Node(a), Node(b)).
             ev3 is Edge(_, Node(b)).
+            ev4 is Edge(y, z).
+            ev5 is Edge(a, a).
             tev1 is TwoEdge(x, y).
+
+            // Terms for testing normalization
         }
     ";
 
     let (model, engine) = parse_program(program, "g");
-    let mut session = Session::new(model.clone(), &engine);
+    let session = Session::new(model.clone(), &engine);
 
     let n1 = model.get_term_by_name("n1");
     let n1x = model.get_term_by_name("n1x");
@@ -75,6 +79,8 @@ fn test_term_bindings() {
     let ev1 = model.get_term_by_name("ev1");
     let ev2 = model.get_term_by_name("ev2");
     let ev3 = model.get_term_by_name("ev3");
+    let ev4 = model.get_term_by_name("ev4");
+    let ev5 = model.get_term_by_name("ev5");
     let tev1 = model.get_term_by_name("tev1");
 
 
@@ -162,7 +168,7 @@ fn test_term_bindings() {
     let var = session.create_term("x.name").unwrap();
     println!("Original binding: {:?}", binding2);
 
-    Term::update_binding(&Arc::new(var.clone()), &mut binding2);
+    var.update_binding(&mut binding2);
     let atom1 = session.create_term("1").unwrap();
 
     assert_eq!(binding2.get(&var).unwrap(), &atom1);
@@ -173,11 +179,21 @@ fn test_term_bindings() {
     let var2 = session.create_term("x.src.name").unwrap();
     println!("Original binding: {:?}", binding5);
 
-    Term::update_binding(&Arc::new(var1.clone()), &mut binding5);
+    var1.update_binding(&mut binding5);
     binding5.remove(&Arc::new(varx));
 
-    Term::update_binding(&Arc::new(var2), &mut binding5);
+    var2.update_binding(&mut binding5);
     println!("Updated binding {:?}", binding5);
+
+    println!("// -------- Test Term Normalization -------- //");
+    let normalized_ev1 = ev1.normalize().0;
+    let normalized_ev4 = ev4.normalize().0;
+    let normalized_ev5 = ev5.normalize().0;
+    println!("{} is normalized to {}", ev1, normalized_ev1);
+    println!("{} is normalized to {}", ev4, normalized_ev4);
+    println!("{} is normalized to {}", ev5, normalized_ev5);
+    assert_eq!(normalized_ev1, normalized_ev4);
+    assert_ne!(normalized_ev4, normalized_ev5);
 }
 
 #[test]

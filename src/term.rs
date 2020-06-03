@@ -233,7 +233,6 @@ impl Variable {
                     fragments,
                     base_term: Some(Arc::new(base_term))
                 }
-
             }
         };
         var.update();
@@ -597,34 +596,34 @@ impl<B> FormulaTerm for B where B: Borrow<Term> {
 
     fn find_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Term> {
         // Only apply to composite term and param must be a variable term.
-        if let Term::Composite(c) = self.borrow() {
-            if let Type::CompositeType(init_ctype) = c.sort.base_type().clone() {
-                let initial_term = self.borrow().clone();
-                let result = labels.iter().fold(Some((init_ctype,initial_term)), |state, label| {
-                    if let Some((ctype, subterm)) = state {
-                        ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
+        if let Term::Composite(cterm) = self.borrow() {
+            let initial_term = self.borrow();
+            let init_type = cterm.sort.base_type();
+            let result = labels.iter().fold(Some((init_type, initial_term)), |state, label| {
+                if let Some((ctype_enum, subterm)) = state {
+                    if let Type::CompositeType(ctype) = ctype_enum {
+                        let new_state = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
                             if let Some(arg_label) = arg_label_opt {
                                 if arg_label == label {
-                                    match subterm.borrow() {
-                                        Term::Composite(cterm) => {
-                                            // Update the composite type for the next round. Note that `t` could 
-                                            // be a renamed type wrapping a composite type.
-                                            let new_ctype: CompositeType = t.base_type().clone().try_into().unwrap();
-                                            let cterm_arg: &Term = cterm.arguments.get(i).unwrap().borrow();
-                                            Some((new_ctype, cterm_arg.clone()))
-                                        },
-                                        _ => { None }
+                                    if let Term::Composite(cterm) = subterm.borrow() {
+                                        // Update the composite type for the next round. Note that `t` could 
+                                        // be a renamed type wrapping a composite type.
+                                        let new_ctype = t.base_type();
+                                        let cterm_arg: &Term = cterm.arguments.get(i).unwrap().borrow();
+                                        return Some((new_ctype, cterm_arg));
                                     }
-                                } else { None }
+                                }
                             } 
-                            else { None }
-                        })
-                    } else { None }
-                });
+                            return None;
+                        });
+                        return new_state;
+                    } 
+                } 
+                return None;
+            });
 
-                if let Some((_, found_term)) = result {
-                    return Some(found_term);
-                }
+            if let Some((_, found_term)) = result {
+                return Some(found_term.clone());
             }
         }
         return None;
@@ -703,6 +702,46 @@ impl Term {
         self.update();
     }
 
+    /// Convert non-ground term into a normalized form.
+    pub fn normalize(&self) -> (Term, HashMap<Term, Term>) {
+        let mut generator = NameGenerator::new("~p");
+
+        // Map variables inside term to alias for normalization.
+        let mut vmap: HashMap<Term, Term> = HashMap::new();
+
+        // Allow multiple mutable reference for closure.
+        // let vars = RefCell::new(HashSet::new());
+
+        let mut normalized_term = self.clone();
+        normalized_term.traverse_mut(
+            &|term| {
+                match term {
+                    Term::Variable(v) => true,
+                    _ => false
+                }
+            },
+            &mut |var| {
+                if !var.is_dc_variable() {
+                    let pvar = match vmap.contains_key(var) {
+                        true => {
+                            vmap.get(var).unwrap().clone()
+                        },
+                        false => {
+                            generator.generate_dc_term()
+                        }
+                    };
+                    vmap.insert(var.clone(), pvar.clone());
+                    *var = pvar;
+                }
+            }
+        );
+
+        // Need to change the unique form since the term is modified.
+        normalized_term.update();
+
+        return (normalized_term, vmap);
+    }
+
     /// Given a string create a nullary composite type with no arguments inside
     /// and return the singleton term or constant in other words.
     pub fn create_constant(constant: String) -> Term {
@@ -742,6 +781,7 @@ impl Term {
             });
     }
 
+    /// Check if the term has variable(s) inside it.
     pub fn is_groundterm(&self) -> bool {
         match self {
             Term::Composite(composite) => {
@@ -757,6 +797,7 @@ impl Term {
         }
     }
 
+    /// Only apply to variable term to return the root term.
     pub fn root(&self) -> &Term {
         match self {
             Term::Variable(v) => {
@@ -830,7 +871,7 @@ impl Term {
     }
 
     // Check if two binding map has conflits in variable mappings.
-    pub fn has_conflit<M, K, V>(outer: &M, inner: &M) -> bool 
+    pub fn has_conflict<M, K, V>(outer: &M, inner: &M) -> bool 
     where 
         M: GenericMap<K, V>,
         K: Borrow<Term>,
