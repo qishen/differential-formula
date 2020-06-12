@@ -13,6 +13,7 @@ use crate::rule::*;
 use crate::constraint::*;
 use crate::module::*;
 use crate::util::*;
+use crate::util::map::*;
 
 #[enum_dispatch(TermAst)]
 trait TermAstBehavior {}

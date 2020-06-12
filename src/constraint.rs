@@ -15,6 +15,7 @@ use crate::term::*;
 use crate::expression::*;
 use crate::type_system::*;
 use crate::util::*;
+use crate::util::map::*;
 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,6 +1,5 @@
 use std::borrow::*;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
@@ -14,126 +13,86 @@ use num::*;
 use im::OrdSet;
 use enum_dispatch::enum_dispatch;
 use serde::{Serialize, Deserialize};
-use differential_dataflow::hashable::*;
 
 use crate::type_system::*;
 use crate::expression::*;
 use crate::util::*;
+use crate::util::map::*;
+use crate::util::wrapper::*;
 
-
-// A wrapped Term that cache the hash and use hash to compare ordering first.
-pub type HashedTerm = OrdHashableWrapper<Term>;
 
 #[enum_dispatch]
-pub trait UniqueForm {
-    /// Each Formula term has an unique form as a string but can be changed to regular
-    /// types in the future. This method provides easy access to the unique form.
-    fn unique_form(&self) -> &String;
+pub trait TermTrait {}
 
-    /// Generate an unique form of the term as string.
-    fn create_unique_form(&self) -> String;
+impl TermTrait for Atom {}
+impl TermTrait for Variable {}
+impl TermTrait for Composite {}
 
-    /// The term is not immutable and when unique form needs to be updated when it is
-    /// internally mutated.
-    fn update(&mut self);
-}
+// impl UniqueForm for Atom {
+//     fn unique_form(&self) -> &String {
+//         &self.unique_form
+//     }
 
-impl UniqueForm for Atom {
-    fn unique_form(&self) -> &String {
-        &self.unique_form
-    }
+//     fn create_unique_form(&self) -> String {
+//         let unique_form = match &self.val {
+//             AtomEnum::Int(i) => format!("{}", i),
+//             AtomEnum::Bool(b) => format!("{:?}", b),
+//             AtomEnum::Str(s) => format!("\"{:?}\"", s),
+//             AtomEnum::Float(f) => format!("{}", f),
+//         };
+//         unique_form
+//     }
 
-    fn create_unique_form(&self) -> String {
-        let unique_form = match &self.val {
-            AtomEnum::Int(i) => format!("{}", i),
-            AtomEnum::Bool(b) => format!("{:?}", b),
-            AtomEnum::Str(s) => format!("\"{:?}\"", s),
-            AtomEnum::Float(f) => format!("{}", f),
-        };
-        unique_form
-    }
+//     fn update(&mut self) {
+//         let new_form = self.create_unique_form();
+//         self.unique_form = new_form;
+//     }
+// }
 
-    fn update(&mut self) {
-        let new_form = self.create_unique_form();
-        self.unique_form = new_form;
-    }
-}
-
-impl UniqueForm for Variable {
-    fn unique_form(&self) -> &String {
-        &self.unique_form
-    }
+// impl UniqueForm for Variable {
+//     fn unique_form(&self) -> &String {
+//         &self.unique_form
+//     }
     
-    fn create_unique_form(&self) -> String {
-        format!("{}.{}", self.root, self.fragments.join("."))
-    }
+//     fn create_unique_form(&self) -> String {
+//         format!("{}.{}", self.root, self.fragments.join("."))
+//     }
 
-    fn update(&mut self) {
-        let new_form = self.create_unique_form();
-        self.unique_form = new_form;
-    }
-}
+//     fn update(&mut self) {
+//         let new_form = self.create_unique_form();
+//         self.unique_form = new_form;
+//     }
+// }
 
-impl UniqueForm for Composite {
-    fn unique_form(&self) -> &String {
-        &self.unique_form
-    }
+// impl UniqueForm for Composite {
+//     fn unique_form(&self) -> &String {
+//         &self.unique_form
+//     }
 
-    fn create_unique_form(&self) -> String {
-        let mut args = vec![];
-        for arg in self.arguments.iter() {
-            args.push(format!("{}", arg));
-        }
+//     fn create_unique_form(&self) -> String {
+//         let mut args = vec![];
+//         for arg in self.arguments.iter() {
+//             args.push(format!("{}", arg));
+//         }
 
-        let args_str = args.join(", ");
-        let unique_form = format!("{}({})", self.sort.name(), args_str);
-        return unique_form;
-    }
+//         let args_str = args.join(", ");
+//         let unique_form = format!("{}({})", self.sort.name(), args_str);
+//         return unique_form;
+//     }
 
-    fn update(&mut self) {
-        let new_form = self.create_unique_form();
-        self.unique_form = new_form;
-    }
-}
+//     fn update(&mut self) {
+//         let new_form = self.create_unique_form();
+//         self.unique_form = new_form;
+//     }
+// }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Composite {
-    pub unique_form: String,
-
     pub sort: Arc<Type>,
 
     pub arguments: Vec<Arc<Term>>,
 
     pub alias: Option<String>
-}
-
-impl Eq for Composite {} 
-
-impl PartialEq for Composite {
-    fn eq(&self, other: &Self) -> bool {
-        self.unique_form == other.unique_form
-    }
-}
-
-impl Ord for Composite {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.unique_form.cmp(&other.unique_form)
-    }
-}
-
-impl PartialOrd for Composite {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Hash for Composite {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.sort.name().hash(state);
-        for arg in self.arguments.iter() {
-            arg.hash(state);
-        }
-    }
 }
 
 impl Display for Composite {
@@ -142,7 +101,15 @@ impl Display for Composite {
             None => "".to_string(),
             Some(name) => format!("{} is ", name)
         };
-        write!(f, "{}{}", alias_str, self.unique_form)
+
+        let mut args = vec![];
+        for arg in self.arguments.iter() {
+            args.push(format!("{}", arg));
+        }
+
+        let args_str = args.join(", ");
+        let term_str = format!("{}({})", self.sort.name(), args_str);
+        write!(f, "{}{}", alias_str, term_str)
     }
 }
 
@@ -150,56 +117,23 @@ impl Composite {
     pub fn new(sort: Arc<Type>, arguments: Vec<Arc<Term>>, alias: Option<String>) -> Self 
     {
         let mut composite = Composite {
-            unique_form: "".to_string(),
             sort,
             arguments,
             alias,
         };
-        composite.update();
         return composite;
     }
 
     pub fn validate(&self) -> bool {
         true
     }
-
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Variable {
-    pub unique_form: String,
     pub root: String,
     pub fragments: Vec<String>,
     pub base_term: Option<Arc<Term>>,
-}
-
-impl Eq for Variable {} 
-
-impl PartialEq for Variable {
-    fn eq(&self, other: &Self) -> bool {
-        self.unique_form == other.unique_form
-    }
-}
-
-impl Ord for Variable {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.unique_form.cmp(&other.unique_form)
-    }
-}
-
-impl PartialOrd for Variable {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Hash for Variable {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.root.hash(state);
-        for elt in self.fragments.iter() {
-            elt.hash(state);
-        }
-    }
 }
 
 impl Display for Variable {
@@ -217,7 +151,6 @@ impl Variable {
         let mut var = match fragments.len() == 0 {
             true => {
                 Variable {
-                    unique_form: "".to_string(),
                     root,
                     fragments,
                     base_term: None,
@@ -228,19 +161,17 @@ impl Variable {
                 // accessed later without clones.
                 let base_term: Term = Variable::new(root.clone(), vec![]).into();
                 Variable {
-                    unique_form: "".to_string(),
                     root,
                     fragments,
                     base_term: Some(Arc::new(base_term))
                 }
             }
         };
-        var.update();
         return var;
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum AtomEnum {
     Int(BigInt),
     Str(String),
@@ -248,7 +179,7 @@ pub enum AtomEnum {
     Float(BigRational),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Atom {
     pub unique_form: String,
     pub val: AtomEnum,
@@ -272,34 +203,7 @@ impl Atom {
             unique_form: "".to_string(), 
             val 
         };
-        atom.update();
         atom
-    }
-}
-
-impl Eq for Atom {} 
-
-impl PartialEq for Atom {
-    fn eq(&self, other: &Self) -> bool {
-        self.unique_form == other.unique_form
-    }
-}
-
-impl Ord for Atom {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.unique_form.cmp(&other.unique_form)
-    }
-}
-
-impl PartialOrd for Atom {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Hash for Atom {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.unique_form.hash(state);
     }
 }
 
@@ -315,39 +219,20 @@ impl Display for Atom {
     }
 }
 
-#[enum_dispatch(UniqueForm)]
-#[derive(Clone, Serialize, Deserialize)]
+#[enum_dispatch(TermTrait)]
+#[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Term {
     Composite,
     Variable,
     Atom
 }
 
-impl Eq for Term {} 
+// impl HasUniqueForm for Term {
+//     type Form = usize;
+//     fn derive_unique_form(&self) -> Self::Form {
 
-impl PartialEq for Term {
-    fn eq(&self, other: &Self) -> bool {
-        self.unique_form() == other.unique_form()
-    }
-}
-
-impl Ord for Term {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.unique_form().cmp(&other.unique_form())
-    }
-}
-
-impl PartialOrd for Term {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Hash for Term {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.unique_form().hash(state);
-    }
-}
+//     }
+// }
 
 pub trait FormulaTerm {
     /// Compare two Formula terms and return a binding if every variable in the first term `a` including 
@@ -699,14 +584,14 @@ impl Term {
         }
 
         // Need to change the unique form since the term is modified.
-        self.update();
+        // self.update();
     }
 
     /// Convert non-ground term into a normalized form.
     pub fn normalize(&self) -> (Term, HashMap<Term, Term>) {
         let mut generator = NameGenerator::new("~p");
 
-        // Map variables inside term to alias for normalization.
+        // Map normalized variables to original variables.
         let mut vmap: HashMap<Term, Term> = HashMap::new();
 
         // Allow multiple mutable reference for closure.
@@ -721,7 +606,7 @@ impl Term {
                 }
             },
             &mut |var| {
-                if !var.is_dc_variable() {
+                // if !var.is_dc_variable() {
                     let pvar = match vmap.contains_key(var) {
                         true => {
                             vmap.get(var).unwrap().clone()
@@ -730,14 +615,15 @@ impl Term {
                             generator.generate_dc_term()
                         }
                     };
-                    vmap.insert(var.clone(), pvar.clone());
+                    //vmap.insert(var.clone(), pvar.clone());
+                    vmap.insert(pvar.clone(), var.clone());
                     *var = pvar;
-                }
+                // }
             }
         );
 
         // Need to change the unique form since the term is modified.
-        normalized_term.update();
+        // normalized_term.update();
 
         return (normalized_term, vmap);
     }

@@ -13,7 +13,7 @@ use crate::expression::*;
 use crate::term::*;
 use crate::rule::*;
 use crate::type_system::*;
-use crate::util::*;
+use crate::util::map::*;
 
 
 #[enum_dispatch]

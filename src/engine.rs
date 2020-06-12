@@ -22,7 +22,8 @@ use crate::expression::*;
 use crate::module::*;
 use crate::rule::*;
 use crate::parser::combinator::*;
-use crate::util::*;
+use crate::util::map::*;
+use crate::util::wrapper::*;
 
 
 pub struct Session<FM: FormulaModule> {
@@ -108,22 +109,16 @@ where
     pub indexes: HashMap<Term, Collection<G, QuickHashOrdMap<Term, Term>>>,
 }
 
-// impl<G> StreamIndex<G> 
-// where
-//     G: Scope,
-//     G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
-// {
-//     pub fn enter(&self, scope: Scope) 
-//     -> StreamChildIndex<G>
-//     {
-//         let mut new_map = HashMap::new();
-//         for (k, v) in self.indexes.iter() {
-//             new_map.insert(k.clone(), v.enter(scope));
-//         }
-
-//         StreamIndex { indexes: new_map }
-//     }
-// }
+impl<G> StreamIndex<G> 
+where
+    G: Scope,
+    G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
+{
+    pub fn find_stream_by_pattern(&self, term: &Term) -> Collection<G, QuickHashOrdMap<Term, Term>> {
+        let (normalized_term, _) = term.normalize();
+        self.indexes.get(&normalized_term).unwrap().clone()
+    } 
+}
 
 pub struct DDEngine {
     pub env: Env,
@@ -308,9 +303,12 @@ impl DDEngine {
         binding_collection
     }
     
+    /// Split the stream of hash maps into two streams of hash maps that one has "left_keys"
+    /// and the other one has "right_keys".
     pub fn split_binding<G>(
         &self,
         bindings: &Collection<G, QuickHashOrdMap<Term, Term>>, 
+        //vmap: HashMap<Term, Term>, 
         left_keys:  OrdSet<Term>,
         right_keys: OrdSet<Term>,
     ) -> Collection<G, (QuickHashOrdMap<Term, Term>, QuickHashOrdMap<Term, Term>)>
@@ -318,7 +316,7 @@ impl DDEngine {
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        bindings.map(move |mut binding| {
+        bindings.map(move |binding| {
             let mut first = BTreeMap::new();
             let mut second = BTreeMap::new();
             let mut btree_map: BTreeMap<Term, Term> = binding.into();
@@ -370,6 +368,7 @@ impl DDEngine {
             }
         }
 
+        // Update stream of hashmaps to add variables with fragments as the key.
         let prev_vars_extra_copy = prev_vars_extra.clone();
         let updated_prev_col = prev_col.map(move |mut binding| {
             for prev_var in prev_vars_extra_copy.iter() {
@@ -408,11 +407,19 @@ impl DDEngine {
 
 
         // Turn collection of [binding] into collection of [(middle, right)] for joins.
-        let m_r_col = self.split_binding(&updated_new_col, mvars.clone(), rvars.clone());
+        let m_r_col = self.split_binding(
+            &updated_new_col, 
+            mvars.clone(),
+            rvars.clone()
+        );
         // m_r_col.inspect(|x| println!("m_r_col: {:?}", x));
 
         // Turn collection of [binding] into collection of [(middle, left)] for joins.
-        let m_l_col = self.split_binding(&updated_prev_col, mvars.clone(), lvars.clone());
+        let m_l_col = self.split_binding(
+            &updated_prev_col, 
+            mvars.clone(), 
+            lvars.clone()
+        );
         // m_l_col.inspect(|x| println!("m_l_col: {:?}", x));
 
         let joint_collection = m_l_col
@@ -432,8 +439,6 @@ impl DDEngine {
         (all_vars, joint_collection)
     } 
 
-
-
     pub fn dataflow_from_constraints<G>(
         &self, 
         models: &Collection<G, HashedTerm>, 
@@ -448,11 +453,7 @@ impl DDEngine {
         // Construct a headless rule from a list of constraints.
         let temp_rule = Rule::new(vec![], constraints.clone());
         let pos_preds = temp_rule.predicate_constraints();
-
         let init_vars: OrdSet<Term> = OrdSet::new();
-
-        //let temp_rule2 = temp_rule.clone();
-        //models.inspect(move |x| println!("Model for rule {}: {:?}", temp_rule2, x));
 
         // TODO: find a better way to create an empty collection.
         let init_col = models
@@ -478,13 +479,13 @@ impl DDEngine {
                 
                 let (normalized_pattern, vmap) = term.normalize();
 
-                // Get bindings derived from all terms or use the cached stream.
+                // Get bindings derived from all terms or use the cached stream, suppose all the streams
+                // use the normalized variables as keys in the hashmaps.
                 let col = cache.as_ref().map_or_else(
                     || {
-                        self.dataflow_filtered_by_positive_predicate_constraint(
-                            models, 
-                            pred_constraint.clone(),
-                        )
+                        // Sometimes you don't want to use cache like when in the inner iteration dealing
+                        // with new derived terms.
+                        self.dataflow_filtered_by_pattern(models, &term)
                     }, 
                     |cache| {
                         let col = match cache.indexes.contains_key(&normalized_pattern) {
@@ -492,15 +493,29 @@ impl DDEngine {
                                 cache.indexes.get(&normalized_pattern).unwrap().clone()
                             },
                             false => {
-                                self.dataflow_filtered_by_positive_predicate_constraint(
-                                    models, 
-                                    pred_constraint.clone(),
-                                )
+                                // self.dataflow_filtered_by_positive_predicate_constraint(
+                                //     models, 
+                                //     pred_constraint.clone(),
+                                // )
+                                println!("The pattern {} is not found in {:?}", normalized_pattern, cache.indexes.keys());
+                                unimplemented!()
                             }
                         };
                         return col;
                     }
                 )
+                .map(move |binding| {
+                    let btree_map: BTreeMap<Term, Term> = binding.into();
+                    let mut updated_btree_map: BTreeMap<Term, Term> = BTreeMap::new();
+                    for (k, v) in btree_map.into_iter() {
+                        // Change the normalized variables back into original ones.
+                        if vmap.contains_key(&k) { 
+                            let k2 = vmap.get(&k).unwrap().clone();
+                            updated_btree_map.insert(k2, v);
+                        }
+                    }
+                    updated_btree_map.into()
+                })
                 //.inspect(|x| println!("col: {:?}", x))
                 ;
 
@@ -509,9 +524,8 @@ impl DDEngine {
                 if prev_vars.len() != 0 {
                     return self.join_two_bindings(prev_vars, &prev_col, vars, &col);
                 }
-                else {
-                    return (vars, col);
-                }
+                else { return (vars, col); }
+                // return (vars, col);
             });
 
         // Let's assume every set comprehension must be explicitly declared with a variable on the left side 
@@ -575,7 +589,6 @@ impl DDEngine {
         (vars, final_collection)
     }
 
-    
     pub fn dataflow_from_set_comprehension<G>(
         &self,
         var: Term,
@@ -754,11 +767,13 @@ impl DDEngine {
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
-        let head_terms: Vec<Term> = rule.get_head().into_iter().map(|term| {
-            let (pattern, _) = term.normalize();
-            return pattern;
-        }).collect();
+        // let head_terms: Vec<Term> = rule.get_head().into_iter().map(|term| {
+        //     let (pattern, _) = term.normalize();
+        //     return pattern;
+        // }).collect();
 
+        let head_terms = rule.get_head();
+        let head_terms_copy = head_terms.clone();
         let constraints = rule.get_body();
 
         let (_, binding_collection) = self.dataflow_from_constraints(
@@ -767,41 +782,95 @@ impl DDEngine {
             cache,
         );
 
-        binding_collection.inspect(|x| println!("From cached stream: {:?}", x));
+        terms.clone()
+        
+        // let fixpoint_collection = binding_collection
+        //     .iterate(|inner_collection| {
+        //         let derived_terms = inner_collection
+        //             //.inspect(|x| println!("A binding map derived from constraints: {:#?}", x))
+        //             .map(move |binding| {
+        //                 let mut new_terms: Vec<HashedTerm> = vec![];
+        //                 for head_term in head_terms.iter() {
+        //                     // If head term has variable term then it means that's a constant.
+        //                     if let Term::Variable(var) = head_term {
+        //                         let constant_name = var.root.clone();
+        //                         let constant = Term::create_constant(constant_name);
+        //                         new_terms.push(constant.into());
+        //                     } else {
+        //                         // println!("Binding for head term: {:?}", binding);
+        //                         let new_term = head_term.propagate_bindings(&binding);
+        //                         new_terms.push(new_term.into());
+        //                     }
+        //                 }
+        //                 new_terms
+        //             })
+        //             .flat_map(|x| x)
+        //             //.inspect(|x| println!("Add some new terms: {:?}", x))
+        //             ;
 
-        terms
-            //.inspect(|x| println!("Model changes: {:?}", x))
-            .iterate(|inner| {
-                let mut inner_binding_collection = binding_collection.enter(&inner.scope());
-                let derived_terms = inner_binding_collection
-                    //.inspect(|x| println!("A binding map derived from constraints: {:#?}", x))
-                    .map(move |binding| {
-                        let mut new_terms: Vec<HashedTerm> = vec![];
-                        for head_term in head_terms.iter() {
-                            // If head term has variable term then it means that's a constant.
-                            if let Term::Variable(var) = head_term {
-                                let constant_name = var.root.clone();
-                                let constant = Term::create_constant(constant_name);
-                                new_terms.push(constant.into());
-                            } else {
-                                println!("Binding for head term: {:?}", binding);
-                                let new_term = head_term.propagate_bindings(&binding);
-                                new_terms.push(new_term.into());
-                            }
-                        }
-                        new_terms
-                    })
-                    .flat_map(|x| x);
+        //         let (_, additional_binding_collection) = self.dataflow_from_constraints(
+        //             &derived_terms, 
+        //             &constraints, 
+        //             &mut None,
+        //         );
 
-                let (_, additional_binding_collection) = self.dataflow_from_constraints(
-                    &derived_terms, 
-                    &constraints, 
-                    &mut None,
-                );
+        //         inner_collection.concat(&additional_binding_collection).distinct()
+        //     });
+        
+        // fixpoint_collection.map(move |binding| {
+        //     let mut new_terms: Vec<HashedTerm> = vec![];
+        //     for head_term in head_terms_copy.iter() {
+        //         // If head term has variable term then it means that's a constant.
+        //         if let Term::Variable(var) = head_term {
+        //             let constant_name = var.root.clone();
+        //             let constant = Term::create_constant(constant_name);
+        //             new_terms.push(constant.into());
+        //         } else {
+        //             // println!("Binding for head term: {:?}", binding);
+        //             let new_term = head_term.propagate_bindings(&binding);
+        //             new_terms.push(new_term.into());
+        //         }
+        //     }
+        //     new_terms
+        // })
+        // .flat_map(|x| x)
 
-                inner_binding_collection = inner_binding_collection.concat(&additional_binding_collection);
-                inner.concat(&derived_terms).distinct()
-            })
+        //.inspect(|x| println!("Add some new terms: {:?}", x))
+        
+        // terms
+        //     .iterate(|inner| {
+        //         let mut inner_binding_collection = binding_collection.enter(&inner.scope());
+        //         let derived_terms = inner_binding_collection
+        //             //.inspect(|x| println!("A binding map derived from constraints: {:#?}", x))
+        //             .map(move |binding| {
+        //                 let mut new_terms: Vec<HashedTerm> = vec![];
+        //                 for head_term in head_terms.iter() {
+        //                     // If head term has variable term then it means that's a constant.
+        //                     if let Term::Variable(var) = head_term {
+        //                         let constant_name = var.root.clone();
+        //                         let constant = Term::create_constant(constant_name);
+        //                         new_terms.push(constant.into());
+        //                     } else {
+        //                         // println!("Binding for head term: {:?}", binding);
+        //                         let new_term = head_term.propagate_bindings(&binding);
+        //                         new_terms.push(new_term.into());
+        //                     }
+        //                 }
+        //                 new_terms
+        //             })
+        //             .flat_map(|x| x)
+        //             //.inspect(|x| println!("Add some new terms: {:?}", x))
+        //             ;
+
+        //         let (_, additional_binding_collection) = self.dataflow_from_constraints(
+        //             &derived_terms, 
+        //             &constraints, 
+        //             &mut None,
+        //         );
+
+        //         inner_binding_collection = inner_binding_collection.concat(&additional_binding_collection);
+        //         inner.concat(&derived_terms).distinct()
+        //     })
             // .inspect(|x| println!("All terms derived in rule: {:?}", x))
     }
 
@@ -831,23 +900,22 @@ impl DDEngine {
                         println!("Rule at Stratum {}: {}", i, rule);
                     }
                     
-                    // let map_collection = self.dataflow_from_constraints(&new_models, &rule.get_body());
-                    // if self.inspect {
-                    //     map_collection.inspect(|x| { println!("Matches from constraints: {:?}", x); });
-                    // }
-
                     if let Some(mut cache) = stream_cache {
                         for constraint in rule.get_body().iter() {
                             if let Constraint::Predicate(predicate) = constraint {
                                 let (normalized_term, _) = predicate.term.normalize();
-                                let stream = self.dataflow_filtered_by_pattern(&new_models, &predicate.term);
-                                // stream.inspect(|x| println!("Cached stream: {:?}", x));
-                                cache.indexes.insert(normalized_term, stream);
+                                if !cache.indexes.contains_key(&normalized_term) {
+                                    let stream = self.dataflow_filtered_by_pattern(&new_models, &predicate.term);
+                                    // stream.inspect(|x| println!("Cached stream: {:?}", x));
+                                    cache.indexes.insert(normalized_term, stream);
+                                }
                             }
                         }
                         stream_cache = Some(cache);
                     }
+                }
 
+                for rule in stratum.iter() {
                     let models_after_rule_execution = self.dataflow_from_single_rule(
                         &new_models, 
                         rule,

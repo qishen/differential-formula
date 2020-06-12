@@ -18,7 +18,7 @@ use crate::term::*;
 use crate::rule::*;
 use crate::constraint::*;
 use crate::util::*;
-
+use crate::util::map::*;
 
 pub trait FormulaExpr {
     // Return all variables in the expression.
