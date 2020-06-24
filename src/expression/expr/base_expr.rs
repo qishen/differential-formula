@@ -1,6 +1,5 @@
 use std::borrow::*;
 use std::convert::*;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -12,23 +11,28 @@ use num::*;
 use crate::expression::{FormulaExprTrait, SetComprehension};
 use crate::expression::expr::ExprTrait;
 use crate::term::*;
+use crate::type_system::*;
 use crate::util::*;
 use crate::util::map::*;
 
 
 #[enum_dispatch]
 pub trait BaseExprTrait {}
-impl BaseExprTrait for SetComprehension {}
-impl BaseExprTrait for Term {}
+impl<S, T> BaseExprTrait for SetComprehension<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {}
+impl<S, T> BaseExprTrait for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {}
 
 #[enum_dispatch(BaseExprTrait)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BaseExpr {
-    SetComprehension,
-    Term,
+pub enum BaseExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    SetComprehension(SetComprehension<S, T>),
+    Term(Term<S, T>),
 }
 
-impl ExprTrait for BaseExpr {
+impl<S, T> ExprTrait for BaseExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+
+    type SortOutput = S;
+    type TermOutput = T;
+
     fn has_set_comprehension(&self) -> bool {
         let has_setcompre = match self {
             BaseExpr::SetComprehension(s) => true,
@@ -38,7 +42,7 @@ impl ExprTrait for BaseExpr {
     }
 
     // A Expr could have multiple set comprehensions.
-    fn set_comprehensions(&self) -> Vec<SetComprehension> {
+    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::SortOutput, Self::TermOutput>> {
         let mut setcompres = vec![];
         match self {
             BaseExpr::SetComprehension(s) => {
@@ -49,15 +53,10 @@ impl ExprTrait for BaseExpr {
         setcompres
     }
 
-    fn evaluate<M, K, V>(&self, binding: &M) -> Option<BigInt> 
-    where 
-        M: GenericMap<K, V>,
-        K: Borrow<Term>,
-        V: Borrow<Term>
-    {
+    fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
         match self {
             BaseExpr::Term(term) => {
-                match term {
+                match term.borrow() {
                     Term::Atom(atom) => {
                         // The expression is a term of integer type.
                         match &atom.val {
@@ -70,20 +69,19 @@ impl ExprTrait for BaseExpr {
                     Term::Variable(variable) => {
                         // The expression is a variable and find the value in hash map by that variable
                         let root_var = term.root();
-                        let val_term = match root_var.borrow() == term {
+                        let val_term = match &root_var == term {
                             true => { 
-                                binding.gget(term).unwrap().borrow().clone() 
+                                binding.gget(term.borrow()).unwrap().clone() 
                             },
                             false => {
                                 // x.y.z does not exist in the binding but x exists.
-                                let val_term: &Term = binding.gget(root_var.borrow()).unwrap().borrow();
+                                let val_term: &T = binding.gget(&root_var.borrow()).unwrap();
                                 val_term.find_subterm(term).unwrap()
                             }
                         };
 
                         // val_term must be an atom term for arithmetic evaluation.
-                        let val_term_ref: &Term = val_term.borrow();
-                        match val_term_ref {
+                        match val_term.borrow() {
                             Term::Atom(atom) => {
                                 match &atom.val {
                                     AtomEnum::Int(num) => {
@@ -103,7 +101,7 @@ impl ExprTrait for BaseExpr {
     }
 }
 
-impl Display for BaseExpr {
+impl<S, T> Display for BaseExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BaseExpr::SetComprehension(s) => write!(f, "{}", s),
@@ -112,39 +110,45 @@ impl Display for BaseExpr {
     }
 }
 
-impl FormulaExprTrait for BaseExpr {
+impl<S, T> FormulaExprTrait for BaseExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
 
-    type Output = Term;
+    type SortOutput = S;
+    type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::Output> {
+    fn variables(&self) -> HashSet<Self::TermOutput> {
         match self {
-            BaseExpr::Term(t) => t.variables(),
+            BaseExpr::Term(t) => t.borrow().variables(),
             BaseExpr::SetComprehension(s) => s.variables(),
         }
     }
 
-    fn replace_pattern<P: Borrow<Term>>(&mut self, pattern: &P, replacement: &Self::Output) {
+    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
         match self {
             BaseExpr::SetComprehension(s) => s.replace_pattern(pattern, replacement),
-            BaseExpr::Term(t) => t.replace_pattern(pattern, replacement),
+            BaseExpr::Term(t) => t.borrow_mut().replace_pattern(pattern, replacement),
         };
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::Output, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    {
         let mut map = HashMap::new();
         match self {
             BaseExpr::SetComprehension(setcompre) => {
-                // It won't return anything but do some conversion if setcompre has setcompre inside itself.
+                // Recursively replace setcompres in the conditions of current setcompre.
                 setcompre.replace_set_comprehension(generator);
+                // Make a deep copy to avoid ugly try_into().
+                let replaced_setcompre = setcompre.clone(); 
+                let dc_name = generator.generate_name();
+                let dc_var: Term<S, T> = Term::Variable(Variable::new(dc_name, vec![]));
+                let introduced_var: T = dc_var.into();
+                let mut base_expr: BaseExpr<S, T> = BaseExpr::Term(introduced_var.clone());
+                std::mem::swap(self, &mut base_expr);
+                map.insert(introduced_var, replaced_setcompre); 
             },
-            BaseExpr::Term(t) => {
-                return map;
-            },
+            BaseExpr::Term(_) => {},
         };
-        let introduced_var = generator.generate_dc_term();
-        let mut base_expr: BaseExpr = BaseExpr::Term(introduced_var.clone());
-        std::mem::swap(self, &mut base_expr);
-        map.insert(introduced_var, base_expr.try_into().unwrap()); 
+
         return map;
     }
 }

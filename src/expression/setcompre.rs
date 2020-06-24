@@ -1,6 +1,5 @@
 use std::borrow::*;
 use std::iter::*;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -11,6 +10,7 @@ use num::*;
 
 use crate::expression::FormulaExprTrait;
 use crate::term::*;
+use crate::type_system::*;
 use crate::rule::*;
 use crate::constraint::Constraint;
 use crate::util::*;
@@ -18,14 +18,14 @@ use crate::util::*;
 
 #[readonly::make]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SetComprehension {
-    pub vars: Vec<Term>,
-    pub condition: Vec<Constraint>,
+pub struct SetComprehension<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    pub vars: Vec<Term<S, T>>,
+    pub condition: Vec<Constraint<S, T>>,
     pub op: SetCompreOp,
     pub default: BigInt,
 }
 
-impl Display for SetComprehension {
+impl<S, T> Display for SetComprehension<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headterm_strs: Vec<String> = self.vars.iter().map(|x| {
             let term_str = format!("{}", x);
@@ -44,8 +44,8 @@ impl Display for SetComprehension {
     }
 }
 
-impl SetComprehension {
-    pub fn new(vars: Vec<Term>, condition: Vec<Constraint>, op: SetCompreOp, default: BigInt) -> Self {
+impl<S, T> SetComprehension<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    pub fn new(vars: Vec<Term<S, T>>, condition: Vec<Constraint<S, T>>, op: SetCompreOp, default: BigInt) -> Self {
         SetComprehension {
             vars,
             condition,
@@ -54,29 +54,34 @@ impl SetComprehension {
         }
     }
 
-    pub fn matched_variables(&self) -> HashSet<Term> {
-        let rule: Rule = self.clone().into();
+    pub fn matched_variables(&self) -> HashSet<T> {
+        // Convert it into a headless rule to use some rule methods.
+        let rule: Rule<S, T> = self.clone().into();
         rule.predicate_matched_variables()
     }
 }
 
-impl FormulaExprTrait for SetComprehension {
+impl<S, T> FormulaExprTrait for SetComprehension<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
 
-    type Output = Term;
+    type SortOutput = S;
+    type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::Output> {
+    fn variables(&self) -> HashSet<Self::TermOutput> {
         let mut vars = self.vars.variables();
         vars.extend(self.condition.variables());
         vars
     }
 
-    fn replace_pattern<P: Borrow<Term>>(&mut self, pattern: &P, replacement: &Self::Output) {
+    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
         self.vars.replace_pattern(pattern, replacement);
         self.condition.replace_pattern(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::Output, SetComprehension> {
-        let var = generator.generate_dc_term();
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    {
+        // let dc_name = generator.generate_name();
+        // let var = generator.generate_dc_term();
         // Set comprehension may have set comprehension expression inside itself.
         // TODO: convert it to a rule and do some changes.
         self.condition.replace_set_comprehension(generator)
@@ -84,8 +89,8 @@ impl FormulaExprTrait for SetComprehension {
 }
 
 // Turn SetComprehension into a headless rule.
-impl From<SetComprehension> for Rule {
-    fn from(setcompre: SetComprehension) -> Self {
+impl<S, T> From<SetComprehension<S, T>> for Rule<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    fn from(setcompre: SetComprehension<S, T>) -> Self {
         Rule::new(vec![], setcompre.condition.clone())
     }
 }
@@ -116,13 +121,13 @@ impl Display for SetCompreOp {
 }
 
 impl SetCompreOp {
-    pub fn aggregate<'a, I, T>(&self, terms: T) -> BigInt 
+    pub fn aggregate<'a, I, S, T>(&self, terms: I) -> BigInt 
     where 
         // `T` represents an iterator of a tuple that the first thing is a reference 
         // and the second thing is the count.
-        T: Iterator<Item=&'a(&'a I, isize)>,
-        // `I` represents a reference of Formula Term.
-        I: Borrow<Term> + Sized + 'static, 
+        I: Iterator<Item=&'a(&'a T, isize)>,
+        S: BorrowedType,
+        T: BorrowedTerm<S, T> + Sized + 'static, 
     {
         match self {
             SetCompreOp::Count => {
@@ -135,7 +140,7 @@ impl SetCompreOp {
             SetCompreOp::Sum => {
                 let mut sum = BigInt::from_i64(0).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = (**term).borrow();
+                    let term_ref: &Term<S, T> = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match &atom.val {
@@ -153,7 +158,7 @@ impl SetCompreOp {
             SetCompreOp::MaxAll => {
                 let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = (**term).borrow();
+                    let term_ref: &Term<S, T> = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match &atom.val {
@@ -170,7 +175,7 @@ impl SetCompreOp {
             _ => {
                 let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                 for (term, count) in terms {
-                    let term_ref: &Term = (**term).borrow();
+                    let term_ref: &Term<S, T> = (**term).borrow();
                     match term_ref {
                         Term::Atom(atom) => {
                             match &atom.val {

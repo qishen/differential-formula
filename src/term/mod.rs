@@ -5,6 +5,8 @@ use std::string::String;
 use std::hash::Hash;
 
 use crate::util::map::*;
+use crate::module::MetaInfo;
+use crate::type_system::*;
 
 mod native_term;
 mod indexed_term;
@@ -14,7 +16,7 @@ pub use indexed_term::*;
 
 pub trait FormulaTerm {
     
-    type Output: Ord+Hash;
+    type Output: Eq+Ord+Hash+Clone;
 
     /// Traverse the term recursively to find the pattern without mutating the found term.
     fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
@@ -53,7 +55,7 @@ pub trait FormulaTerm {
     where M: GenericMap<Self::Output, Self::Output>;
         
     /// Find the subterm of a composite term when given a variable term with fragments.
-    fn find_subterm<T: Borrow<Term>>(&self, var_term: &T) -> Option<Self::Output>;
+    fn find_subterm(&self, var_term: &Self::Output) -> Option<Self::Output>;
 
     /// A similar method as find_subterm() method but given a list of labels as the argument to derive subterm.
     fn find_subterm_by_labels(&self, labels: &Vec<String>) -> Option<Self::Output>;
@@ -63,9 +65,14 @@ pub trait FormulaTerm {
     /// that `x.y` points to will be derived and `x.y.z` -> `subterm` will be added into the current binding.
     fn update_binding<M>(&self, binding: &mut M) -> bool where M: GenericMap<Self::Output, Self::Output>;
 
+    /// Immutable version of `rename_mut` that return a new term with everything renamed.
+    fn rename<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>) -> Self
+    where BS: BorrowedType, BT: BorrowedTerm<BS, BT>;
+
     /// Extend the root of variable term with scope or add additional scope to the type of a composite term.
     /// atom term is skipped.
-    fn rename(&mut self, scope: String);
+    fn rename_mut<BS, BT>(&mut self, scope: String, metainfo: &MetaInfo<BS, BT>) 
+    where BS: BorrowedType, BT: BorrowedTerm<BS, BT>;
 
     /// Check if the term has variable(s) inside it.
     fn is_groundterm(&self) -> bool;
@@ -88,5 +95,5 @@ pub trait FormulaTerm {
     fn has_subterm(&self, term: &Self::Output) -> Option<bool>;
 
     /// If one variable term starts with another variable term, then return their difference in the fragments.
-    fn fragments_difference(&self, term: &Term) -> Option<Vec<String>>;
+    fn fragments_difference(&self, term: &Self::Output) -> Option<Vec<String>>;
 }

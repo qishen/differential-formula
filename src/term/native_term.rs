@@ -15,12 +15,22 @@ use num::*;
 use enum_dispatch::enum_dispatch;
 use serde::{Serialize, Deserialize};
 
-use crate::term::FormulaTerm;
+use crate::term::{FormulaTerm, FromWithIndex};
 use crate::type_system::*;
 use crate::expression::*;
+use crate::module::{Model, MetaInfo};
 use crate::util::*;
 use crate::util::map::*;
 
+
+/// This trait implements both mutable and immutable borrow with some basic derivable traits.
+/// Some recursion occurs in trait definition. It's very interesting here that the trait
+/// has one generic type param that needs to implement the trait itself.
+pub trait BorrowedTerm<S, T>: Borrow<Term<S, T>> + BorrowMut<Term<S, T>> + From<Term<S, T>> + Eq + Hash + Clone + Ord + Debug + Display 
+where 
+    S: BorrowedType, T: BorrowedTerm<S, T> {}
+
+impl<S, T> BorrowedTerm<S, T> for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {}
 
 #[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum AtomEnum {
@@ -42,9 +52,9 @@ impl From<AtomEnum> for Atom {
     }
 }
 
-impl From<AtomEnum> for Term {
+impl<S, T> From<AtomEnum> for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn from(val: AtomEnum) -> Self {
-        Atom::new(val).into()
+        Term::Atom(Atom::new(val))
     }
 }
 
@@ -70,14 +80,15 @@ impl Display for Atom {
     }
 }
 
+// A generic variable term that does not require a specific type of reference.
 #[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Variable {
+pub struct Variable<S, T> where T: BorrowedTerm<S, T> {
     pub root: String,
     pub fragments: Vec<String>,
-    pub base_term: Option<Arc<Term>>,
+    pub base_term: Option<T>
 }
 
-impl Display for Variable {
+impl<S, T> Display for Variable<S, T> where T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut rest = self.fragments.join(".");
         if self.fragments.len() > 0 {
@@ -87,7 +98,7 @@ impl Display for Variable {
     }
 }
 
-impl Variable {
+impl<S, T> Variable<S, T> where T: BorrowedTerm<S, T>, S: BorrowedType {
     pub fn new(root: String, fragments: Vec<String>) -> Self {
         let mut var = match fragments.len() == 0 {
             true => {
@@ -100,24 +111,25 @@ impl Variable {
             false => {
                 // Create a base term with same root but no fragments so base term can be easily 
                 // accessed later without clones.
-                let base_term: Term = Variable::new(root.clone(), vec![]).into();
+                let base_term: Term<S, T> = Term::Variable(Variable::new(root.clone(), vec![]));
                 Variable {
                     root,
                     fragments,
-                    base_term: Some(Arc::new(base_term))
+                    base_term: Some(base_term.into())
                 }
             }
         };
+
         return var;
     }
 }
 
-// A generic `Composite` struct that does not require specific type for its sort and arguments.
-pub struct GComposite<S, T> 
-where 
-    S: Borrow<Type> + Borrow<Type>,
-    T: Borrow<Term>, // + BorrowMut<Term>,
-{
+// TODO: Exclude alias for auto-derived trait like Eq, Hash and Ord.
+/// A generic Composite struct that does not require a specific smart pointer like 
+/// `Rc<T>` or `Arc<T>` for its sort and arguments and of course you can use the native
+/// data types without wrappers.
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     pub sort: S,
 
     pub arguments: Vec<T>,
@@ -125,22 +137,7 @@ where
     pub alias: Option<String>,
 }
 
-pub struct IndexedComposite {
-    item: GComposite<Arc<Type>, Arc<Term>>,
-}
-
-// TODO: Consider change to a generic reference that implements Borrow<Term>.
-// TODO: Exclude alias for auto-derived trait like Eq, Hash and Ord.
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Composite {
-    pub sort: Arc<Type>,
-
-    pub arguments: Vec<Arc<Term>>,
-
-    pub alias: Option<String>
-}
-
-impl Display for Composite {
+impl<S, T> Display for Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let alias_str = match &self.alias {
             None => "".to_string(),
@@ -158,14 +155,14 @@ impl Display for Composite {
     }
 }
 
-impl Composite {
-    pub fn new(sort: Arc<Type>, arguments: Vec<Arc<Term>>, alias: Option<String>) -> Self 
-    {
+impl<S, T> Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    pub fn new(sort: S, arguments: Vec<T>, alias: Option<String>) -> Self {
         let mut composite = Composite {
             sort,
             arguments,
             alias,
         };
+
         return composite;
     }
 
@@ -177,56 +174,53 @@ impl Composite {
 #[enum_dispatch]
 pub trait TermTrait {}
 impl TermTrait for Atom {}
-impl TermTrait for Variable {}
-impl TermTrait for Composite {}
+impl<S, T> TermTrait for Variable<S, T> {}
+impl<S, T> TermTrait for Composite<S, T> {}
 
 #[enum_dispatch(TermTrait)]
 #[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub enum Term {
-    Composite,
-    Variable,
-    Atom
+pub enum Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    Composite(Composite<S, T>),
+    Variable(Variable<S, T>),
+    Atom(Atom)
 }
 
 // Put some term-related static methods here.
-impl Term {
+impl<S, T> Term<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm<S, T> + FormulaExprTrait<SortOutput=S, TermOutput=T>
+{
     /// Given a string create a nullary composite type with no arguments inside
     /// and return the singleton term or constant in other words.
-    pub fn create_constant(constant: String) -> Term
-    {
-        let nullary_type: Type = CompositeType { name: constant, arguments: vec![] }.into();
-        let term: Term = Composite::new(Arc::new(nullary_type), vec![], None).into();
-        return term;
+    pub fn create_constant(constant: String) -> T {
+        let nullary_type: Type = Type::CompositeType(
+            CompositeType { name: constant, arguments: vec![] }
+        );
+        let term: Term<S, T> = Term::Composite(
+            Composite::new(nullary_type.into(), vec![], None)
+        );
+        return term.into();
     }
 
     /// Compare two lists of variable terms and return true if some terms in one list
     /// are subterms of the terms in another list. 
-    pub fn has_deep_intersection<T, I>(a: I, b: I) -> bool 
-    where 
-        I: Iterator<Item=T>,
-        T: Borrow<Term>
-    {
-        let mut b_cloned = vec![];
-        for v in b {
-            b_cloned.push(v);
-        }
-
+    pub fn has_deep_intersection<I>(a: I, b: I) -> bool where I: Iterator<Item=T> {
         for v1 in a {
-            for v2 in b_cloned.iter() {
-                if v1.borrow().has_subterm(v2.borrow()).unwrap() || 
-                   v2.borrow().has_subterm(v1.borrow()).unwrap() {
+            for v2 in b {
+                if v1.has_subterm(&v2).unwrap() || 
+                   v2.has_subterm(&v1).unwrap() {
                     return true;
                 }
             }
         }
-
         return false;
     }
 }
 
-impl Display for Term {
+impl<S, T> Display for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let term_str = match self {
+        let term_str = match self.borrow() {
             Term::Composite(c) => format!("{}", c),
             Term::Variable(v) => format!("{}", v),
             Term::Atom(a) => format!("{}", a),
@@ -235,9 +229,9 @@ impl Display for Term {
     }
 }
 
-impl Debug for Term {
+impl<S, T> Debug for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let term_str = match self {
+        let term_str = match self.borrow() {
             Term::Composite(c) => format!("{}", c),
             Term::Variable(v) => format!("{}", v),
             Term::Atom(a) => format!("{}", a),
@@ -246,11 +240,21 @@ impl Debug for Term {
     }
 }
 
-impl FormulaExprTrait for Term
+// Do nothing and just return the term.
+impl<S, T> FromWithIndex<S, Term<S, T>> for Term<S, T> {
+    fn from_with_index(item: Term<S, T>, index: Arc<RwLock<Model<S, T>>>) -> Self {
+        item
+    }
+}
+
+/// Implement `FormulaExprTrait` not directly for Term<S, T> instead the implementation is 
+/// for any type that implements the `BorrowedTerm` trait that wraps Term<S, T>
+impl<S, T> FormulaExprTrait for T where S: BorrowedType, T: BorrowedTerm<S, T>
 {   
-    type Output = Term; 
+    type SortOutput = S;
+    type TermOutput = T; 
 
-    fn variables(&self) -> HashSet<Self::Output> {
+    fn variables(&self) -> HashSet<Self::TermOutput> {
         // Allow multiple mutable reference for closure.
         let vars = RefCell::new(HashSet::new());
         self.traverse(
@@ -269,7 +273,7 @@ impl FormulaExprTrait for Term
         vars.into_inner()
     }
 
-    fn replace_pattern<P: Borrow<Term>>(&mut self, pattern: &P, replacement: &Self::Output) {
+    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
         self.traverse_mut(
             &|term| { return term.borrow() == pattern.borrow(); }, 
             &mut |mut term| { 
@@ -278,16 +282,11 @@ impl FormulaExprTrait for Term
         );
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::Output, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    {
         // set comprehension does not exist in terms.
         HashMap::new()
-    }
-}
-
-// Enable conversion from Arc<Term> into Term and have to make a deep copy.
-impl From<Arc<Term>> for Term {
-    fn from(item: Arc<Term>) -> Self {
-        item.as_ref().clone()
     }
 }
 
@@ -295,14 +294,10 @@ impl From<Arc<Term>> for Term {
 /// `T` could be native Term or boxed Term like `Arc<Term>` or `Box<Term>` and `T` needs to satisfy some traits that
 /// enables `T` to be converted back and forth between `Term` and `Arc<Term>` because the arguments of composite
 /// term has `Arc<Term>` type and we don't know what exactly is the type of `T`.
-impl<FT> FormulaTerm for FT
-where 
-    FT: FormulaExprTrait<Output=Term> + // Need this trait to return all variables in the expression.
-        Ord + Hash + Clone + Display + 
-        Borrow<Term> + BorrowMut<Term> + Into<Term> + From<Term> + Into<Arc<Term>> + From<Arc<Term>>,
+impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
 {
     // Assuming the output has the same type as the type of input being invoked.
-    type Output = FT;
+    type Output = T;
 
     fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
     where F1: Fn(&Self::Output) -> bool, F2: Fn(&Self::Output)
@@ -378,11 +373,13 @@ where
                             vmap.get(var_ref.borrow()).unwrap().clone()
                         },
                         false => {
-                            let p: Self::Output = generator.generate_dc_term().into();
+                            let dc_name = generator.generate_name();
+                            let dc_var: Term<S, T> = Term::Variable(Variable::new(dc_name, vec![]));
+                            let p: T = dc_var.into();
                             p
                         }
                     };
-                    vmap.insert(p, var_ref);
+                    vmap.insert(p.clone(), var_ref);
                     *var = p.into();
                 }
             }
@@ -393,10 +390,10 @@ where
 
 
     fn get_bindings_in_place<M>(&self, binding: &mut M, term: &Self::Output) -> bool 
-    where M: GenericMap<Self::Output, Self::Output>
+    where 
+        M: GenericMap<Self::Output, Self::Output>
     {
-        let term_ref: &Term = self.borrow();
-        match term_ref {
+        match self.borrow() {
             Term::Atom(sa) => { false }, // Atom cannot be a pattern.
             Term::Variable(sv) => { 
                 // Detect a conflict in variable binding and return false.
@@ -494,7 +491,7 @@ where
         return self_copy;
     }
 
-    fn find_subterm<T: Borrow<Term>>(&self, var_term: &T) -> Option<Self::Output> 
+    fn find_subterm(&self, var_term: &Self::Output) -> Option<Self::Output> 
     {
         if let Term::Variable(v) = var_term.borrow() {
             return self.find_subterm_by_labels(&v.fragments);
@@ -505,7 +502,7 @@ where
         // Only apply to composite term and param must be a variable term.
         if let Term::Composite(cterm) = self.borrow() {
             let initial_term = self.clone();
-            let init_type = cterm.sort.base_type();
+            let init_type = cterm.sort.borrow().base_type();
             let result = labels.iter().fold(Some((init_type, initial_term)), |state, label| {
                 if let Some((ctype_enum, subterm)) = state {
                     if let Type::CompositeType(ctype) = ctype_enum {
@@ -541,7 +538,7 @@ where
     where 
         M: GenericMap<Self::Output, Self::Output>,
     {
-        let var_ref: &Term = self.borrow();
+        let var_ref: &Term<S, T> = self.borrow();
         match var_ref {
             Term::Variable(_) => {
                 // Let's say `var` is `x.y.z` and the binding does not have root term of `x` as key 
@@ -552,7 +549,7 @@ where
                     if key.has_subterm(self).unwrap() {
                         let value = binding.gget(key.borrow()).unwrap();
                         // find the fragments difference between `var` and `key`.
-                        let labels = key.fragments_difference(var_ref).unwrap();
+                        let labels = key.fragments_difference(self).unwrap();
                         let sub_value = value.find_subterm_by_labels(&labels).unwrap();
                         binding.ginsert(self.clone(), sub_value);
                         return true;
@@ -564,7 +561,20 @@ where
         }
     }
 
-    fn rename(&mut self, scope: String) {
+    fn rename<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>) -> Self
+    where 
+        BS: BorrowedType, BT: BorrowedTerm<BS, BT>
+    {
+        // Make a copy of itself and apply a mutable rename.
+        let mut self_clone = self.clone();
+        self_clone.rename_mut(scope, metainfo);
+        return self_clone;
+    }
+
+    fn rename_mut<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>)
+    where 
+        BS: BorrowedType, BT: BorrowedTerm<BS, BT>
+    {
         self.traverse_mut(
             &|term| {
                 match term.borrow() {
@@ -582,9 +592,9 @@ where
                         v.root = format!("{}.{}", scope, v.root);
                     },
                     Term::Composite(c) => {
-                        // TODO: A deep copy of type in every term looks bad!
-                        let new_type = c.sort.rename_type(scope.clone());
-                        c.sort = Arc::new(new_type);
+                        // Assuming that the renamed type is already in MetaInfo.
+                        let new_type_name = format!("{}.{}", scope, c.sort.name());
+                        let new_type = metainfo.get_type_by_name(&new_type_name);
                     },
                     _ => {}
                 }
@@ -630,8 +640,8 @@ where
 
     fn intersect(&self, other: &Self::Output) -> (HashSet<Self::Output>, HashSet<Self::Output>, HashSet<Self::Output>) 
     {
-        let vars: HashSet<Term> = self.variables();
-        let other_vars: HashSet<Term> = other.variables();
+        let vars: HashSet<T> = self.variables();
+        let other_vars: HashSet<T> = other.variables();
 
         let (l, m, r) = ldiff_intersection_rdiff(&OrdSet::from(vars), &OrdSet::from(other_vars));
         let left: HashSet<Self::Output> = l.into_iter().map(|x| x.into()).collect();
@@ -688,11 +698,11 @@ where
         }
     }
 
-    fn fragments_difference(&self, term: &Term) -> Option<Vec<String>> {
+    fn fragments_difference(&self, term: &Self::Output) -> Option<Vec<String>> {
         match self.borrow() {
             Term::Variable(v1) => {
                 let len1 = v1.fragments.len();
-                match term {
+                match term.borrow() {
                     Term::Variable(v2) => {
                         let len2 = v2.fragments.len();
                         if v1.fragments.starts_with(&v2.fragments) {

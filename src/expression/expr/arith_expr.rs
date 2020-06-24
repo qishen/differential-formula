@@ -1,5 +1,4 @@
 
-use std::borrow::*;
 use std::iter::*;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -11,6 +10,7 @@ use num::*;
 
 use crate::expression::{Expr, ExprTrait, FormulaExprTrait, SetComprehension};
 use crate::term::*;
+use crate::type_system::*;
 use crate::util::*;
 use crate::util::map::*;
 
@@ -35,16 +35,17 @@ impl Display for ArithmeticOp {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArithExpr {
+pub struct ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     pub op: ArithmeticOp,
-    pub left: Arc<Expr>,
-    pub right: Arc<Expr>,
+    pub left: Arc<Expr<S, T>>,
+    pub right: Arc<Expr<S, T>>,
 }
 
-impl FormulaExprTrait for ArithExpr {
-    type Output = Term;
+impl<S, T> FormulaExprTrait for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+    type SortOutput = S;
+    type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::Output> {
+    fn variables(&self) -> HashSet<Self::TermOutput> {
         let mut vars = HashSet::new();
         let left_vars = self.left.variables();
         let right_vars = self.right.variables();
@@ -53,12 +54,16 @@ impl FormulaExprTrait for ArithExpr {
         vars
     }
 
-    fn replace_pattern<P: Borrow<Term>>(&mut self, pattern: &P, replacement: &Self::Output) {
-        self.left.replace_pattern(pattern, replacement);
-        self.right.replace_pattern(pattern, replacement);
+    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+        let left = Arc::make_mut(&mut self.left);
+        left.replace_pattern(pattern, replacement);
+        let right = Arc::make_mut(&mut self.right);
+        right.replace_pattern(pattern, replacement);
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::Output, SetComprehension> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    {
         let mut map = HashMap::new();
         let left_map = Arc::make_mut(&mut self.left).replace_set_comprehension(generator);
         let right_map = Arc::make_mut(&mut self.right).replace_set_comprehension(generator);
@@ -68,18 +73,22 @@ impl FormulaExprTrait for ArithExpr {
     }
 }
 
-impl Display for ArithExpr {
+impl<S, T> Display for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.left, self.op, self.right)
     }
 }
 
-impl ExprTrait for ArithExpr {
+impl<S, T> ExprTrait for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+
+    type SortOutput = S;
+    type TermOutput = T;
+
     fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension();
     }
 
-    fn set_comprehensions(&self) -> Vec<SetComprehension> {
+    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::SortOutput, Self::TermOutput>> {
         let mut list = vec![];
         let mut left_vec = self.left.set_comprehensions();
         let mut right_vec = self.right.set_comprehensions();
@@ -88,12 +97,7 @@ impl ExprTrait for ArithExpr {
         list
     }
 
-    fn evaluate<M, K, V>(&self, binding: &M) -> Option<BigInt> 
-    where 
-        M: GenericMap<K, V>,
-        K: Borrow<Term>,
-        V: Borrow<Term>
-    {
+    fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
         let lvalue = self.left.evaluate(binding).unwrap();
         let rvalue = self.right.evaluate(binding).unwrap();
         let result = match self.op {
