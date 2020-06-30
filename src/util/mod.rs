@@ -1,19 +1,10 @@
 pub mod wrapper;
 pub mod map;
 
-
-use std::cmp::Ordering;
 use std::fmt::*;
-use std::hash::{Hash, Hasher};
-use std::iter::Iterator;
-use std::borrow::Borrow;
-use std::collections::{BTreeMap, HashMap};
-use differential_dataflow::hashable::*;
-use serde::*;
-use fnv;
+use std::hash::Hash;
 
-
-use crate::term::*;
+use im::*;
 
 #[derive(Debug, Clone)]
 pub struct NameGenerator {
@@ -33,9 +24,20 @@ impl NameGenerator {
         format!("{}{}", self.prefix, self.counter)
     }
 
-    pub fn generate_dc_term(&mut self) -> Term {
-        let var: Term = Variable::new(format!("{}{}", self.prefix, self.counter), vec![]).into();
-        self.counter += 1;
-        var
-    }
+    // Cannot decide what's the exact type of Term<S, T>
+    // pub fn generate_dc_term(&mut self) -> Term {
+    //     let var: Term = Variable::new(format!("{}{}", self.prefix, self.counter), vec![]).into();
+    //     self.counter += 1;
+    //     var
+    // }
+}
+
+
+pub fn ldiff_intersection_rdiff<T: Eq+Hash+Clone+Ord>(one: &OrdSet<T>, two: &OrdSet<T>) 
+-> (OrdSet<T>, OrdSet<T>, OrdSet<T>) 
+{
+    let left: OrdSet<T> = one.clone().difference(two.clone()).into_iter().map(|x| x.clone()).collect();
+    let middle: OrdSet<T> = one.clone().intersection(two.clone()).into_iter().map(|x| x.clone()).collect();
+    let right: OrdSet<T> = two.clone().difference(one.clone()).into_iter().map(|x| x.clone()).collect();
+    (left, middle, right)
 }

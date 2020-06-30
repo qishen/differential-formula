@@ -6,31 +6,58 @@ use std::collections::*;
 use std::convert::*;
 use std::fmt;
 use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 use std::string::String;
 use std::hash::Hash;
 
-use derivative::*;
 use im::OrdSet;
 use num::*;
 use enum_dispatch::enum_dispatch;
 use serde::{Serialize, Deserialize};
 
-use crate::term::{FormulaTerm, FromWithIndex};
+use crate::term::{VisitTerm, FromWithIndex};
 use crate::type_system::*;
 use crate::expression::*;
 use crate::module::{Model, MetaInfo};
 use crate::util::*;
 use crate::util::map::*;
+use crate::util::wrapper::*;
 
 
-/// This trait implements both mutable and immutable borrow with some basic derivable traits.
-/// Some recursion occurs in trait definition. It's very interesting here that the trait
-/// has one generic type param that needs to implement the trait itself.
-pub trait BorrowedTerm<S, T>: Borrow<Term<S, T>> + BorrowMut<Term<S, T>> + From<Term<S, T>> + Eq + Hash + Clone + Ord + Debug + Display 
-where 
-    S: BorrowedType, T: BorrowedTerm<S, T> {}
+/// This is a supertrait that implements both mutable and immutable borrow traits with some fundamental
+/// derivable traits. I change it from generic typed trait BorrowedTerm<S, T> to trait with associated
+/// types. Let's say a struct Foo implements the trait BorrowedTerm with two associated types X which
+/// implements BorrowedType and Y which implements BorrowedTerm. The supertrait has some sub-traits 
+/// like Borrow<B> a trait with generic type B and here the generic type B is replaced by Term<S, T>
+/// that also has generic parameters. The Borrow<B> trait expects the type who implements it can be
+/// converted to a reference &B or &Term<S, T> in our case but what's exactly S and T here if the trait
+/// does not provide generic parameters? For each type who wants to implement BorrowedTerm with 
+/// associated types, it only has one choice for its associated types because it's not trait with generic
+/// parameters, then one trait can have many implementations for just one type since you can have many
+/// different combinations of those generic parameters in the trait. Here S and T are decided by the 
+/// associated types of the type that tries to implement BorrowedTerm as <Self as BorrowedTerm>::Output.
+pub trait BorrowedTerm: 
+    // For example, access a reference of Term<Arc<Type>, Arc<AtomicTerm>> from AtomicTerm, where
+    // Arc<Type> and Arc<AtomicTerm> are the associated types in AtomicTerm.
+    Borrow<Term<<Self as BorrowedTerm>::SortOutput, <Self as BorrowedTerm>::TermOutput>> + 
+    // acess a mutable reference of Term<Arc<Type>, Arc<AtomicTerm>> from mutable AtomicTerm.
+    BorrowMut<Term<<Self as BorrowedTerm>::SortOutput, <Self as BorrowedTerm>::TermOutput>> + 
+    // A trait that enable conversion from Term<S, T> into AtomicTerm
+    From<Term<<Self as BorrowedTerm>::SortOutput, <Self as BorrowedTerm>::TermOutput>> + 
+    // A trait that enable conversion from AtomicTerm::TermOutput which is Arc<AtomicTerm> back into AtomicTerm.
+    From<<Self as BorrowedTerm>::TermOutput> + 
+    // Some basic derivable traits.
+    Eq + Hash + Clone + Ord + Debug + Display + differential_dataflow::ExchangeData
+{
+    type SortOutput: BorrowedType;
+    type TermOutput: BorrowedTerm + From<Self>; // Require Self::TermOutput to be able to convert back to Self.
+}
 
-impl<S, T> BorrowedTerm<S, T> for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {}
+/// Explicitly implement `BorrowedTerm` trait for Term<S, T>.
+impl<S, T> BorrowedTerm for Term<S, T> where S: BorrowedType, T: BorrowedTerm {
+    type SortOutput = S;
+    type TermOutput = T;
+}
 
 #[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum AtomEnum {
@@ -40,35 +67,18 @@ pub enum AtomEnum {
     Float(BigRational),
 }
 
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Atom {
-    pub unique_form: String,
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]
+pub struct Atom<S, T> where S: BorrowedType, T: BorrowedTerm {
+    // The type of Atom term.
+    pub sort: S,
+    // The field that holds the data.
     pub val: AtomEnum,
+    // Need this for the generic type T even though atom term does not hold any
+    // term but it's required to convert Atom into Term<S, T>.
+    pub term: PhantomData<T>
 }
 
-impl From<AtomEnum> for Atom {
-    fn from(val: AtomEnum) -> Self {
-        Atom::new(val)
-    }
-}
-
-impl<S, T> From<AtomEnum> for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
-    fn from(val: AtomEnum) -> Self {
-        Term::Atom(Atom::new(val))
-    }
-}
-
-impl Atom {
-    pub fn new(val: AtomEnum) -> Self {
-        let mut atom = Atom { 
-            unique_form: "".to_string(), 
-            val 
-        };
-        atom
-    }
-}
-
-impl Display for Atom {
+impl<S, T> Display for Atom<S, T> where S: BorrowedType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let atom_str = match &self.val {
             AtomEnum::Int(i) => format!("{}", i),
@@ -80,15 +90,26 @@ impl Display for Atom {
     }
 }
 
-// A generic variable term that does not require a specific type of reference.
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Variable<S, T> where T: BorrowedTerm<S, T> {
+/// A generic variable term that does not require a specific type of reference.
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]
+pub struct Variable<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm 
+{
+    // If variable is inside a predicate, the type could be derived otherwise use Undefined.
+    // A variable is meaningless without context.
+    pub sort: S,
+    // Make a variable term with no fragments for easy access of root term.
     pub root: String,
+    // The remaining fragments of the variable term.
     pub fragments: Vec<String>,
-    pub base_term: Option<T>
+    // Create a reference to access root variable term like getting `x` term given `x.y.z` as a variable term.
+    // If the variable does not have fragments than the `root_term` is None.
+    pub root_term: Option<Term<S, T>>,
 }
 
-impl<S, T> Display for Variable<S, T> where T: BorrowedTerm<S, T> {
+impl<S, T> Display for Variable<S, T> where S: BorrowedType, T: BorrowedTerm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut rest = self.fragments.join(".");
         if self.fragments.len() > 0 {
@@ -98,29 +119,45 @@ impl<S, T> Display for Variable<S, T> where T: BorrowedTerm<S, T> {
     }
 }
 
-impl<S, T> Variable<S, T> where T: BorrowedTerm<S, T>, S: BorrowedType {
-    pub fn new(root: String, fragments: Vec<String>) -> Self {
-        let mut var = match fragments.len() == 0 {
-            true => {
-                Variable {
-                    root,
-                    fragments,
-                    base_term: None,
-                }
-            },
-            false => {
-                // Create a base term with same root but no fragments so base term can be easily 
-                // accessed later without clones.
-                let base_term: Term<S, T> = Term::Variable(Variable::new(root.clone(), vec![]));
-                Variable {
-                    root,
-                    fragments,
-                    base_term: Some(base_term.into())
-                }
-            }
+impl<S, T> Variable<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm 
+{
+    /// Create a new variable term given sort, root and fragments. The sort is optional because
+    /// it's unknown without context unless you know it then pass a sort as parameter.
+    pub fn new(sort: Option<S>, root: String, fragments: Vec<String>) -> Self {
+        let undefined_sort: S = Type::Undefined( Undefined{} ).into();
+        let var_sort = match sort {
+            Some(sort) => sort,
+            None => undefined_sort,
         };
 
-        return var;
+        if fragments.len() == 0 {
+            let var = Variable {
+                sort: var_sort,
+                root,
+                fragments,
+                root_term: None
+            };
+            return var;
+        } else {
+            let root_var = Variable {
+                // The sort of root term is unknown without context.
+                sort: undefined_sort,
+                root,
+                fragments: vec![],
+                root_term: None
+            };
+
+            let var = Variable {
+                sort: var_sort,
+                root,
+                fragments,
+                root_term: Some(Term::Variable(root_var))
+            };
+            return var;
+        }
     }
 }
 
@@ -128,16 +165,21 @@ impl<S, T> Variable<S, T> where T: BorrowedTerm<S, T>, S: BorrowedType {
 /// A generic Composite struct that does not require a specific smart pointer like 
 /// `Rc<T>` or `Arc<T>` for its sort and arguments and of course you can use the native
 /// data types without wrappers.
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]
+pub struct Composite<S, T> where S: BorrowedType, T: BorrowedTerm {
+    // The type of the composite term.
     pub sort: S,
-
+    // A vector of terms as arguments.
     pub arguments: Vec<T>,
-
+    // An optional alias for term.
     pub alias: Option<String>,
 }
 
-impl<S, T> Display for Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<S, T> Display for Composite<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm 
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let alias_str = match &self.alias {
             None => "".to_string(),
@@ -150,12 +192,12 @@ impl<S, T> Display for Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S,
         }
 
         let args_str = args.join(", ");
-        let term_str = format!("{}({})", self.sort.name(), args_str);
+        let term_str = format!("{}({})", self.sort.borrow(), args_str);
         write!(f, "{}{}", alias_str, term_str)
     }
 }
 
-impl<S, T> Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<S, T> Composite<S, T> where S: BorrowedType, T: BorrowedTerm {
     pub fn new(sort: S, arguments: Vec<T>, alias: Option<String>) -> Self {
         let mut composite = Composite {
             sort,
@@ -173,34 +215,53 @@ impl<S, T> Composite<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
 
 #[enum_dispatch]
 pub trait TermTrait {}
-impl TermTrait for Atom {}
+impl<S, T> TermTrait for Atom<S, T> {}
 impl<S, T> TermTrait for Variable<S, T> {}
 impl<S, T> TermTrait for Composite<S, T> {}
 
 #[enum_dispatch(TermTrait)]
-#[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub enum Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
-    Composite(Composite<S, T>),
+#[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]
+pub enum Term<S, T> where S: BorrowedType, T: BorrowedTerm {
+    Atom(Atom<S, T>),
     Variable(Variable<S, T>),
-    Atom(Atom)
+    Composite(Composite<S, T>)
+}
+
+impl<S, T> From<Term<S, T>> for Term<S, T> {
+    fn from(item: Term<S, T>) -> Self {
+        item
+    }
+}
+
+impl<S, T> Borrow<Term<S, T>> for Term<S, T> {
+    fn borrow(&self) -> &Term<S, T> {
+        self
+    }
+}
+
+impl<S, T> BorrowMut<Term<S, T>> for Term<S, T> {
+    fn borrow_mut(&mut self) -> &mut Term<S, T> {
+        self
+    }
 }
 
 // Put some term-related static methods here.
-impl<S, T> Term<S, T> 
-where 
-    S: BorrowedType, 
-    T: BorrowedTerm<S, T> + FormulaExprTrait<SortOutput=S, TermOutput=T>
+impl<S, T> Term<S, T> where S: BorrowedType, T: BorrowedTerm
 {
     /// Given a string create a nullary composite type with no arguments inside
     /// and return the singleton term or constant in other words.
-    pub fn create_constant(constant: String) -> T {
+    pub fn create_constant(constant: String) -> Self {
         let nullary_type: Type = Type::CompositeType(
             CompositeType { name: constant, arguments: vec![] }
         );
         let term: Term<S, T> = Term::Composite(
-            Composite::new(nullary_type.into(), vec![], None)
+            Composite::new(
+                nullary_type.into(), 
+                vec![], 
+                None
+            )
         );
-        return term.into();
+        return term;
     }
 
     /// Compare two lists of variable terms and return true if some terms in one list
@@ -218,9 +279,13 @@ where
     }
 }
 
-impl<S, T> Display for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<S, T> Display for Term<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm 
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let term_str = match self.borrow() {
+        let term_str = match self {
             Term::Composite(c) => format!("{}", c),
             Term::Variable(v) => format!("{}", v),
             Term::Atom(a) => format!("{}", a),
@@ -229,9 +294,13 @@ impl<S, T> Display for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
     }
 }
 
-impl<S, T> Debug for Term<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<S, T> Debug for Term<S, T> 
+where 
+    S: BorrowedType, 
+    T: BorrowedTerm 
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let term_str = match self.borrow() {
+        let term_str = match self {
             Term::Composite(c) => format!("{}", c),
             Term::Variable(v) => format!("{}", v),
             Term::Atom(a) => format!("{}", a),
@@ -247,12 +316,16 @@ impl<S, T> FromWithIndex<S, Term<S, T>> for Term<S, T> {
     }
 }
 
-/// Implement `FormulaExprTrait` not directly for Term<S, T> instead the implementation is 
-/// for any type that implements the `BorrowedTerm` trait that wraps Term<S, T>
-impl<S, T> FormulaExprTrait for T where S: BorrowedType, T: BorrowedTerm<S, T>
-{   
+impl<S, T> FormulaExprTrait for Term<S, T> where S: BorrowedType, T: BorrowedTerm 
+{
     type SortOutput = S;
     type TermOutput = T; 
+}
+
+impl<T> FormulaExprTrait for T where T: BorrowedTerm
+{   
+    type SortOutput = T::SortOutput;
+    type TermOutput = T; // Use the same type T as the TermOutput type.
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
         // Allow multiple mutable reference for closure.
@@ -290,18 +363,24 @@ impl<S, T> FormulaExprTrait for T where S: BorrowedType, T: BorrowedTerm<S, T>
     }
 }
 
-/// Implement the `FormulaTerm` trait in a way that it works both for native `Term` and boxed `Term` like `Arc<Term>`.
-/// `T` could be native Term or boxed Term like `Arc<Term>` or `Box<Term>` and `T` needs to satisfy some traits that
-/// enables `T` to be converted back and forth between `Term` and `Arc<Term>` because the arguments of composite
-/// term has `Arc<Term>` type and we don't know what exactly is the type of `T`.
-impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
+/// Implement trait `VisitTerm` for any type that looks like a term that implements the `BorrowedTerm`
+/// trait and the associated type `Output` is set to be the same type that implements the VisitTerm
+/// trait. This trait is implemented for types like Term<S, T> and AtomicTerm.
+impl<T> VisitTerm for T 
+where 
+    T: BorrowedTerm, 
+    <T as BorrowedTerm>::TermOutput: From<T>
 {
-    // Assuming the output has the same type as the type of input being invoked.
+    // The associated type Output is the same as T itself.
     type Output = T;
 
     fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
-    where F1: Fn(&Self::Output) -> bool, F2: Fn(&Self::Output)
+    where 
+        F1: Fn(&Self::Output) -> bool, 
+        F2: Fn(&Self::Output)
     {
+        // Need to convert T into its associated term T::TermOutput. 
+        // For example, conversion from AtomicTerm into Arc<AtomicTerm> with a little clone here.
         if pattern(self) {
             logic(self);
         }
@@ -312,10 +391,10 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
         match self.borrow() {
             Term::Composite(c) => {
                 for arg in c.arguments.iter() {
-                    // Convert native term or boxed term like `Arc<Term>` into Self::Output in order to
-                    // use the traverse method, where Self::Output could be native term or boxed term.
-                    let converted_arg: Self::Output = arg.clone().into();
-                    converted_arg.traverse(pattern, logic);
+                    // Convert from T::Output = Arc<AtomicTerm> back to T = AtomicTerm and a clone on
+                    // Arc<SomeType> is fine but the convertion from Arc<SomeType> may copy the inner value.
+                    let argt: Self::Output = arg.clone().into();
+                    argt.traverse(pattern, logic);
                 }
             },
             _ => {}
@@ -342,7 +421,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
                 // with only a reference copy.
                 let mut new_arg: Self::Output = arg.clone().into();
                 new_arg.traverse_mut(pattern, logic);
-                // Convert whatever Self::Output is back into Arc<Term>.
+                // Convert T back into T::TermOutput.
                 *arg = new_arg.into();
             }
         }
@@ -374,7 +453,9 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
                         },
                         false => {
                             let dc_name = generator.generate_name();
-                            let dc_var: Term<S, T> = Term::Variable(Variable::new(dc_name, vec![]));
+                            let dc_var = Term::Variable(
+                                Variable::new(None, dc_name, vec![])
+                            );
                             let p: T = dc_var.into();
                             p
                         }
@@ -387,7 +468,6 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
 
         return (normalized_term, vmap);
     }
-
 
     fn get_bindings_in_place<M>(&self, binding: &mut M, term: &Self::Output) -> bool 
     where 
@@ -538,7 +618,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
     where 
         M: GenericMap<Self::Output, Self::Output>,
     {
-        let var_ref: &Term<S, T> = self.borrow();
+        let var_ref = self.borrow();
         match var_ref {
             Term::Variable(_) => {
                 // Let's say `var` is `x.y.z` and the binding does not have root term of `x` as key 
@@ -563,7 +643,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
 
     fn rename<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>) -> Self
     where 
-        BS: BorrowedType, BT: BorrowedTerm<BS, BT>
+        BS: BorrowedType, BT: BorrowedTerm
     {
         // Make a copy of itself and apply a mutable rename.
         let mut self_clone = self.clone();
@@ -573,7 +653,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
 
     fn rename_mut<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>)
     where 
-        BS: BorrowedType, BT: BorrowedTerm<BS, BT>
+        BS: BorrowedType + UniqueForm<String>, BT: BorrowedTerm
     {
         self.traverse_mut(
             &|term| {
@@ -593,7 +673,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
                     },
                     Term::Composite(c) => {
                         // Assuming that the renamed type is already in MetaInfo.
-                        let new_type_name = format!("{}.{}", scope, c.sort.name());
+                        let new_type_name = format!("{}.{}", scope, c.sort);
                         let new_type = metainfo.get_type_by_name(&new_type_name);
                     },
                     _ => {}
@@ -619,7 +699,7 @@ impl<S, T> FormulaTerm for T where S: BorrowedType, T: BorrowedTerm<S, T>
     fn root(&self) -> Self::Output {
         match self.borrow() {
             Term::Variable(v) => {
-                match &v.base_term {
+                match &v.root_term {
                     Some(boxed_term) => { boxed_term.clone().into() },
                     None => { self.clone() }
                 }

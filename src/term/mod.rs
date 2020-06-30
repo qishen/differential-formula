@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::vec::Vec;
 use std::collections::*;
 use std::string::String;
@@ -8,14 +7,19 @@ use crate::util::map::*;
 use crate::module::MetaInfo;
 use crate::type_system::*;
 
-mod native_term;
+mod atomic;
+mod generic;
 mod indexed_term;
-pub use native_term::*;
+
+pub use atomic::*;
+pub use generic::*;
 pub use indexed_term::*;
 
-
-pub trait FormulaTerm {
+/// `BorrowedTerm` trait must be implemented before implementing `VisitTerm` trait because
+/// it only works for type that looks like a Formula term with tree data structure to traverse.
+pub trait VisitTerm {
     
+    // By default the Output type should be the same type that implement `VisitTerm` trait.
     type Output: Eq+Ord+Hash+Clone;
 
     /// Traverse the term recursively to find the pattern without mutating the found term.
@@ -67,12 +71,12 @@ pub trait FormulaTerm {
 
     /// Immutable version of `rename_mut` that return a new term with everything renamed.
     fn rename<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>) -> Self
-    where BS: BorrowedType, BT: BorrowedTerm<BS, BT>;
+    where BS: BorrowedType, BT: BorrowedTerm;
 
     /// Extend the root of variable term with scope or add additional scope to the type of a composite term.
     /// atom term is skipped.
     fn rename_mut<BS, BT>(&mut self, scope: String, metainfo: &MetaInfo<BS, BT>) 
-    where BS: BorrowedType, BT: BorrowedTerm<BS, BT>;
+    where BS: BorrowedType, BT: BorrowedTerm;
 
     /// Check if the term has variable(s) inside it.
     fn is_groundterm(&self) -> bool;

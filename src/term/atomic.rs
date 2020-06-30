@@ -1,3 +1,4 @@
+use std::borrow::*;
 use std::sync::*;
 use std::hash::Hash;
 use std::fmt::*;
@@ -5,9 +6,10 @@ use std::marker::PhantomData;
 
 use serde::{Serialize, Deserialize};
 
-use crate::type_system::*;
 use super::generic::*;
 use super::VisitTerm;
+use crate::type_system::*;
+use crate::util::wrapper::*;
 
 
 #[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -50,9 +52,10 @@ impl AtomicTerm {
         let nullary_type = Type::CompositeType(
             CompositeType { name: constant, arguments: vec![] }
         );
+        let wrapped_nullary_type: UniqueFormWrapper<String, Type> = nullary_type.into();
         let term = AtomicTerm::Composite(
             AtomicComposite::new(
-                nullary_type.into(), 
+                Arc::new(wrapped_nullary_type), 
                 vec![], 
                 None
             )
@@ -180,11 +183,7 @@ impl AtomicVariable {
             return var;
         } else {
             // The sort of root term is unknown without context.
-            // TODO: Create the same type on every initialization is bad.
-            let undefined_sort = Type::Undefined(
-                Undefined{ name: "Undefined".to_string() }
-            );
-
+            let undefined_sort = Type::undefined();
             let root_var = AtomicVariable {
                 sort: undefined_sort.into(),
                 root,
@@ -206,8 +205,8 @@ impl AtomicVariable {
 
 #[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicComposite {
-    // The type of the composite term.
-    pub sort: Arc<Type>,
+    // The type of the composite term and has an unique form as string.
+    pub sort: Arc<UniqueFormWrapper<String, Type>>,
     // The atomically wrapped arguments.
     pub arguments: Vec<Arc<AtomicTerm>>,
     // May or may not have an string alias.
@@ -227,7 +226,8 @@ impl Display for AtomicComposite {
         }
 
         let args_str = args.join(", ");
-        let term_str = format!("{}({})", self.sort.name(), args_str);
+        let type_ref: &Type = self.sort.as_ref().borrow();
+        let term_str = format!("{}({})", type_ref, args_str);
         write!(f, "{}{}", alias_str, term_str)
     }
 }
@@ -235,7 +235,7 @@ impl Display for AtomicComposite {
 // Convert AtomicComposite into generic Composite<S, T> with no extra cost.
 impl<S, T> From<AtomicComposite> for Composite<S, T> where S: BorrowedType, T: BorrowedTerm
 {
-    fn from(item: AtomicComposite) -> Composite<Arc<Type>, Arc<AtomicTerm>> {
+    fn from(item: AtomicComposite) -> Composite<Arc<UniqueFormWrapper<String, Type>>, Arc<AtomicTerm>> {
         Composite {
             sort: item.sort,
             arguments: item.arguments,
@@ -245,7 +245,12 @@ impl<S, T> From<AtomicComposite> for Composite<S, T> where S: BorrowedType, T: B
 }
 
 impl AtomicComposite { 
-    pub fn new(sort: Arc<Type>, arguments: Vec<Arc<AtomicTerm>>, alias: Option<String>) -> Self {
+    pub fn new(
+        sort: Arc<UniqueFormWrapper<String, Type>>, 
+        arguments: Vec<Arc<AtomicTerm>>, 
+        alias: Option<String>
+    ) -> Self 
+    {
         let mut composite = AtomicComposite {
             sort,
             arguments,
