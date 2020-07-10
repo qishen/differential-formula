@@ -1,11 +1,8 @@
 use std::vec::Vec;
 use std::collections::*;
 use std::string::String;
-use std::hash::Hash;
 
 use crate::util::map::*;
-use crate::module::MetaInfo;
-use crate::type_system::*;
 
 mod atomic;
 mod generic;
@@ -16,11 +13,11 @@ pub use generic::*;
 pub use indexed_term::*;
 
 /// `BorrowedTerm` trait must be implemented before implementing `VisitTerm` trait because
-/// it only works for type that looks like a Formula term with tree data structure to traverse.
-pub trait VisitTerm {
+/// it only works for those types that look like a Formula term with tree data structure to traverse.
+pub trait VisitTerm: BorrowedTerm {
     
     // By default the Output type should be the same type that implement `VisitTerm` trait.
-    type Output: Eq+Ord+Hash+Clone;
+    type Output: BorrowedTerm;
 
     /// Traverse the term recursively to find the pattern without mutating the found term.
     fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2)
@@ -70,19 +67,17 @@ pub trait VisitTerm {
     fn update_binding<M>(&self, binding: &mut M) -> bool where M: GenericMap<Self::Output, Self::Output>;
 
     /// Immutable version of `rename_mut` that return a new term with everything renamed.
-    fn rename<BS, BT>(&self, scope: String, metainfo: &MetaInfo<BS, BT>) -> Self
-    where BS: BorrowedType, BT: BorrowedTerm;
+    fn rename(&self, scope: String, type_map: &HashMap<String, <Self::Output as BorrowedTerm>::SortOutput>) -> Self;
 
     /// Extend the root of variable term with scope or add additional scope to the type of a composite term.
     /// atom term is skipped.
-    fn rename_mut<BS, BT>(&mut self, scope: String, metainfo: &MetaInfo<BS, BT>) 
-    where BS: BorrowedType, BT: BorrowedTerm;
+    fn rename_mut(&mut self, scope: String, type_map: &HashMap<String, <Self::Output as BorrowedTerm>::SortOutput>);
 
     /// Check if the term has variable(s) inside it.
     fn is_groundterm(&self) -> bool;
 
-    /// Only apply to variable term to return the root term.
-    fn root(&self) -> Self::Output;
+    /// Only apply to variable term to return the root string otherwise return None.
+    fn var_root(&self) -> Option<&String>;
 
     /// Check if the term is a don't-care variable with variable root name as '_'.
     fn is_dc_variable(&self) -> bool;

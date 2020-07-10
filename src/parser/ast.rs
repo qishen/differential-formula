@@ -1,9 +1,7 @@
 use std::collections::*;
 use std::sync::Arc;
-use std::convert::TryInto;
 use std::borrow::Borrow;
 use enum_dispatch::enum_dispatch;
-use differential_dataflow::hashable::*;
 use num::*;
 
 use crate::term::*;
@@ -14,37 +12,60 @@ use crate::constraint::*;
 use crate::module::*;
 use crate::util::*;
 use crate::util::map::*;
+use crate::util::wrapper::*;
 
-#[enum_dispatch(TermAst)]
-trait TermAstBehavior {}
+// #[enum_dispatch]
+// trait TermAstBehavior {}
+// impl TermAstBehavior for CompositeTermAst {}
+// impl TermAstBehavior for VariableTermAst {}
+// impl TermAstBehavior for AtomEnum {}
 
-impl TermAstBehavior for CompositeTermAst {}
-impl TermAstBehavior for Term {}
-
-#[enum_dispatch]
+// #[enum_dispatch(TermAstBehavior)]
 #[derive(Debug, Clone)]
 pub enum TermAst {
-    CompositeTermAst,
-    Term, // It only represents Atom or Variable.
+    CompositeTermAst(CompositeTermAst),
+    VariableTermAst(VariableTermAst),
+    AtomTermAst(AtomEnum),
 }
 
 impl TermAst {
-    pub fn to_term<FM: FormulaModule>(&self, module: &FM) -> Term {
-        match self {
+    /// By default convert TermAst to AtomicTerm given a type map using AtomicStrType.
+    pub fn to_atomic_term(&self, type_map: &HashMap<String, AtomicStrType>) -> AtomicStrTerm {
+        // TODO: Get undefined type from type map or create a new one.
+        let undefined: AtomicStrType = type_map.get("~Undefined").unwrap().clone();
+
+        // Do not consume the data in TermAst and just make a copy for everything.
+        let atomic_term = match self {
             TermAst::CompositeTermAst(cterm_ast) => {
                 let mut term_arguments = vec![];
                 for argument in cterm_ast.arguments.clone() {
-                    let term = argument.to_term(module);
-                    term_arguments.push(Arc::new(term));
+                    let term = argument.to_atomic_term(type_map);
+                    term_arguments.push(term.into());
                 }
                 let sort_name = cterm_ast.sort.name().unwrap();
-                let sort = module.type_map().get(&sort_name).unwrap().clone();
-                Composite::new(sort, term_arguments, cterm_ast.alias.clone()).into()
+                let sort: AtomicStrType = type_map.get(&sort_name).unwrap().clone().into();
+                let composite = AtomicComposite::new(sort, term_arguments, cterm_ast.alias.clone());
+                AtomicTerm::Composite(composite)
             },
-            TermAst::Term(term) => {
-                term.clone()
+            TermAst::VariableTermAst(vterm_ast) => {
+                let var = AtomicVariable::new(
+                    undefined.clone(),
+                    vterm_ast.root.clone(), 
+                    vterm_ast.fragments.clone()
+                );
+                AtomicTerm::Variable(var)
+            },
+            TermAst::AtomTermAst(atom_enum) => {
+                let atom = AtomicAtom {
+                    sort: undefined.clone(),
+                    val: atom_enum.clone()
+                };
+                AtomicTerm::Atom(atom)
             }
-        }
+        };
+
+        let term: UniqueFormWrapper<String, AtomicTerm> = atomic_term.into();
+        AtomicStrTerm { term: Arc::new(term) }
     }
 }
 
@@ -55,19 +76,35 @@ pub struct CompositeTermAst {
     pub alias: Option<String>
 }
 
-#[enum_dispatch(TypeDefAst)]
+#[derive(Debug, Clone)]
+pub struct VariableTermAst {
+    pub root: String,
+    pub fragments: Vec<String>
+}
+
 pub trait TypeDefAstBehavior {
     fn name(&self) -> Option<String>;
 }
 
-#[enum_dispatch]
 #[derive(Debug, Clone)]
 pub enum TypeDefAst {
-    AliasTypeDefAst,
-    CompositeTypeDefAst,
-    UnionTypeDefAst,
-    RangeTypeDefAst,
-    EnumTypeDefAst,
+    AliasTypeDefAst(AliasTypeDefAst),
+    CompositeTypeDefAst(CompositeTypeDefAst),
+    UnionTypeDefAst(UnionTypeDefAst),
+    RangeTypeDefAst(RangeTypeDefAst),
+    EnumTypeDefAst(EnumTypeDefAst),
+}
+
+impl TypeDefAstBehavior for TypeDefAst {
+    fn name(&self) -> Option<String> {
+        match self {
+            TypeDefAst::AliasTypeDefAst(a) => a.name(),
+            TypeDefAst::CompositeTypeDefAst(a) => a.name(),
+            TypeDefAst::UnionTypeDefAst(a) => a.name(),
+            TypeDefAst::RangeTypeDefAst(a) => a.name(),
+            TypeDefAst::EnumTypeDefAst(a) => a.name(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -213,11 +250,10 @@ pub struct ProgramAst {
     pub domain_ast_map: HashMap<String, DomainAst>,
     pub model_ast_map: HashMap<String, ModelAst>,
     pub transform_ast_map: HashMap<String, TransformAst>,
-    //generator: NameGenerator,
 }
 
 impl ProgramAst {
-    pub fn build_env(&self) -> Env {
+    pub fn build_env(&self) -> Env<AtomicStrTerm> {
         let mut domain_map = HashMap::new();
         let mut model_map = HashMap::new();
         let mut transform_map = HashMap::new();
@@ -245,13 +281,14 @@ impl ProgramAst {
         }
     }
 
-    fn create_type(
+    /// Recursively create atomic type `AtomicStrType`, add the new created type into the type map
+    /// and return the new created type or just return what already exists in the type map.
+    fn create_atomic_type(
         &self, t: String, 
-        ast_map: &mut HashMap<String, TypeDefAst>,    // Only has type ASTs in current domain.
-        type_map: &mut HashMap<String, Arc<Type>>,     // Recursively put new created type into type map.
+        ast_map: &mut HashMap<String, TypeDefAst>,      // Only has type ASTs in current domain.
+        type_map: &mut HashMap<String, AtomicStrType>,  // Recursively put new created type into type map.
         generator: &mut NameGenerator,
-    ) 
-    -> Arc<Type>
+    ) -> AtomicStrType 
     {
         if type_map.contains_key(&t) {
             let existing_type = type_map.get(&t).unwrap();
@@ -266,7 +303,7 @@ impl ProgramAst {
                 if type_map.contains_key(&full_name) {
                     type_map.get(&full_name).unwrap().clone()
                 } else {
-                    self.create_type(full_name, ast_map, type_map, generator)
+                    self.create_atomic_type(full_name, ast_map, type_map, generator)
                 }
             },
             TypeDefAst::CompositeTypeDefAst(ctypedef) => {
@@ -288,19 +325,23 @@ impl ProgramAst {
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
                         None => { 
-                            self.create_type(name, ast_map, type_map, generator)
+                            self.create_atomic_type(name, ast_map, type_map, generator)
                         }
                     };
 
-                    args.push((id_opt.clone(), subtype));
+                    args.push(
+                        (id_opt.clone(), subtype)
+                    );
                 }
 
-                let composite_type: Type = CompositeType {
-                    name: typename,
-                    arguments: args,
-                }.into();
+                let composite_type = Type::CompositeType(
+                    CompositeType {
+                        name: typename,
+                        arguments: args,
+                    }
+                );
 
-                Arc::new(composite_type)
+                composite_type.into()
             },
             TypeDefAst::UnionTypeDefAst(utypedef) => {
                 let mut subtypes = vec![];
@@ -328,27 +369,29 @@ impl ProgramAst {
                     let subtype_opt = type_map.get(&name);
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
-                        None => { self.create_type(name, ast_map, type_map, generator) }
+                        None => { self.create_atomic_type(name, ast_map, type_map, generator) }
                     };
                     subtypes.push(subtype);
                 }
 
-                let union_type = UnionType {
-                    name: typename,
-                    subtypes: subtypes,
-                }.into();
-
-                Arc::new(union_type)
+                let union_type = Type::UnionType(
+                    UnionType {
+                        name: typename,
+                        subtypes: subtypes,
+                    }
+                );
+                
+                union_type.into()
             },
             TypeDefAst::EnumTypeDefAst(etypedef) => {
                 let mut items = vec![];
                 for term_ast in etypedef.items.clone() {
-                    let term: Term = term_ast.try_into().unwrap();
-                    if let Term::Variable(v) = term {
-                        // Create a constant from variable term.
-                        let constant = Term::create_constant(v.root);
+                    let term = term_ast.to_atomic_term(type_map);
+                    if let AtomicTerm::Variable(v) = term {
+                        // Create a constant from variable term with a nullary type.
+                        let constant: AtomicStrTerm = AtomicTerm::create_constant(v.root).into();
                         items.push(constant);
-                    } else if let Term::Atom(_) = term {
+                    } else if let AtomicTerm::Atom(_) = term {
                         items.push(term);
                     }
                 }
@@ -363,8 +406,8 @@ impl ProgramAst {
                     }
                 };
 
-                let enum_type = EnumType { name, items }.into();
-                Arc::new(enum_type)
+                let enum_type = Type::EnumType(EnumType { name, items });
+                enum_type.into()
             },
             _ => { 
                 unimplemented!()
@@ -373,26 +416,26 @@ impl ProgramAst {
 
         // Add new type to the type map.
         type_map.insert(t, new_type.clone());
-
         return new_type;
     }
 
-    pub fn import_builtin_types(&self, type_map: &mut HashMap<String, Arc<Type>>) {
+    pub fn import_builtin_types(&self, type_map: &mut HashMap<String, AtomicStrType>) {
         // TODO: There are more types to add here.
-        let string_type: Type = BaseType::new("String").into();
-        let integer_type: Type = BaseType::new("Integer").into();
-        let bool_type: Type = BaseType::new("Boolean").into();
-        type_map.insert("String".to_string(), Arc::new(string_type));
-        type_map.insert("Integer".to_string(), Arc::new(integer_type));
-        type_map.insert("Boolean".to_string(), Arc::new(bool_type));
+        let string_type = Type::BaseType(BaseType::String);
+        let integer_type = Type::BaseType(BaseType::Integer);
+        let bool_type = Type::BaseType(BaseType::Boolean);
+        let undefined_type = Type::undefined();
+        type_map.insert("String".to_string(), string_type.into());
+        type_map.insert("Integer".to_string(), integer_type.into());
+        type_map.insert("Boolean".to_string(), bool_type.into());
+        type_map.insert("~Undefined".to_string(), undefined_type.into());
     }
 
     pub fn create_transform(
         &self, transform_name: String, 
-        transform_map: &mut HashMap<String, Transform>,
-        domain_map: &mut HashMap<String, Domain>
-    ) -> Transform 
-    {
+        transform_map: &mut HashMap<String, Transform<AtomicStrTerm>>,
+        domain_map: &mut HashMap<String, Domain<AtomicStrTerm>>
+    ) -> Transform<AtomicStrTerm> {
         if transform_map.contains_key(&transform_name) {
             return transform_map.get(&transform_name).unwrap().clone();
         }
@@ -457,13 +500,15 @@ impl ProgramAst {
             let domain_name = tagged_domain_ast.domain.clone();
             let domain = self.create_domain(domain_name, domain_map);
 
-            for (type_name, formula_type_arc) in domain.type_map.iter() {
-                let formula_type: Type = formula_type_arc.as_ref().clone();
+            for (type_name, formula_type) in domain.meta_info().type_map().iter() {
+                let formula_type: &Type = formula_type.borrow();
                 match formula_type {
                     Type::BaseType(_) => {},
                     _ => {
                         let renamed_type = formula_type.rename_type(tag.clone());
-                        type_map.insert(renamed_type.name().clone(), Arc::new(renamed_type.into()));
+                        let atomic_renamed_type: AtomicStrType = renamed_type.into();
+                        let new_name = atomic_renamed_type.unique_form();
+                        type_map.insert(new_name.clone(), atomic_renamed_type);
                     }
                 }
             }
@@ -483,27 +528,22 @@ impl ProgramAst {
 
         let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
         for type_name in type_names {
-            self.create_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
+            self.create_atomic_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
-        // A temporary domain for transform to create rules and term.
-        let temp_transform_domain = Domain {
-            name: transform_name.clone(),
-            type_map: type_map.clone(),
-            rules: vec![],
-        };
+        let temp_metainfo = MetaInfo::new(type_map, vec![]);
 
         // Add rules into domain and converting rule ASTs need type information in domain.
         let mut rules = vec![];
         for rule_ast in transform_ast.rules.iter() {
-            rules.push(rule_ast.to_rule(&temp_transform_domain));
+            rules.push(rule_ast.to_rule(&temp_metainfo));
         }
 
         // Add terms that defined in the transform.
         let mut terms = HashSet::new();
         for term_ast in transform_ast.terms.iter() {
-            let term = term_ast.to_term(&temp_transform_domain);
-            terms.insert(term);
+            let term = term_ast.to_atomic_term(&temp_metainfo.type_map());
+            terms.insert(term.into());
         }
 
         // Some parameters that are known types in `type_map`
@@ -511,36 +551,37 @@ impl ProgramAst {
             let input_type = type_map.get(&type_ast.name().unwrap()).unwrap();
         }
 
-        let transform = Transform {
-            name: transform_name.clone(),
-            type_map,
+        let transform = Transform::new(
+            transform_name.clone(),
+            temp_metainfo.type_map().clone(),
             rules,
             params,
             input_type_map,
             input_domain_map,
             output_domain_map,
             terms
-        };
+        );
 
         transform_map.insert(transform_name.clone(), transform.clone());
         transform
     }
 
-    pub fn create_domain(&self, domain_name: String, domain_map: &mut HashMap<String, Domain>) -> Domain {
+    pub fn create_domain(&self, 
+        domain_name: String, 
+        domain_map: &mut HashMap<String, Domain<AtomicStrTerm>>
+    ) -> Domain<AtomicStrTerm> {
         if domain_map.contains_key(&domain_name) { 
             return domain_map.get(&domain_name).unwrap().clone(); 
         }
 
-        let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", domain_name)[..]);
-
         let mut type_map = HashMap::new();
         self.import_builtin_types(&mut type_map);
-
+        let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", domain_name)[..]);
         let domain_ast = self.domain_ast_map.get(&domain_name).unwrap();
 
         for subdomain_name in domain_ast.subdomains.iter() {
             let subdomain = self.create_domain(subdomain_name.clone(), domain_map);
-            type_map.extend(subdomain.type_map.clone());
+            type_map.extend(subdomain.meta_info().type_map().clone());
 
             if domain_ast.inherit_type == "extends" {
                 // TODO: import comformance rules if inheritance type is `extends`.
@@ -549,13 +590,14 @@ impl ProgramAst {
 
         for (scope, subdomain_name) in domain_ast.renamed_subdomains.iter() {
             let subdomain = self.create_domain(subdomain_name.clone(), domain_map);
-            for (type_name, formula_type_arc) in subdomain.type_map.iter() {
-                let formula_type: Type = formula_type_arc.as_ref().clone();
+            for (type_name, formula_type) in subdomain.meta_info().type_map().iter() {
+                let formula_type: &Type = formula_type.borrow();
                 match formula_type {
                     Type::BaseType(_) => {},
                     _ => {
-                        let renamed_type = formula_type.rename_type(scope.clone());
-                        type_map.insert(renamed_type.name().clone(), Arc::new(renamed_type.into()));
+                        let atomic_renamed_type: AtomicStrType = formula_type.rename_type(scope.clone()).into();
+                        let name = atomic_renamed_type.unique_form();
+                        type_map.insert(name.clone(), atomic_renamed_type);
                     }
                 }
             }
@@ -580,38 +622,40 @@ impl ProgramAst {
 
         let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
         for type_name in type_names {
-            self.create_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
+            self.create_atomic_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
-        let mut domain = Domain {
+        let empty_rules: Vec<Rule<AtomicStrTerm>> = vec![];
+        let metainfo = MetaInfo::new(type_map, empty_rules);
+
+        for rule_ast in domain_ast.rules.iter() {
+            let rule = rule_ast.to_rule(&metainfo);
+            metainfo.add_rule(rule);
+        }
+        
+        let domain = Domain {
             name: domain_name.clone(),
-            type_map: type_map,
-            rules: vec![],
+            metainfo,
         };
 
-        // Add rules into domain and converting rule ASTs need type information in domain.
-        // TODO: add conformance rules.
-        for rule_ast in domain_ast.rules.iter() {
-            domain.add_rule(rule_ast.to_rule(&domain));
-        }
-
         domain_map.insert(domain_name.clone(), domain.clone());
-        domain
+        return domain;
     }
 
-    /// It won't return a model because deep copy of large amounts of data
-    /// is too expensive and all models are stored in `model_map`.
+    /// Don't return the model because deep copy of large amounts of data
+    /// is too expensive and all models are stored in `model_map`. By default
+    /// use atomic term and atomic type to replace the generic params.
     pub fn create_model(
         &self, 
         model_name: String,
-        model_map: &mut HashMap<String, Model>, 
-        domain_map: &HashMap<String, Domain>
-    ) 
-    {
+        model_map: &mut HashMap<String, Model<AtomicStrTerm>>, 
+        domain_map: &HashMap<String, Domain<AtomicStrTerm>>
+    ) {
         if model_map.contains_key(&model_name) { return; }
         
         let model_ast = self.model_ast_map.get(&model_name).unwrap();
         let domain = domain_map.get(&model_ast.domain_name).unwrap();
+        let undefined = domain.meta_info().type_map().get("~Undefined").unwrap();
 
         // Store terms that don't have alias.
         let mut raw_terms = vec![];
@@ -619,7 +663,7 @@ impl ProgramAst {
         let mut raw_alias_map = HashMap::new();
 
         // alias map and terms store after variable propagation.
-        let mut alias_map: HashMap<Arc<Term>, Arc<Term>> = HashMap::new();
+        let mut alias_map = HashMap::new();
         let mut model_store = HashSet::new();
         
         // Deep clone is not really necessary for keeping all ASTs but just keep them.
@@ -627,26 +671,28 @@ impl ProgramAst {
             // Something tricky here: A renamed alias could be treated as a variable.
             // e.g. Iso(Left.v1, Right.v2) after parsing the arguments are variables with fragments.
             // Terms in the model should not contain variables with fragments not even in partial model.
-            let mut term = term_ast.to_term(domain);
+            let mut term = term_ast.to_atomic_term(domain.meta_info().type_map());
 
             // Reursively traverse the term to find all variables with fragments and fix them.
             term.traverse_mut(
                 &|t| { 
                     match t {
-                        Term::Variable(v) => { v.fragments.len() > 0 },
+                        AtomicTerm::Variable(v) => { v.fragments.len() > 0 },
                         _ => false
                     }
                 }, 
                 &mut |mut t| {
                     // Use displayed name as the root name for the new variable term.
                     let name = format!("{}", t); 
-                    *t = Variable::new(name, vec![]).into();
+                    *t = AtomicTerm::Variable(
+                        AtomicVariable::new(undefined.clone(), name, vec![])
+                    );
                 }
             );
 
             // Remove alias from term and return alias.
             let alias = match &mut term {
-                Term::Composite(c) => {
+                AtomicTerm::Composite(c) => {
                     let alias = c.alias.clone();
                     c.alias = None;
                     alias
@@ -657,11 +703,13 @@ impl ProgramAst {
             match alias {
                 None => {
                     // if term does not have alias, add it to model store.
-                    raw_terms.push(term);
+                    raw_terms.push(Arc::new(term));
                 },
                 Some(alias) => {
                     // alias here shouldn't have fragments and add term to model store later.
-                    let vterm: Term = Variable::new(alias, vec![]).into();
+                    let vterm: AtomicTerm = AtomicTerm::Variable(
+                        AtomicVariable::new(undefined.clone(), alias, vec![])
+                    );
                     raw_alias_map.insert(Arc::new(vterm), Arc::new(term));
                 }
             }
@@ -674,13 +722,13 @@ impl ProgramAst {
             let submodel = model_map.get(submodel_name).unwrap();
 
             // Copy all terms.
-            for term_arc in submodel.terms.iter() {
-                if !model_store.contains(term_arc) {
-                    model_store.insert(term_arc.clone());
+            for term_ref in submodel.terms() {
+                if !model_store.contains(term_ref) {
+                    model_store.insert(term_ref.clone());
                 }
             }
             // Copy alias map to raw alias map.
-            raw_alias_map.extend(submodel.alias_map.clone());
+            raw_alias_map.extend(submodel.model_store().alias_map().clone());
         }
 
         // Import renamed sub-models with the type changed.
@@ -691,15 +739,16 @@ impl ProgramAst {
             // TODO: Submodels should be imported as traces.
             // Just make a deep copy as they are all Arc<Term> and rename the whole model.
             let mut submodel = model_map.get(submodel_name).unwrap().clone();
-            submodel.rename(scope.clone());
-            model_store.extend(submodel.terms);
-            alias_map.extend(submodel.alias_map);
+            let renamed_submodel = submodel.rename(scope.clone());
+            let submodel_terms: Vec<_> = renamed_submodel.terms().into_iter().map(|x| x.clone()).collect();
+            model_store.extend(submodel_terms);
+            alias_map.extend(renamed_submodel.model_store().alias_map().clone());
         }
 
         
         // Alias in the raw term is treated as variables and needs to be replaced with the real term.
         // Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
-        //prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
+        // prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
         for key in raw_alias_map.keys() {
             self.propagate_alias_map(key.clone(), &raw_alias_map, &mut alias_map);
         }
@@ -711,13 +760,12 @@ impl ProgramAst {
         }
 
         for (_, term_arc) in alias_map.iter() {
-            let term: &Term = term_arc.borrow();
-            model_store.insert(term.clone());
+            model_store.insert(term_arc.clone());
         }
 
         let model = Model::new(
             model_name.clone(), 
-            domain.clone(), 
+            domain, 
             model_store, 
             alias_map
         );
@@ -725,58 +773,70 @@ impl ProgramAst {
         model_map.insert(model_name.clone(), model);
     }
 
-    fn propagate_alias_map<M, K, V, T>(&self, var: T, raw_alias_map: &M, alias_map: &mut M) 
-    where 
-        M: GenericMap<K, V>,
-        K: Borrow<Term> + From<Term> + Clone,
-        V: Borrow<Term> + From<Term> + Clone,
-        T: Borrow<Term>
+    fn propagate_alias_map<M, T>(&self, var: T, raw_alias_map: &M, alias_map: &mut M) 
+    where M: GenericMap<T, T>, T: BorrowedTerm,
     {
-        let raw_term = raw_alias_map.gget(var.borrow()).unwrap();
+        let var_ref: &Term<_,_> = var.borrow();
+        let raw_term = raw_alias_map.gget(var_ref).unwrap();
         // if current term has variables inside then propagate binding to them first.
-        let raw_term_vars = raw_term.borrow().variables();
+        let raw_term_vars = raw_term.clone().variables();
         for raw_term_var in raw_term_vars {
-            if raw_alias_map.contains_gkey(&raw_term_var) {
-                self.propagate_alias_map(&raw_term_var, raw_alias_map, alias_map);
+            let raw_term_var_ref: &String = raw_term_var.borrow();
+            if raw_alias_map.contains_gkey(raw_term_var_ref) {
+                self.propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
             }
         }
         
         // Make a little clone here but that's ok for a tradeoff between elegancy and unnecessary clone.
         let new_term = raw_term.propagate_bindings(alias_map);
-        let k: K = var.borrow().to_owned().into();
-        let v: V = new_term.to_owned().into();
+        let k = var.clone();
+        let v = new_term.clone();
         alias_map.ginsert(k, v);
     }
 }
 
-#[enum_dispatch(ExprAst)]
 trait ExprAstBehavior {
-    fn to_expr<FM: FormulaModule>(&self, domain: &FM) -> Expr;
+    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: BorrowedTerm;
 }
 
-#[enum_dispatch]
 #[derive(Clone, Debug)]
 pub enum ExprAst {
-    BaseExprAst,
-    ArithExprAst,
+    BaseExprAst(BaseExprAst),
+    ArithExprAst(ArithExprAst),
 }
 
-#[enum_dispatch(BaseExprAst)]
+impl ExprAstBehavior for ExprAst {
+    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: BorrowedTerm {
+        match self {
+            ExprAst::BaseExprAst(b) => b.to_expr(metainfo),
+            ExprAst::ArithExprAst(a) => a.to_expr(metainfo)
+        }
+    }
+}
+
 trait BaseExprAstBehavior {
-    fn to_base_expr<FM: FormulaModule>(&self, module: &FM) -> BaseExpr;
+    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: BorrowedTerm;
 }
 
-#[enum_dispatch]
 #[derive(Clone, Debug)]
 pub enum BaseExprAst {
-    SetComprehensionAst,
-    TermAst,
+    SetComprehensionAst(SetComprehensionAst),
+    TermAst(TermAst),
+}
+
+impl BaseExprAstBehavior for BaseExprAst {
+    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: BorrowedTerm {
+        match self {
+            BaseExprAst::SetComprehensionAst(s) => s.to_base_expr(metainfo),
+            BaseExprAst::TermAst(t) => t.to_base_expr(metainfo)
+        }
+    }
 }
 
 impl ExprAstBehavior for BaseExprAst {
-    fn to_expr<FM: FormulaModule>(&self, module: &FM) -> Expr {
-        let base_expr = self.to_base_expr(module);
-        base_expr.into()
+    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: BorrowedTerm {
+        let base_expr = self.to_base_expr(metainfo);
+        Expr::BaseExpr(base_expr)
     }
 }
 
@@ -789,15 +849,20 @@ pub struct SetComprehensionAst {
 }
 
 impl BaseExprAstBehavior for SetComprehensionAst {
-    fn to_base_expr<FM: FormulaModule>(&self, module: &FM) -> BaseExpr {
+    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: BorrowedTerm {
         let mut vars = vec![];
         let mut condition = vec![];
+        // Need HashMap<String, AtomicStrType> instead of HashMap<String, S>.
+        let atomic_type_map = metainfo.atomic_type_map();
         for term_ast in self.vars.clone() {
-            vars.push(term_ast.to_term(module));
+            let atomic_term = term_ast.to_atomic_term(&atomic_type_map);
+            let term: Term<_,_> = atomic_term.into();
+            let t: T = term.into();
+            vars.push(t);
         }
 
         for constraint_ast in self.condition.clone() {
-            condition.push(constraint_ast.to_constraint(module));
+            condition.push(constraint_ast.to_constraint(metainfo));
         }
         
         // Count and Sum operator does not have explicit default value but let's set it to 0.
@@ -806,19 +871,21 @@ impl BaseExprAstBehavior for SetComprehensionAst {
             Some(val) => { val },
         };
 
-        SetComprehension::new( 
+        let setcompre = SetComprehension::new( 
             vars,
             condition,
             self.op.clone(),
             default,
-        ).into()
+        );
+
+        BaseExpr::SetComprehension(setcompre)
     }
 }
 
 impl BaseExprAstBehavior for TermAst {
-    fn to_base_expr<FM: FormulaModule>(&self, module: &FM) -> BaseExpr {
-        let term = self.to_term(module);
-        term.into()
+    fn to_base_expr(&self, metainfo: &MetaInfo<AtomicStrTerm>) -> BaseExpr<AtomicStrTerm> {
+        let atomic_term = self.to_atomic_term(metainfo.type_map());
+        BaseExpr::Term(atomic_term.into()) // Convert AtomicTerm into Term<S, T>
     }
 }
 
@@ -830,29 +897,37 @@ pub struct ArithExprAst {
 }
 
 impl ExprAstBehavior for ArithExprAst {
-    fn to_expr<FM: FormulaModule>(&self, module: &FM) -> Expr {
-        let left = self.left.to_expr(module);
-        let right = self.right.to_expr(module);
-
-        ArithExpr {
+    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: BorrowedTerm {
+        let left = self.left.to_expr(metainfo);
+        let right = self.right.to_expr(metainfo);
+        let arith = ArithExpr {
             op: self.op.clone(),
             left: Arc::new(left),
             right: Arc::new(right),
-        }.into()
+        };
+        Expr::ArithExpr(arith)
     }
 }
 
-#[enum_dispatch(ConstraintAst)]
 trait ConstraintAstBehavior {
-    fn to_constraint<FM: FormulaModule>(&self, module: &FM) -> Constraint;
+    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: BorrowedTerm;
 }
 
-#[enum_dispatch]
 #[derive(Clone, Debug)]
 pub enum ConstraintAst {
-    PredicateAst,
-    BinaryAst,
-    TypeConstraintAst,
+    PredicateAst(PredicateAst),
+    BinaryAst(BinaryAst),
+    TypeConstraintAst(TypeConstraintAst),
+}
+
+impl ConstraintAstBehavior for ConstraintAst {
+    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: BorrowedTerm {
+        match self {
+            ConstraintAst::PredicateAst(p) => p.to_constraint(metainfo),
+            ConstraintAst::BinaryAst(b) => b.to_constraint(metainfo),
+            ConstraintAst::TypeConstraintAst(t) => t.to_constraint(metainfo)
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -862,11 +937,13 @@ pub struct TypeConstraintAst {
 }
 
 impl ConstraintAstBehavior for TypeConstraintAst {
-    fn to_constraint<FM: FormulaModule>(&self, module: &FM) -> Constraint {
+    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: BorrowedTerm {
         let typename = self.sort.name().unwrap();
-        let sort = module.type_map().get(&typename).unwrap().clone();
-
-        TypeConstraint { var: self.var.to_term(module), sort }.into()
+        let sort = metainfo.type_map().get(&typename).unwrap().clone();
+        let term: Term<_,_> = self.var.to_atomic_term(&metainfo.atomic_type_map()).into();
+        let t: T = term.into();
+        let tc = TypeConstraint { var: t, sort };
+        Constraint::TypeConstraint(tc)
     }
 }
 
@@ -879,33 +956,40 @@ pub struct PredicateAst {
 }
 
 impl ConstraintAstBehavior for PredicateAst {
-    fn to_constraint<FM: FormulaModule>(&self, module: &FM) -> Constraint {
+    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: BorrowedTerm {
+        // Use `AtomicStrType` and atomic terms by default for the terms in constraints.
+        let undefined = metainfo.type_map().get("~Undefined").unwrap().clone();
         let alias = match self.alias.clone() {
             None => None,
             Some(a) => {
-                let term: Term = Variable::new(a, vec![]).into();
+                let term: T = Term::create_variable(a).into();
                 Some(term)
             }
         };
         
-        // TermAst is either Term or CompositeTermAst.
         let real_term = match &self.term {
-            TermAst::Term(var_term) => {
-                // If it's a variable then don't treat it as a variable term,
-                // instead convert it into a constant (A composite term with zero argument)
-                let var: Variable = var_term.clone().try_into().unwrap();
-                let constant = var.root.clone();
-                let nullary_term = Term::create_constant(constant);
-                nullary_term
+            TermAst::VariableTermAst(var_ast) => {
+                // Convert variable term into a constant (A composite term with zero argument)
+                let nullary_atomic_term = AtomicTerm::create_constant(var_ast.root.clone());
+                let nullary_term: Term<_,_> = nullary_atomic_term.into();
+                let t: T = nullary_term.into();
+                t
             },
-            _ => { self.term.to_term(module) }
+            _ => { 
+                let atomic_term = self.term.to_atomic_term(&metainfo.atomic_type_map()); 
+                let term: Term<_,_> = atomic_term.into();
+                let t: T = term.into();
+                t
+            }
         };
 
-        Predicate {
+        let pred = Predicate {
             negated: self.negated,
-            term: real_term,
+            term: real_term.into(),
             alias,
-        }.into()
+        };
+
+        Constraint::Predicate(pred)
     }
 }
 
@@ -917,12 +1001,13 @@ pub struct BinaryAst {
 }
 
 impl ConstraintAstBehavior for BinaryAst {
-    fn to_constraint<FM: FormulaModule>(&self, module: &FM) -> Constraint {
-        Binary {
+    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: BorrowedTerm {
+        let bin = Binary {
             op: self.op.clone(),
-            left: self.left.to_expr(module),
-            right: self.right.to_expr(module),
-        }.into()
+            left: self.left.to_expr(metainfo),
+            right: self.right.to_expr(metainfo),
+        };
+        Constraint::Binary(bin)
     }
 }
 
@@ -933,15 +1018,19 @@ pub struct RuleAst {
 }
 
 impl RuleAst {
-    pub fn to_rule<FM: FormulaModule>(&self, module: &FM) -> Rule {
+    pub fn to_rule<T>(&self, metainfo: &MetaInfo<T>) -> Rule<T> where T: BorrowedTerm {
         let mut head = vec![];
+        let atomic_type_map = metainfo.atomic_type_map();
         for term_ast in self.head.clone() {
-            head.push(term_ast.to_term(module));
+            let atomic_term = term_ast.to_atomic_term(&atomic_type_map);
+            let term: Term<_,_> = atomic_term.into();
+            let t: T = term.into();
+            head.push(t);
         }
 
         let mut body = vec![];
         for constraint_ast in self.body.clone() {
-            body.push(constraint_ast.to_constraint(module));
+            body.push(constraint_ast.to_constraint(metainfo));
         }
 
         Rule::new(head, body)

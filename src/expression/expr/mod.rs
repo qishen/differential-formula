@@ -1,12 +1,12 @@
 use std::borrow::*;
 use std::collections::*;
 use std::fmt::*;
+use std::sync::*;
 use std::vec::Vec;
 
-// use enum_dispatch::enum_dispatch;
 use num::*;
 
-use crate::expression::{FormulaExprTrait, SetComprehension};
+use crate::expression::{Expression, SetComprehension};
 use crate::term::*;
 use crate::type_system::*;
 use crate::util::map::*;
@@ -21,12 +21,12 @@ pub use base_expr::*;
 /// enum_dispatch does not support trait with associated types.
 // #[enum_dispatch(ExprTrait)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Expr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
-    BaseExpr(BaseExpr<S, T>),
-    ArithExpr(ArithExpr<S, T>),
+pub enum Expr<T> where T: BorrowedTerm {
+    BaseExpr(BaseExpr<T>),
+    ArithExpr(ArithExpr<T>),
 }
 
-impl<S, T> Display for Expr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<T> Display for Expr<T> where T: BorrowedTerm {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             Expr::BaseExpr(b) => write!(f, "{}", b),
@@ -38,28 +38,20 @@ impl<S, T> Display for Expr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
 // #[enum_dispatch]
 pub trait ExprTrait {
 
-    type SortOutput;
-    type TermOutput;
+    type TermOutput: BorrowedTerm;
 
     /// Check if expression contains set comprehension.
     fn has_set_comprehension(&self) -> bool;
 
     /// Return all set comprehension in the expression.
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::SortOutput, Self::TermOutput>>;
+    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>>;
 
     /// Evaluate the expression given the variable binding map.
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput>;
 }
 
-
-impl<E, S, T> ExprTrait for E
-where 
-    E: Borrow<Expr<S, T>> + BorrowMut<Expr<S, T>>,
-    S: BorrowedType,
-    T: BorrowedTerm<S, T>
+impl<T> ExprTrait for Expr<T> where T: BorrowedTerm
 {
-
-    type SortOutput = S;
     type TermOutput = T;
 
     fn has_set_comprehension(&self) -> bool {
@@ -69,7 +61,7 @@ where
         }
     }
 
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::SortOutput, Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>> {
         match self.borrow() {
             Expr::BaseExpr(be) => be.set_comprehensions(),
             Expr::ArithExpr(ae) => ae.set_comprehensions(),
@@ -84,13 +76,12 @@ where
     }
 }
 
-impl<E, S, T> FormulaExprTrait for E
-where 
-    E: Borrow<Expr<S, T>> + BorrowMut<Expr<S, T>>,
-    S: BorrowedType,
-    T: BorrowedTerm<S, T>
+impl<T> ExprTrait for Arc<Expr<T>> where T: BorrowedTerm {
+
+}
+
+impl<T> Expression for Expr<T> where T: BorrowedTerm
 {
-    type SortOutput = S;
     type TermOutput = T;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
@@ -107,9 +98,7 @@ where
         }
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
-    {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
         match self.borrow_mut() {
             Expr::BaseExpr(b) => { return b.replace_set_comprehension(generator); },
             Expr::ArithExpr(a) => { return a.replace_set_comprehension(generator); }

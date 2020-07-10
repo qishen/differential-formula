@@ -8,9 +8,8 @@ use std::fmt::{Debug, Display};
 
 use num::*;
 
-use crate::expression::{Expr, ExprTrait, FormulaExprTrait, SetComprehension};
+use crate::expression::{Expr, ExprTrait, Expression, SetComprehension};
 use crate::term::*;
-use crate::type_system::*;
 use crate::util::*;
 use crate::util::map::*;
 
@@ -35,14 +34,14 @@ impl Display for ArithmeticOp {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+pub struct ArithExpr<T> where T: BorrowedTerm {
     pub op: ArithmeticOp,
-    pub left: Arc<Expr<S, T>>,
-    pub right: Arc<Expr<S, T>>,
+    pub left: Arc<Expr<T>>,
+    pub right: Arc<Expr<T>>,
 }
 
-impl<S, T> FormulaExprTrait for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
-    type SortOutput = S;
+impl<T> Expression for ArithExpr<T> where T: BorrowedTerm 
+{
     type TermOutput = T;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
@@ -62,7 +61,7 @@ impl<S, T> FormulaExprTrait for ArithExpr<S, T> where S: BorrowedType, T: Borrow
     }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
     {
         let mut map = HashMap::new();
         let left_map = Arc::make_mut(&mut self.left).replace_set_comprehension(generator);
@@ -73,22 +72,21 @@ impl<S, T> FormulaExprTrait for ArithExpr<S, T> where S: BorrowedType, T: Borrow
     }
 }
 
-impl<S, T> Display for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<T> Display for ArithExpr<T> where T: BorrowedTerm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.left, self.op, self.right)
     }
 }
 
-impl<S, T> ExprTrait for ArithExpr<S, T> where S: BorrowedType, T: BorrowedTerm<S, T> {
+impl<T> ExprTrait for ArithExpr<T> where T: BorrowedTerm {
 
-    type SortOutput = S;
     type TermOutput = T;
 
     fn has_set_comprehension(&self) -> bool {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension();
     }
 
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::SortOutput, Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>> {
         let mut list = vec![];
         let mut left_vec = self.left.set_comprehensions();
         let mut right_vec = self.right.set_comprehensions();

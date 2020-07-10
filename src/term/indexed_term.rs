@@ -14,25 +14,26 @@ use crate::type_system::BorrowedType;
 
  
 /// Same as `From<T>` but with index as an additional argument.
-pub trait FromWithIndex<S, T> where S: BorrowedType, T: BorrowedTerm {
-    fn from_with_index(item: T, index: Arc<RwLock<Model<S, T>>>) -> Self;
+pub trait FromWithIndex<T> where T: BorrowedTerm {
+    fn from_with_index(item: T, index: Arc<RwLock<Model<T>>>) -> Self;
 }
 
-pub trait IntoWithIndex<S, T> where S: BorrowedType, T: BorrowedTerm {
-    fn into_with_index(self, index: Arc<RwLock<Model<S, T>>>) -> T;
+pub trait IntoWithIndex<T> where T: BorrowedTerm {
+    fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> T;
 }
 
-/// `FromWithIndex<T>` and `IntoWithIndex<T>` are reflexive.
-impl<S, T, U> IntoWithIndex<S, U> for T
-where
-    S: BorrowedType,
-    U: FromWithIndex<S, T>,
-    T: BorrowedTerm
-{
-    fn into_with_index(self, index: Arc<RwLock<Model<S, T>>>) -> U {
-        U::from_with_index(self, index)
-    }
-}
+// `FromWithIndex<T>` and `IntoWithIndex<T>` are reflexive.
+
+// impl<S, T, U> IntoWithIndex<S, U> for T
+// where
+//     S: BorrowedType,
+//     U: FromWithIndex<S, T>,
+//     T: BorrowedTerm
+// {
+//     fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> U {
+//         U::from_with_index(self, index)
+//     }
+// }
 
 // #[derive(Derivative)]
 // #[derivative(Default, Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]

@@ -12,32 +12,26 @@ pub use expr::*;
 
 /// This trait applies to Formula expressions like terms, rules, constraints, setcompre, etc.
 /// It provides some functions to return variables in the expressions or replace some variables.
-pub trait FormulaExprTrait {
+pub trait Expression {
     
-    type SortOutput;
-    type TermOutput;
+    type TermOutput: BorrowedTerm;
 
     /// Return all variables in the expression.
     fn variables(&self) -> HashSet<Self::TermOutput>;
 
     /// Find a term with certain pattern in the expression and replace it with another term.
+    /// The pattern can be any generic term that implemets `BorrowedTerm` trait.
     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput);
 
     /// Find set comprehension in the expression and replace it with a don't-care variable to 
     /// represent it. The method will return a hash map mapping don't-care variable term to set 
     /// comprehension and there is a counter that is used to generate variable name.
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>>;
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>;
 }
 
-impl<E, S, T> FormulaExprTrait for Option<E> 
-where 
-    S: BorrowedType,
-    T: BorrowedTerm<S, T>,
-    E: FormulaExprTrait<SortOutput=S, TermOutput=T>
+impl<E> Expression for Option<E> where E: Expression
 {
-    type SortOutput = S;
-    type TermOutput = T;
+    type TermOutput = E::TermOutput;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
         match self {
@@ -57,9 +51,7 @@ where
         };
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
-    {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
         match self {
             Some(expr) => {
                 return expr.replace_set_comprehension(generator);
@@ -69,14 +61,9 @@ where
     }
 }
 
-impl<E, S, T> FormulaExprTrait for Vec<E> 
-where
-    S: BorrowedType,
-    T: BorrowedTerm<S, T>,
-    E: FormulaExprTrait<SortOutput=S, TermOutput=T>
+impl<E> Expression for Vec<E> where E: Expression
 {
-    type SortOutput = S;
-    type TermOutput = T;
+    type TermOutput = E::TermOutput;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
         let mut vars = HashSet::new();
@@ -93,8 +80,7 @@ where
         }
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::SortOutput, Self::TermOutput>> 
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
     {
         let mut map = HashMap::new();
         for element in self.iter_mut() {

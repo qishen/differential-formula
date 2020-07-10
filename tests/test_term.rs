@@ -124,7 +124,7 @@ fn test_term_bindings() {
     e_n1_y.replace(&x, n1);
     println!("Replace {} in {} with {} and finally get {}", x, e_x_y, n1, e_n1_y);
     let mut e_n1_n2 = e_n1_y.clone();
-    e_n1_n2.replace(&y, n2);
+    
     println!("Replace {} in {} with {} and finally get {}", y, e_n1_y, n2, e_n1_n2);
     assert_eq!(&e_n1_n2, e1);
 

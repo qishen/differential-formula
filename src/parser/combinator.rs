@@ -2,25 +2,23 @@ use crate::parser::ast::*;
 use crate::constraint::*;
 use crate::module::*;
 use crate::term::*;
-use crate::expression::*;
 use crate::type_system::*;
+use crate::expression::*;
 use crate::util::*;
 
-use std::convert::TryInto;
+use std::sync::Arc;
 use std::str::FromStr;
-use std::path::Path;
-use std::fs;
 use std::collections::*;
 
 use nom::character::*;
 use nom::character::complete::*;
 use nom::number::complete::*;
-
 use num::*;
 
 
-// Export this function to parse FORMULA file in string format.
-pub fn load_program(content: String) -> Env {
+/// Export this function to parse FORMULA file in string format and by default use `AtomicStrTerm`
+/// as the generic term type.
+pub fn load_program(content: String) -> Env<AtomicStrTerm> {
     let result = program(&content[..]).unwrap();
     // Make sure the whole file is parsed rather than part of the program.
     assert_eq!(result.0, "EOF");
@@ -50,11 +48,11 @@ named!(id<&str, String>,
 
 // Just treat it like a variable term despite the % sign.
 // In model transformation it will be replaced with another term.
-named!(param_id<&str, Term>,
+named!(param_id<&str, VariableTermAst>,
     do_parse!(
         tag!("%") >>
         pid: id >>
-        (Variable::new(pid, vec![]).into())
+        (VariableTermAst { root: pid, fragments: vec![] })
     )
 );
 
@@ -64,10 +62,11 @@ named!(param_id<&str, Term>,
 named!(typename<&str, TypeDefAst>,
     map!(separated_nonempty_list!(tag!("."), id), |mut names| {
         let name = names.remove(names.len()-1);
-        AliasTypeDefAst {
+        let alias_ast = AliasTypeDefAst {
             chained_scopes: names,
             name,
-        }.into()
+        };
+        TypeDefAst::AliasTypeDefAst(alias_ast)
     })
 );
 
@@ -85,7 +84,6 @@ named!(tagged_type<&str, (Option<String>, TypeDefAst)>,
         })
     )
 );
-
 
 named!(composite_typedef<&str, TypeDefAst>,
     do_parse!(
@@ -108,10 +106,12 @@ fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -
         boxed_args.push((id, Box::new(typedef)));
     }
 
-    CompositeTypeDefAst {
+    let composite_ast = CompositeTypeDefAst {
         name: t,
         args: boxed_args,
-    }.into()
+    };
+
+    TypeDefAst::CompositeTypeDefAst(composite_ast)
 }
 
 named!(enum_typedef_inline<&str, TypeDefAst>,
@@ -139,10 +139,11 @@ named!(enum_typedef<&str, TypeDefAst>,
 );
 
 fn parse_enum_typedef(t_opt: Option<String>, items: Vec<TermAst>) -> TypeDefAst {
-    EnumTypeDefAst { 
+    let enum_ast = EnumTypeDefAst { 
         name: t_opt, 
         items 
-    }.into()
+    };
+    TypeDefAst::EnumTypeDefAst(enum_ast)
 }
 
 // Union of defined type or enum type expression.
@@ -176,7 +177,8 @@ fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<TypeDefAst>) -> Type
         for subtype in subtypes {
             boxed_subtypes.push(Box::new(subtype));
         }
-        return UnionTypeDefAst { name: t_opt, subtypes: boxed_subtypes }.into();
+        let union_ast = UnionTypeDefAst { name: t_opt, subtypes: boxed_subtypes };
+        TypeDefAst::UnionTypeDefAst(union_ast)
     }
 }
 
@@ -204,7 +206,7 @@ named!(pub rule<&str, RuleAst>,
     do_parse!(
         head: separated_list!(
             delimited!(skip, tag!(","), skip), 
-            alt!(composite | map!(variable, |x| { x.into() }))
+            alt!(composite | map!(variable, |x| { TermAst::VariableTermAst(x) }))
         ) >>
         delimited!(skip, tag!(":-"), skip) >>
         body: separated_list!(
@@ -561,15 +563,21 @@ named!(setcompre_op<&str, SetCompreOp>,
 named!(base_expr<&str, ExprAst>,
     alt!(
         map!(setcompre, |x| { 
-            let base_expr: BaseExprAst = x.into(); 
-            base_expr.into()
+            let base_expr = BaseExprAst::SetComprehensionAst(x); 
+            ExprAst::BaseExprAst(base_expr)
         }) |
         // Can only be either atom of numeric value or variable that represent numeric value.
-        map!(alt!(param_id | variable | atom), |term| { 
-            let term_ast: TermAst = term.into();
-            let base_expr: BaseExprAst = term_ast.into();
-            base_expr.into()
+        map!(alt!(param_id | variable), |var| { 
+            let term_ast = TermAst::VariableTermAst(var);
+            let base_expr = BaseExprAst::TermAst(term_ast);
+            ExprAst::BaseExprAst(base_expr)
         }) | 
+        map!(atom, |atom_enum| {
+            let term_ast = TermAst::AtomTermAst(atom_enum);
+            let base_expr = BaseExprAst::TermAst(term_ast);
+            ExprAst::BaseExprAst(base_expr)
+
+        }) |
         parens_arith_expr
     )
 );
@@ -628,11 +636,13 @@ named!(arith_expr_low<&str, ExprAst>,
 fn parse_arith_expr(base: ExprAst, remain: Vec<(ArithmeticOp, ExprAst)>) -> ExprAst {
     let mut left = base;
     for (op, right) in remain {
-        let new_left = ArithExprAst {
-            op,
-            left: Box::new(left),
-            right: Box::new(right),
-        }.into();
+        let new_left = ExprAst::ArithExprAst(
+            ArithExprAst {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        );
         left = new_left;
     }
     left
@@ -653,7 +663,7 @@ named!(setcompre<&str, SetComprehensionAst>,
             terminated!(tag!(","), space0))) >>
         tag!("{") >>
         vars: separated_list!(tag!(","), 
-            delimited!(space0, alt!(composite | map!(variable, |x| { x.into() })), space0)
+            delimited!(space0, alt!(composite | map!(variable, |x| { TermAst::VariableTermAst(x) })), space0)
         ) >>
         delimited!(space0, tag!("|"), space0) >>
         condition: separated_list!(tag!(","), 
@@ -669,18 +679,16 @@ fn parse_setcompre(
     vars: Vec<TermAst>, 
     condition: Vec<ConstraintAst>, 
     op: SetCompreOp, 
-    default: Option<Term>
-) -> SetComprehensionAst {
+    default: Option<AtomEnum>
+) -> SetComprehensionAst 
+{
     let default_value = match default {
         None => None,
-        Some(term) => {
-            // The term has to be an integer as default value.
-            let atom: Atom = term.try_into().unwrap();
-            let num = match atom.val {
+        Some(atom_enum) => {
+            let num = match atom_enum {
                 AtomEnum::Int(num) => Some(num),
                 _ => None,
             };
-
             num
         }
     };
@@ -700,18 +708,18 @@ can be matched as a float number, so any composite term with type name starting 
 */
 named!(constraint<&str, ConstraintAst>,
     alt!(
-        map!(predicate, |x| { x.into() }) |
-        map!(binary, |x| { x.into() }) |
-        map!(type_constraint, |x| { x.into() }) |
+        map!(predicate, |x| { ConstraintAst::PredicateAst(x) }) |
+        map!(binary, |x| { ConstraintAst::BinaryAst(x) }) |
+        map!(type_constraint, |x| { ConstraintAst::TypeConstraintAst(x) }) |
         // Nullary predicate is just a variable with keyword `no` in the beginning.
         // Need to put it at last because it's partially matched with `type_constraint`.
-        map!(nullary_predicate, |x| { x.into() })
+        map!(nullary_predicate, |x| { ConstraintAst::PredicateAst(x) })
     )
 );
 
 named!(type_constraint<&str, TypeConstraintAst>,
     do_parse!(
-        var: map!(variable, |x| { x.into() }) >>
+        var: map!(variable, |x| { TermAst::VariableTermAst(x) }) >>
         op: delimited!(space0, alt!(tag!("is") | tag!(":")), space0) >>
         sort: typename >>
         (parse_type_constraint(var, sort))
@@ -742,11 +750,10 @@ fn parse_binary(op: BinOp, left: ExprAst, right: ExprAst) -> BinaryAst {
     }
 }
 
-
 named!(nullary_predicate<&str, PredicateAst>,
     do_parse!(
         neg: opt!(delimited!(space0, tag!("no"), space0)) >>
-        constant: map!(variable, |x| { x.into() }) >>
+        constant: map!(variable, |x| { TermAst::VariableTermAst(x) }) >>
         (parse_predicate(neg, None, constant))
     )
 );
@@ -777,8 +784,8 @@ fn parse_predicate(neg: Option<&str>, alias: Option<String>, term: TermAst) -> P
 named!(pub term<&str, TermAst>,
     alt!(
         composite |
-        map!(atom, |x| { x.into() }) |
-        map!(variable, |x| { x.into() })
+        map!(atom, |x| { TermAst::AtomTermAst(x) }) |
+        map!(variable, |x| { TermAst::VariableTermAst(x) })
     )
 );
 
@@ -795,7 +802,7 @@ named!(composite<&str, TermAst>,
                     alt!(
                         term |
                         // Handle some weird expression like %id only in model transformation.
-                        map!(param_id, |x| { x.into() }) 
+                        map!(param_id, |x| { TermAst::VariableTermAst(x) }) 
                     ), 
                     space0
                 )
@@ -807,11 +814,12 @@ named!(composite<&str, TermAst>,
 );
 
 fn parse_composite(alias: Option<String>, sort: TypeDefAst, args: Vec<TermAst>) -> TermAst {
-    CompositeTermAst {
+    let composite_ast = CompositeTermAst {
         sort,
         arguments: args.into_iter().map(|x| Box::new(x)).collect(),
         alias,
-    }.into()
+    };
+    TermAst::CompositeTermAst(composite_ast)
 }
 
 // Underscore and quote sign at the end is allowed in variable name.
@@ -832,7 +840,7 @@ fn is_alphanumeric_char(c: char) -> bool {
     is_alphanumeric(c as u8)
 }
 
-named!(variable<&str, Term>,
+named!(variable<&str, VariableTermAst>,
     do_parse!(
         var: varname >>
         fragments: opt!(preceded!(tag!("."), separated_list!(tag!("."), id))) >>
@@ -840,77 +848,89 @@ named!(variable<&str, Term>,
     )
 );
 
-fn parse_variable(var: &str, fragments: Option<Vec<String>>) -> Term {
+fn parse_variable(var: &str, fragments: Option<Vec<String>>) -> VariableTermAst {
     let frags = match fragments {
         None => vec![],
         Some(list) => list,
     };
 
-    Variable::new(var.to_string(), frags).into()
+    VariableTermAst {
+        root: var.to_string(),
+        fragments: frags
+    }
 }
 
 named!(atom_ast<&str, TermAst>,
     map!(atom, |x| {
-        x.into()
+        TermAst::AtomTermAst(x)
     })
 );
 
-named!(atom<&str, Term>,
+named!(atom<&str, AtomEnum>,
     alt!(atom_float | atom_integer | atom_bool | atom_string)
 );
 
-named!(atom_integer<&str, Term>,
+named!(atom_integer<&str, AtomEnum>,
     map!(tuple!(opt!(alt!(char!('+') | char!('-'))), digit1),
         |(sign, num_str)| {
             let num = match sign {
                 Some(sign_char) => { sign_char.to_string() + &num_str.to_string() },
                 None => { num_str.to_string() }
             };
-            AtomEnum::Int(BigInt::from_str(&num[..]).unwrap()).into() 
+            let atom_enum = AtomEnum::Int(BigInt::from_str(&num[..]).unwrap()); 
+            return atom_enum;
         }
     )
 );
 
-named!(atom_string<&str, Term>,
+named!(atom_string<&str, AtomEnum>,
     map!(
         delimited!(char!('"'), many0!(none_of("\"")), char!('"')), 
         |char_vec| { 
             let s: String = char_vec.into_iter().collect();
-            AtomEnum::Str(s).into() 
+            let atom_enum = AtomEnum::Str(s);
+            return atom_enum;
         }
     )
 );
 
 // Match float but need to exclude integer.
-named!(atom_float<&str, Term>,
+named!(atom_float<&str, AtomEnum>,
     map!(
         recognize!(float), 
         |float_str| { 
             if let Ok(i) = BigInt::from_str(float_str) {
-                return AtomEnum::Int(i).into();
+                let atom_enum = AtomEnum::Int(i);
+                return atom_enum;
             } else {
                 let num = f32::from_str(float_str).unwrap();
-                return AtomEnum::Float(BigRational::from_f32(num).unwrap()).into(); 
+                let atom_enum = AtomEnum::Float(BigRational::from_f32(num).unwrap()); 
+                return atom_enum;
             }
         }
     )
 );
 
-named!(atom_bool<&str, Term>,
+named!(atom_bool<&str, AtomEnum>,
     map!(
         alt!(tag!("true") | tag!("false")), 
         |x| {
-            match x {
-                "true" => AtomEnum::Bool(true).into(),
-                _ => AtomEnum::Bool(false).into(),
-            }
+            let atom_enum = match x {
+                "true" => AtomEnum::Bool(true),
+                _ => AtomEnum::Bool(false),
+            };
+            atom_enum
         }
     )
 );
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use std::path::Path;
+    use std::fs;
+
     #[test]
     fn test_blank() {
         assert_eq!(comment("// comment \n\n").unwrap().0, "\n");

@@ -2,6 +2,7 @@
 #![type_length_limit="1120927"]
 extern crate rand;
 
+use std::cell::*;
 use std::intrinsics::type_name;
 use std::marker::*;
 use std::sync::*;
@@ -107,9 +108,13 @@ fn main() {
 
     // Parse string and install program in the engine.
     engine.install(program);
+    let m = engine.create_empty_model("m", "Graph");
+    // let marc = Arc::new(RefCell::new(m));
+    let safem = Arc::new(RwLock::new(m));
     let node_type = engine.env.get_domain_by_name("Graph").unwrap().get_type(&"Node".to_string());
     let node_type2 = node_type.clone();
     let env = engine.env.clone();
+    let env2 = env.clone();
 
     // Some lambda functions to convert `usize` to other types.
     let convert_to_int = |x: usize| { x };
@@ -135,6 +140,14 @@ fn main() {
         let node_with_hash: HashableWrapper<Term> = term.clone().into();
         let wrapped_node = OrdWrapper { item: node_with_hash };
         return wrapped_node;
+    };
+
+    let convert_to_indexed_term = move |x: usize| {
+        let graph_domain = env2.get_domain_by_name("Graph").unwrap();
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = term_ast.to_term(graph_domain);
+        let indexed_term = IndexedTerm::new(&term, safem.clone());
+        return indexed_term;
     };
 
     let convert_to_int_hashmap = |num: usize| {
@@ -189,12 +202,14 @@ fn main() {
     hops_computation(convert_to_bigint);
     hops_computation(convert_to_wrapped_bigint);
     hops_computation(convert_to_term);
-    hops_computation(convert_to_int_hashmap);
-    hops_computation(convert_to_int_quick_hashmap);
-    hops_computation(convert_to_term_hashmap);
-    hops_computation(convert_to_term_quick_hashmap);
+    hops_computation(convert_to_indexed_term);
     
-    hops_differential_formula();
+    // hops_computation(convert_to_int_hashmap);
+    // hops_computation(convert_to_int_quick_hashmap);
+    // hops_computation(convert_to_term_hashmap);
+    // hops_computation(convert_to_term_quick_hashmap);
+    
+    // hops_differential_formula();
 }
 
 
