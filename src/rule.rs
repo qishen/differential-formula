@@ -2,11 +2,9 @@ extern crate rand;
 extern crate abomonation_derive;
 extern crate abomonation;
 
-use std::borrow::Borrow;
 use std::iter::*;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::string::String;
@@ -21,12 +19,12 @@ use crate::util::*;
 
 
 #[derive(Clone, Debug)]
-pub struct Rule<T> where T: BorrowedTerm {
+pub struct Rule<T> where T: TermStructure {
     head: Vec<T>,
     body: Vec<Constraint<T>>,
 }
 
-impl<T> Expression for Rule<T> where T: BorrowedTerm {
+impl<T> Expression for Rule<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -48,7 +46,7 @@ impl<T> Expression for Rule<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Display for Rule<T> where T: BorrowedTerm  {
+impl<T> Display for Rule<T> where T: TermStructure  {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let term_strs: Vec<String> = self.head.iter().map(|x| {
             let term_str = format!("{}", x);
@@ -70,7 +68,7 @@ impl<T> Display for Rule<T> where T: BorrowedTerm  {
 }
 
 
-impl<T> Rule<T> where T: BorrowedTerm {
+impl<T> Rule<T> where T: TermStructure {
     pub fn new(head: Vec<T>, body: Vec<Constraint<T>>) -> Self {
         let mut rule = Rule { head, body };
 
@@ -154,7 +152,7 @@ impl<T> Rule<T> where T: BorrowedTerm {
                 Constraint::Predicate(predicate) => {
                     if predicate.negated {
                         let random_name = generator.generate_name();
-                        let introduced_var: T = Term::create_variable(random_name).into();
+                        let introduced_var = T::create_variable_term(None, random_name, vec![]);
                         let (b1, b2) = predicate.convert_negation(introduced_var).unwrap();
                         constraints.push(b1);
                         constraints.push(b2);
@@ -204,11 +202,10 @@ impl<T> Rule<T> where T: BorrowedTerm {
 
         // println!("rule: {}, pred: {:?}, all vars {:?}", self, pred_matched_vars, all_vars);
 
-        for var in all_vars.into_iter() {
-            let var_str: &String = var.borrow();
+        for var in all_vars.iter() {
             // var cannot have fragments as a derived variable.
-            if !pred_matched_vars.contains(&var) && var_str == var.var_root().unwrap() {
-                derived_vars.insert(var);
+            if !pred_matched_vars.contains(var) && var == var.root() {
+                derived_vars.insert(var.clone());
             }
         }
 
@@ -257,7 +254,7 @@ impl<T> Rule<T> where T: BorrowedTerm {
     pub fn elect_declaration_constraint<'a>(&self, candidates: Vec<&'a Constraint<T>>) -> &'a Constraint<T> {
         for constraint in candidates.clone().into_iter() {
             if let Constraint::Binary(binary) = constraint {
-                match binary.right {
+                match &binary.right {
                     Expr::BaseExpr(base_expr) => {
                         if let BaseExpr::SetComprehension(setcompre) = base_expr {
                             return constraint;
@@ -327,8 +324,7 @@ impl<T> Rule<T> where T: BorrowedTerm {
                     if let Constraint::Binary(b2) = c2 {
                         if let Expr::BaseExpr(base_expr) = b1.left {
                             if let BaseExpr::Term(left_var) = base_expr {
-                                let left_var_ref: &String = left_var.borrow();
-                                if b2.right.variables().contains(left_var_ref) {
+                                if b2.right.variables().contains(&left_var) {
                                     graph.add_edge(n1.clone(), n2.clone(), 1);
                                 }
                             }

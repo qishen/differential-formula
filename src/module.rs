@@ -1,5 +1,4 @@
 use std::borrow::*;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::collections::*;
 use std::fmt::*;
@@ -12,12 +11,10 @@ use crate::expression::*;
 use crate::term::*;
 use crate::rule::*;
 use crate::type_system::*;
-use crate::util::wrapper::*;
-
 
 #[enum_dispatch]
 #[derive(Debug, Clone)]
-pub enum Program<T> where T: BorrowedTerm 
+pub enum Program<T> where T: TermStructure 
 {
     Domain(Domain<T>),
     Model(Model<T>),
@@ -27,14 +24,14 @@ pub enum Program<T> where T: BorrowedTerm
 /// Meta information in a Formula Module like types and rules with a generic type for Formula
 /// type to enable easy access of wrapped Formula type when building terms.
 #[derive(Clone, Debug)]
-pub struct MetaInfo<T> where T: BorrowedTerm {
+pub struct MetaInfo<T> where T: TermStructure {
     // Map string to a wrapped Formula type. 
     type_map: HashMap<String, T::SortOutput>,
     // Rules defined in transformation.
     rules: Vec<Rule<T>>,
 }
 
-impl<T> MetaInfo<T> where T: BorrowedTerm 
+impl<T> MetaInfo<T> where T: TermStructure 
 {
     /// Use type map and rules to create a new MetaInfo instance basically represents Formula Domain.
     pub fn new(type_map: HashMap<String, T::SortOutput>, rules: Vec<Rule<T>>) -> Self {
@@ -104,8 +101,8 @@ impl<T> MetaInfo<T> where T: BorrowedTerm
     }
 
     /// Return a type map that turn generic sort type into `AtomicStrType` by wrapping up basic type.
-    pub fn atomic_type_map(&self) -> HashMap<String, AtomicStrType> {
-        let atomic_type_map = HashMap::new();
+    pub fn atomic_type_map(&self) -> HashMap<String, AtomicType> {
+        let mut atomic_type_map = HashMap::new();
         for (k, v) in self.type_map() {
             let t: &Type = v.borrow();
             atomic_type_map.insert(k.clone(), t.clone().into());
@@ -126,7 +123,7 @@ impl<T> MetaInfo<T> where T: BorrowedTerm
 /// in single thread scenario or just `Term` if you don't care about too many duplicates as long as it 
 /// implements the required traits that make it look like a term.
 #[derive(Clone, Debug)]
-pub struct ModelStore<T> where T: BorrowedTerm {
+pub struct ModelStore<T> where T: TermStructure {
     // Map each term to an unique id bi-directionally.
     term_map: BiMap<usize, T>,
     // Map alias string as a variable term to term.
@@ -135,7 +132,7 @@ pub struct ModelStore<T> where T: BorrowedTerm {
     counter: usize,
 }
 
-impl<T> ModelStore<T> where T: BorrowedTerm {
+impl<T> ModelStore<T> where T: TermStructure {
     pub fn new(terms: HashSet<T>, alias_map: HashMap<T, T>) -> Self {
         let mut counter = 0;
         let mut term_map = BiMap::new();
@@ -159,16 +156,21 @@ impl<T> ModelStore<T> where T: BorrowedTerm {
     pub fn rename(&self, scope: String, type_map: &HashMap<String, T::SortOutput>) -> Self {
         let mut renamed_alias_map = HashMap::new();
         let mut renamed_terms = HashSet::new();
+        let mut type_set = HashSet::new();
+
+        for (_, t) in type_map {
+            type_set.insert(t.clone());
+        }
 
         for term_ref in self.terms().into_iter() {
             let mut renamed_term = term_ref.clone();
-            renamed_term.rename(scope.clone(), type_map);
+            renamed_term.rename(scope.clone(), &mut type_set);
             renamed_terms.insert(renamed_term);
         }
 
         for (key, val) in self.alias_map.clone().into_iter() {
-            let new_key = key.rename(scope.clone(), type_map);
-            let new_val = val.rename(scope.clone(), type_map);
+            let new_key = key.rename(scope.clone(), &mut type_set);
+            let new_val = val.rename(scope.clone(), &mut type_set);
             renamed_alias_map.insert(new_key, new_val);
         }
 
@@ -237,15 +239,17 @@ impl<T> ModelStore<T> where T: BorrowedTerm {
     }
 }
 
-pub trait FormulaModule<T> where T: BorrowedTerm {
+pub trait FormulaModule<T> where T: TermStructure {
     // Return all terms as reference in a vector.
     fn terms(&self) -> Vec<&T>;
     // Return meta inforamtion with type map and rules.
     fn meta_info(&self) -> &MetaInfo<T>;
+    // Add a rule.
+    fn add_rule(&mut self, rule: Rule<T>);
 }
 
 #[derive(Debug, Clone)]
-pub struct Transform<T> where T: BorrowedTerm {
+pub struct Transform<T> where T: TermStructure {
     // The name of transform.
     pub name: String,
     // Meta information including the ones from input and output domains.
@@ -262,7 +266,7 @@ pub struct Transform<T> where T: BorrowedTerm {
     pub output_domain_map: HashMap<String, Domain<T>>,
 }
 
-impl<T> Transform<T> where T: BorrowedTerm {
+impl<T> Transform<T> where T: TermStructure {
     pub fn new(name: String, 
         type_map: HashMap<String, T::SortOutput>, 
         rules: Vec<Rule<T>>,
@@ -291,7 +295,7 @@ impl<T> Transform<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> FormulaModule<T> for Transform<T> where T: BorrowedTerm
+impl<T> FormulaModule<T> for Transform<T> where T: TermStructure
 {
     fn terms(&self) -> Vec<&T> {
         self.store.terms()
@@ -300,10 +304,14 @@ impl<T> FormulaModule<T> for Transform<T> where T: BorrowedTerm
     fn meta_info(&self) -> &MetaInfo<T> {
         &self.metainfo
     }
+
+    fn add_rule(&mut self, rule: Rule<T>) {
+        self.metainfo.add_rule(rule);
+    }
 }
 
 /// `Transformation` is the instantiation of `Transform` with input terms and models.
-pub struct Transformation<T> where T: BorrowedTerm {
+pub struct Transformation<T> where T: TermStructure {
     // Meta model information.
     pub metainfo: MetaInfo<T>,
     // Term store.
@@ -320,7 +328,7 @@ pub struct Transformation<T> where T: BorrowedTerm {
     pub inherited_rules: Vec<Rule<T>>,
 }
 
-impl<T> FormulaModule<T> for Transformation<T> where T: BorrowedTerm
+impl<T> FormulaModule<T> for Transformation<T> where T: TermStructure
 {
     fn terms(&self) -> Vec<&T> {
         // Includes all terms in submodels and terms defined in Transform.
@@ -341,6 +349,10 @@ impl<T> FormulaModule<T> for Transformation<T> where T: BorrowedTerm
 
     fn meta_info(&self) -> &MetaInfo<T> {
         &self.metainfo
+    }
+    
+    fn add_rule(&mut self, rule: Rule<T>) {
+        self.metainfo.add_rule(rule);
     }
 
     // fn rules(&self) -> Vec<Rule> {
@@ -375,8 +387,7 @@ impl<T> FormulaModule<T> for Transformation<T> where T: BorrowedTerm
     // }
 }
 
-impl<T> Transformation<T> where T: BorrowedTerm
-{
+impl<T> Transformation<T> where T: TermStructure {
     pub fn new(transform: Transform<T>, input_term_map: HashMap<String, T>, input_model_map: HashMap<String, Model<T>>) -> Self {   
         let mut inherited_terms = HashSet::new();
         let mut inherited_rules = Vec::new();
@@ -384,10 +395,7 @@ impl<T> Transformation<T> where T: BorrowedTerm
 
         // Some additional terms may be defined in transform even with alias like %id that need to be replaced.
         for (key, replacement) in input_term_map.iter() {
-            let pattern: T = Term::Variable(
-                Variable::new(None, key.clone(), vec![])
-            ).into();
-
+            let pattern = T::create_variable_term(None, key.clone(), vec![]);
             for raw_term in transform.terms() {
                 let mut term = raw_term.clone();
                 term.replace_pattern(&pattern, replacement);
@@ -403,10 +411,7 @@ impl<T> Transformation<T> where T: BorrowedTerm
 
         // Replace parameter like %id in transform rules with term from `input_term_map`.
         for (key, replacement) in input_term_map.iter() {
-            let pattern: T = Term::Variable(
-                Variable::new(None, key.clone(), vec![])
-            ).into();
-
+            let pattern = T::create_variable_term(None, key.clone(), vec![]);
             for mut rule in transform.meta_info().rules() {
                 rule.replace_pattern(&pattern, replacement);
                 inherited_rules.push(rule);
@@ -428,22 +433,26 @@ impl<T> Transformation<T> where T: BorrowedTerm
 }
 
 #[derive(Debug, Clone)]
-pub struct Domain<T> where T: BorrowedTerm {
+pub struct Domain<T> where T: TermStructure {
     pub name: String,
     pub metainfo: MetaInfo<T>,
 }
 
-impl<T> FormulaModule<T> for Domain<T> where T: BorrowedTerm {
+impl<T> FormulaModule<T> for Domain<T> where T: TermStructure {
     fn terms(&self) -> Vec<&T> {
         Vec::new()
     }
 
-    fn meta_info(&self) -> &MetaInfo<T> where T: BorrowedTerm {
+    fn meta_info(&self) -> &MetaInfo<T> where T: TermStructure {
         &self.metainfo
+    }
+    
+    fn add_rule(&mut self, rule: Rule<T>) {
+        self.metainfo.add_rule(rule);
     }
 }
 
-impl<T> Domain<T> where T: BorrowedTerm {
+impl<T> Domain<T> where T: TermStructure {
     pub fn new(name: String, type_map: HashMap<String, T::SortOutput>, rules: Vec<Rule<T>>) -> Self {
         let metainfo = MetaInfo::new(type_map, rules);
         Domain { name, metainfo }
@@ -473,7 +482,7 @@ impl<T> Domain<T> where T: BorrowedTerm {
 }
 
 #[derive(Clone, Debug)]
-pub struct Model<T> where T: BorrowedTerm {
+pub struct Model<T> where T: TermStructure {
     // The name of the model.
     pub name: String,
     // Meta info and rules that terms in the model need to conform.
@@ -482,8 +491,7 @@ pub struct Model<T> where T: BorrowedTerm {
     store: ModelStore<T>,
 }
 
-impl<T> FormulaModule<T> for Model<T> where T: BorrowedTerm
-{
+impl<T> FormulaModule<T> for Model<T> where T: TermStructure {
     fn terms(&self) -> Vec<&T> {
         self.store.terms()
     }
@@ -491,9 +499,13 @@ impl<T> FormulaModule<T> for Model<T> where T: BorrowedTerm
     fn meta_info(&self) -> &MetaInfo<T> {
         &self.metainfo
     }
+
+    fn add_rule(&mut self, rule: Rule<T>) {
+        self.metainfo.add_rule(rule);
+    }
 }
 
-impl<T> Model<T> where T: BorrowedTerm {
+impl<T> Model<T> where T: TermStructure {
     /// Provide domain, terms and alias mapping to create a new model.
     pub fn new(name: String, domain: &Domain<T>, terms: HashSet<T>, alias_map: HashMap<T, T>) -> Self {
         let metainfo = domain.metainfo.clone();
@@ -526,13 +538,13 @@ impl<T> Model<T> where T: BorrowedTerm {
 }
 
 #[derive(Debug, Clone)]
-pub struct Env<T> where T: BorrowedTerm {
+pub struct Env<T> where T: TermStructure {
     pub domain_map: HashMap<String, Domain<T>>,
     pub model_map: HashMap<String, Model<T>>,
     pub transform_map: HashMap<String, Transform<T>>,
 }
 
-impl<T> Env<T> where T: BorrowedTerm {
+impl<T> Env<T> where T: TermStructure {
     pub fn new() -> Self {
         Env {
             domain_map: HashMap::new(),

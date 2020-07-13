@@ -1,6 +1,6 @@
-use std::borrow::*;
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::{Debug, Display};
 
@@ -15,17 +15,43 @@ use crate::util::map::*;
 
 // #[enum_dispatch]
 pub trait BaseExprTrait {}
-impl<T> BaseExprTrait for SetComprehension<T> where T: BorrowedTerm {}
-impl<T> BaseExprTrait for T where T: BorrowedTerm {}
+impl<T> BaseExprTrait for SetComprehension<T> where T: TermStructure {}
+impl<T> BaseExprTrait for T where T: TermStructure {}
 
 // #[enum_dispatch(BaseExprTrait)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BaseExpr<T> where T: BorrowedTerm {
+pub enum BaseExpr<T> where T: TermStructure {
     SetComprehension(SetComprehension<T>),
     Term(T),
 }
 
-impl<T> ExprTrait for BaseExpr<T> where T: BorrowedTerm {
+impl<T> TryFrom<BaseExpr<T>> for SetComprehension<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: BaseExpr<T>) -> Result<Self, Self::Error> {
+        match value {
+            BaseExpr::SetComprehension(setcompre) => {
+                Ok(setcompre)
+            },
+            _ => { Err("It's not a set comprehension.") }
+        }
+    }
+}
+
+// impl<T1> TryFrom<BaseExpr<T1>> for T1 where T1: TermStructure {
+//     type Error = &'static str;
+
+//     fn try_from(value: BaseExpr<T1>) -> Result<Self, Self::Error> {
+//         match value {
+//             BaseExpr::Term(term) => {
+//                 Ok(term)
+//             },
+//             _ => { Err("It's not a term.") }
+//         }
+//     }
+// }
+
+impl<T> ExprTrait for BaseExpr<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -49,55 +75,34 @@ impl<T> ExprTrait for BaseExpr<T> where T: BorrowedTerm {
     }
 
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
-        match self {
+        let atom_enum = match self {
             BaseExpr::Term(term) => {
-                match term.borrow() {
-                    Term::Atom(atom) => {
-                        // The expression is a term of integer type.
-                        match &atom.val {
-                            AtomEnum::Int(num) => {
-                                return Some(num.clone());
-                            },
-                            _ => { return None; },
-                        }
-                    },
-                    Term::Variable(variable) => {
-                        // The expression is a variable and find the value in hash map by that variable
-                        let root_var = term.var_root().unwrap();
-                        let term_str: &String = term.borrow();
-                        let val_term = match root_var == term_str {
-                            true => { 
-                                binding.gget(term_str).unwrap().clone() 
-                            },
-                            false => {
-                                // x.y.z does not exist in the binding but x exists.
-                                let val_term = binding.gget(root_var).unwrap();
-                                val_term.find_subterm(&term).unwrap()
-                            }
-                        };
-
-                        // val_term must be an atom term for arithmetic evaluation.
-                        match val_term.borrow() {
-                            Term::Atom(atom) => {
-                                match &atom.val {
-                                    AtomEnum::Int(num) => {
-                                        return Some(num.clone())
-                                    },
-                                    _ => { None }
-                                }
-                            },
-                            _ => { None }
-                        }
-                    },
-                    _ => { return None; }
+                if term == term.root() {
+                    let bigint_term = match binding.contains_gkey(term) {
+                        true => binding.gget(term).unwrap(),
+                        false => term,
+                    };
+                    let bigint_enum = bigint_term.into_atom_enum().unwrap();
+                    Some(bigint_enum)
+                } else {
+                    // The term is not in the binding but the root of term is in the binding.
+                    let var_term = binding.gget(term.root()).unwrap();
+                    let fragment_diff = term.fragments_diff(term.root()).unwrap();
+                    let subterm = var_term.find_subterm_by_labels(&fragment_diff).unwrap();
+                    subterm.into_atom_enum()
                 }
             },
-            _ => { return None; } // Can't directly evaluate set comprehension.
+            _ => { None } // No evaluation on set comprehension.
+        }.unwrap();
+
+        match atom_enum {
+            AtomEnum::Int(i) => Some(i),
+            _ => None
         }
     }
 }
 
-impl<T> Display for BaseExpr<T> where T: BorrowedTerm {
+impl<T> Display for BaseExpr<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BaseExpr::SetComprehension(s) => write!(f, "{}", s),
@@ -106,7 +111,7 @@ impl<T> Display for BaseExpr<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Expression for BaseExpr<T> where T: BorrowedTerm {
+impl<T> Expression for BaseExpr<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -135,7 +140,7 @@ impl<T> Expression for BaseExpr<T> where T: BorrowedTerm {
                 // Make a deep copy to avoid ugly try_into().
                 let replaced_setcompre = setcompre.clone(); 
                 let dc_name = generator.generate_name();
-                let dc_var: T = Term::Variable(Variable::new(None, dc_name, vec![])).into();
+                let dc_var = T::create_variable_term(None, dc_name, vec![]);
                 let mut base_expr: BaseExpr<T> = BaseExpr::Term(dc_var.clone());
                 std::mem::swap(self, &mut base_expr);
                 map.insert(dc_var, replaced_setcompre); 

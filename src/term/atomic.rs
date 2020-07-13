@@ -1,15 +1,17 @@
 use std::borrow::*;
-use std::collections::HashSet;
+use std::collections::*;
 use std::sync::Arc;
 use std::hash::Hash;
 use std::fmt::*;
 
 use serde::{Serialize, Deserialize};
 
+use crate::module::Env;
 use super::generic::*;
-use super::VisitTerm;
 use crate::type_system::*;
 use crate::util::wrapper::*;
+use crate::parser::ast::*;
+use crate::parser::combinator::parse_program;
 
 /******************** AtomicType *******************/
 
@@ -97,7 +99,7 @@ impl TermStructure for AtomicTerm {
     }
 
     fn arguments(&self) -> Vec<&Self> {
-        let args = vec![];
+        let mut args = vec![];
         match self {
             AtomicTerm::Composite(composite) => {
                 for arg in composite.arguments.iter() {
@@ -110,7 +112,7 @@ impl TermStructure for AtomicTerm {
     }
 
     fn arguments_mut(&mut self) -> Vec<&mut Self> {
-        let args = vec![];
+        let mut args = vec![];
         match self {
             AtomicTerm::Composite(composite) => {
                 for arg in composite.arguments.iter_mut() {
@@ -133,23 +135,33 @@ impl TermStructure for AtomicTerm {
     fn root(&self) -> &Self {
         match self {
             AtomicTerm::Variable(var) => {
-                let root = var.root_term.map_or(self, |root| &root);
+                let root = var.root_term.as_ref().map_or(self, |root| &root);
                 root
             },
             _ => { self } // Return itself for atom and composite term.
         }
     }
 
-    fn create_variable_term(root: String, fragments: Vec<String>) -> Self {
-        // Use undefined for the sort because it is unknown without context.
-        let undefined_sort: AtomicType = Type::undefined().into();
-        let var = AtomicVariable::new(undefined_sort, root, fragments);
+    fn create_variable_term(sort: Option<Self::SortOutput>, root: String, fragments: Vec<String>) -> Self {
+        // Use undefined for the sort because it is unknown without context if no sort in provided in params.
+        let var_sort = match sort {
+            Some(sort) => sort,
+            None => Type::undefined().into()
+        };
+        let var = AtomicVariable::new(var_sort, root, fragments);
         AtomicTerm::Variable(var)
     }
 
-    fn create_atom_term(atom_enum: AtomEnum) -> Self {
-        let atom = AtomicAtom::new(atom_enum);
+    fn create_atom_term(sort: Option<Self::SortOutput>, atom_enum: AtomEnum) -> Self {
+        let atom = AtomicAtom::new(sort, atom_enum);
         AtomicTerm::Atom(atom)
+    }
+
+    fn create_constant(constant: String) -> (Self::SortOutput, Self) {
+        let nullary_type = Type::CompositeType(CompositeType { name: constant, arguments: vec![] });
+        let composite = AtomicComposite::new(nullary_type.clone().into(), vec![], None);
+        let term = AtomicTerm::Composite(composite);
+        return (nullary_type.into(), term);
     }
 
     fn is_dc_variable(&self) -> bool {
@@ -175,48 +187,139 @@ impl TermStructure for AtomicTerm {
         }
     }
 
-    fn find_subterm(&self, labels: &Vec<String>) -> Option<&Self> {
-        let result = match self {
-            AtomicTerm::Composite(cterm) => {
-                let initial_term = self;
-                let mut init_type: &Type = cterm.sort.borrow();
-                let init_type = init_type.base_type();
-                // The final value is a tuple of type and term.
-                let result = labels.iter().fold(Some((init_type, initial_term)), 
-                    |state, label| {
-                    if let Some((ctype_enum, subterm)) = state {
-                        if let Type::CompositeType(ctype) = ctype_enum {
-                            let new_state = ctype.arguments.iter().enumerate().find_map(
-                                |(i, (arg_label_opt, t))| {
-                                if let Some(arg_label) = arg_label_opt {
-                                    if arg_label == label {
-                                        if let AtomicTerm::Composite(cterm) = subterm.borrow() {
-                                            // Update the composite type for the next round. Note that `t` could 
-                                            // be a renamed type wrapping a composite type.
-                                            let type_ref: &Type = t.borrow();
-                                            let new_ctype = type_ref.base_type();
-                                            let cterm_arg = cterm.arguments.get(i).unwrap();
-                                            // Need to convert Arc<Term> into generic type T.
-                                            return Some((new_ctype, cterm_arg));
-                                        }
-                                    }
-                                } 
-                                return None;
-                            });
-                            return new_state;
-                        } 
-                    } 
-                    return None;
-                });
+    fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self> {
+        let mut current_term = self; 
+        for label in labels {
+            let subterm_opt = current_term.find_argument_by_label(label);
+            if let Some(subterm) = subterm_opt {
+                current_term = subterm;
+            } else {
+                return None;
+            }
+        }
+        Some(current_term)
+    }
 
-                result.map(|(_, term)| {
-                    term
-                })
+    fn is_direct_subterm_of(&self, term: &Self) -> bool {
+        match term {
+            AtomicTerm::Composite(composite) => {
+                for arg in composite.arguments.iter() {
+                    // Check if self is equal to one of its arguments.
+                    if self == arg { return true; }
+                }
+                false
+            },
+            AtomicTerm::Variable(var) => {
+                match self {
+                    AtomicTerm::Variable(sub_var) => { // e.g. `x.y.z` is a subterm of `x.y`.
+                        if var.root == sub_var.root && sub_var.fragments.starts_with(&var.fragments){ true }
+                        else { false }
+                    },
+                    _ => { false }
+                }
+            },
+            AtomicTerm::Atom(atom) => { false }
+        }
+    }
+
+
+    fn fragments_diff<'a>(&'a self, term: &'a Self) -> Option<Vec<&'a String>> {
+        match self {
+            AtomicTerm::Variable(v1) => {
+                let len1 = v1.fragments.len();
+                match term {
+                    AtomicTerm::Variable(v2) => {
+                        let len2 = v2.fragments.len();
+                        if v1.fragments.starts_with(&v2.fragments) {
+                            let mut labels = vec![];
+                            for i in len2 .. len1 {
+                                labels.push(v1.fragments.get(i).unwrap());
+                            } 
+                            Some(labels)
+                        }
+                        else if v2.fragments.starts_with(&v1.fragments) {
+                            let mut labels = vec![];
+                            for i in len1 .. len2 {
+                                labels.push(v2.fragments.get(i).unwrap());
+                            }
+                            Some(labels)
+                        }
+                        else { None }
+                    },
+                    _ => { None }
+                }  
             },
             _ => { None }
+        }
+    }
+
+    fn into_atom_enum(&self) -> Option<AtomEnum> {
+        match self {
+            AtomicTerm::Atom(atom) => {
+                Some(atom.val.clone())
+            },
+            _ => None,
+        }
+    }
+
+    fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, Self::SortOutput>) -> Self {
+        // Get undefined sort from the type map or generate a new one and insert into type map.
+        let undefined_sort: AtomicType = match type_map.contains_key("~Undefined") {
+            true => type_map.get("~Undefined").unwrap().clone().into(),
+            false => { Type::undefined().into() }
         };
 
-        None
+        let atomic_term = match ast {
+            TermAst::CompositeTermAst(cterm_ast) => {
+                let mut term_arguments = vec![];
+                for argument in cterm_ast.arguments.clone() {
+                    let term = AtomicTerm::from_term_ast(argument.as_ref(), type_map);
+                    term_arguments.push(term);
+                }
+                let sort_name = cterm_ast.sort.name().unwrap();
+                let sort: AtomicType = type_map.get(&sort_name).unwrap().clone().into();
+                let composite = AtomicComposite::new(sort, term_arguments, cterm_ast.alias.clone());
+                AtomicTerm::Composite(composite)
+            },
+            TermAst::VariableTermAst(vterm_ast) => {
+                // The sort of variable term is undefined at this point.
+                let var = AtomicVariable::new(
+                    undefined_sort.clone(),
+                    vterm_ast.root.clone(), 
+                    vterm_ast.fragments.clone()
+                );
+                AtomicTerm::Variable(var)
+            },
+            TermAst::AtomTermAst(atom_enum) => {
+                let atom = AtomicAtom {
+                    sort: undefined_sort.clone(),
+                    val: atom_enum.clone()
+                };
+                AtomicTerm::Atom(atom)
+            }
+        };
+
+        atomic_term
+    }
+
+    fn remove_alias(&mut self) -> Option<String> {
+        match self {
+            AtomicTerm::Composite(composite) => {
+                let alias = composite.alias.clone();
+                composite.alias = None;
+                alias
+            },
+            _ => { None }
+        }
+    }
+
+    fn load_program(text: String) -> Env<Self> {
+        let result = parse_program(&text[..]);
+        // Make sure the whole file is parsed rather than part of the program.
+        assert_eq!(result.0, "EOF");
+        // println!("{:?}", result.0);
+        let program_ast = result.1;
+        program_ast.build_env()
     }
 }
 
@@ -247,24 +350,6 @@ impl AtomicTerm {
         );
 
         return term;
-    }
-
-    /// Compare two lists of variable terms and return true if some terms in one list
-    /// are subterms of the terms in another list. 
-    pub fn has_deep_intersection<I, T>(a: I, b: I) -> bool 
-    where 
-        I: Iterator<Item=T>, 
-        T: TermStructure,
-    {
-        for v1 in a {
-            for v2 in b {
-                if v1.has_subterm(&v2).unwrap() || 
-                   v2.has_subterm(&v1).unwrap() {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /// Given a label as string and check if one of the arguments in composite term is related to the label
@@ -347,21 +432,26 @@ impl Display for AtomicAtom {
 }
 
 impl AtomicAtom {
-    pub fn new(atom_enum: AtomEnum) -> AtomicAtom {
-        // Decide the sort based on the enum value.
-        let base_type = match atom_enum {
-            AtomEnum::Bool(b)  => { BaseType::Boolean },
-            AtomEnum::Float(f) => { BaseType::Rational },
-            AtomEnum::Int(i)   => { BaseType::Integer },
-            AtomEnum::Str(s)   => { BaseType::String }
+    pub fn new(sort: Option<AtomicType>, atom_enum: AtomEnum) -> AtomicAtom {
+        // create a sort if not provided in the params.
+        let atom_sort = match sort {
+            Some(sort) => sort,
+            None => {
+                // Decide the sort based on the enum value.
+                let base_type = match &atom_enum {
+                    AtomEnum::Bool(_)  => { BaseType::Boolean },
+                    AtomEnum::Float(_) => { BaseType::Rational },
+                    AtomEnum::Int(_)   => { BaseType::Integer },
+                    AtomEnum::Str(_)   => { BaseType::String }
+                };
+
+                let base_type = Type::BaseType(base_type);
+                base_type.into()
+            }
         };
 
-        // TODO: Use static constants for types without having to create a new type each time.
-        // Create a new base type for atom and should use a copy of base type reference.
-        let base_type = Type::BaseType(base_type);
-
         AtomicAtom {
-            sort: base_type.into(),
+            sort: atom_sort,
             val: atom_enum
         }
     }
@@ -378,7 +468,7 @@ pub struct AtomicVariable {
     // The remaining fragments of the variable term.
     pub fragments: Vec<String>,
     // A reference to the root term but is optional only if the variable has fragments.
-    pub root_term: Option<AtomicTerm>
+    pub root_term: Option<Box<AtomicTerm>>
 }
 
 impl HasUniqueForm<String> for AtomicVariable {
@@ -404,7 +494,7 @@ impl AtomicVariable {
     /// and has no relations with fragments and the type of fragments can be derived from root type later.
     pub fn new(sort: AtomicType, root: String, fragments: Vec<String>) -> Self {
         let root_var = AtomicVariable {
-            sort,
+            sort: sort.clone(),
             root: root.clone(),
             fragments: vec![],
             root_term: None
@@ -413,11 +503,12 @@ impl AtomicVariable {
         if fragments.len() == 0 {
             return root_var;
         } else {
+            let root_term = Some(Box::new(AtomicTerm::Variable(root_var)));
             let var = AtomicVariable {
                 sort,
                 root,
                 fragments,
-                root_term: Some(AtomicTerm::Variable(root_var))
+                root_term
             };
             return var;
         }
@@ -460,7 +551,7 @@ impl AtomicComposite {
     }
 
     pub fn rename(&self, scope: String, renamed_types: &mut HashSet<AtomicType>) -> Self {
-        let arguments = vec![];
+        let mut arguments = vec![];
         for arg in self.arguments.iter() {
             let renamed_arg = arg.rename(scope.clone(), renamed_types);
             arguments.push(renamed_arg);

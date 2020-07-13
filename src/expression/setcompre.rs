@@ -18,14 +18,14 @@ use crate::util::*;
 
 #[readonly::make]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SetComprehension<T> where T: BorrowedTerm {
+pub struct SetComprehension<T> where T: TermStructure {
     pub vars: Vec<T>,
     pub condition: Vec<Constraint<T>>,
     pub op: SetCompreOp,
     pub default: BigInt,
 }
 
-impl<T> Display for SetComprehension<T> where T: BorrowedTerm {
+impl<T> Display for SetComprehension<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headterm_strs: Vec<String> = self.vars.iter().map(|x| {
             let term_str = format!("{}", x);
@@ -44,7 +44,7 @@ impl<T> Display for SetComprehension<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> SetComprehension<T> where T: BorrowedTerm {
+impl<T> SetComprehension<T> where T: TermStructure {
     pub fn new(vars: Vec<T>, condition: Vec<Constraint<T>>, op: SetCompreOp, default: BigInt) -> Self {
         SetComprehension {
             vars,
@@ -61,7 +61,7 @@ impl<T> SetComprehension<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Expression for SetComprehension<T> where T: BorrowedTerm {
+impl<T> Expression for SetComprehension<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -88,7 +88,7 @@ impl<T> Expression for SetComprehension<T> where T: BorrowedTerm {
 }
 
 // Turn SetComprehension into a headless rule.
-impl<T> From<SetComprehension<T>> for Rule<T> where T: BorrowedTerm {
+impl<T> From<SetComprehension<T>> for Rule<T> where T: TermStructure {
     fn from(setcompre: SetComprehension<T>) -> Self {
         Rule::new(vec![], setcompre.condition.clone())
     }
@@ -120,13 +120,11 @@ impl Display for SetCompreOp {
 }
 
 impl SetCompreOp {
-    pub fn aggregate<'a, I, S, T>(&self, terms: I) -> BigInt 
+    pub fn aggregate<'a, I, T>(&self, terms: I) -> BigInt 
     where 
-        // `T` represents an iterator of a tuple that the first thing is a reference 
-        // and the second thing is the count.
-        I: Iterator<Item=&'a(&'a Term<S, T>, isize)>,
-        S: BorrowedType,
-        T: BorrowedTerm + Sized + 'static, 
+        // `T` represents an iterator of a tuple that the first thing is a reference and the second thing is the count.
+        I: Iterator<Item=&'a(&'a T, isize)>,
+        T: 'a + TermStructure, 
     {
         match self {
             SetCompreOp::Count => {
@@ -139,15 +137,9 @@ impl SetCompreOp {
             SetCompreOp::Sum => {
                 let mut sum = BigInt::from_i64(0).unwrap();
                 for (term, count) in terms {
-                    match term {
-                        Term::Atom(atom) => {
-                            match &atom.val {
-                                AtomEnum::Int(i) => { 
-                                    sum += i.clone() * count;
-                                },
-                                _ => {}
-                            }
-                        },
+                    let atom_enum = term.into_atom_enum().unwrap();
+                    match atom_enum {
+                        AtomEnum::Int(i) => { sum += i.clone() * count },
                         _ => {}
                     }
                 }
@@ -156,13 +148,9 @@ impl SetCompreOp {
             SetCompreOp::MaxAll => {
                 let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
                 for (term, count) in terms {
-                    match term {
-                        Term::Atom(atom) => {
-                            match &atom.val {
-                                AtomEnum::Int(i) => { if i > &max { max = i.clone(); } },
-                                _ => {}
-                            }
-                        },
+                    let atom_enum = term.into_atom_enum().unwrap();
+                    match atom_enum {
+                        AtomEnum::Int(i) => { if i > max { max = i.clone(); } },
                         _ => {}
                     }
                 }
@@ -172,14 +160,10 @@ impl SetCompreOp {
             _ => {
                 let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
                 for (term, count) in terms {
-                    match term {
-                        Term::Atom(atom) => {
-                            match &atom.val {
-                                AtomEnum::Int(i) => { 
-                                    if i < &min { min = i.clone(); } 
-                                },
-                                _ => {}
-                            }
+                    let atom_enum = term.into_atom_enum().unwrap();
+                    match atom_enum {
+                        AtomEnum::Int(i) => { 
+                            if i < min { min = i.clone(); } 
                         },
                         _ => {}
                     }

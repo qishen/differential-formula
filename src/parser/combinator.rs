@@ -6,7 +6,6 @@ use crate::type_system::*;
 use crate::expression::*;
 use crate::util::*;
 
-use std::sync::Arc;
 use std::str::FromStr;
 use std::collections::*;
 
@@ -16,15 +15,25 @@ use nom::number::complete::*;
 use num::*;
 
 
-/// Export this function to parse FORMULA file in string format and by default use `AtomicStrTerm`
-/// as the generic term type.
-pub fn load_program(content: String) -> Env<AtomicStrTerm> {
-    let result = program(&content[..]).unwrap();
-    // Make sure the whole file is parsed rather than part of the program.
-    assert_eq!(result.0, "EOF");
-    // println!("{:?}", result.0);
-    let program_ast = result.1;
-    program_ast.build_env()
+// /// Export this function to parse FORMULA file in string format and by default use `AtomicStrTerm`
+// /// as the generic term type.
+// pub fn load_program<T>(content: String) -> Env<T> 
+// where 
+//     T: TermStructure,
+//     T::SortOutput: Into<AtomicType>
+// {
+//     let result = program(&content[..]).unwrap();
+//     // Make sure the whole file is parsed rather than part of the program.
+//     assert_eq!(result.0, "EOF");
+//     // println!("{:?}", result.0);
+//     let program_ast = result.1;
+//     program_ast.build_env()
+
+// }
+
+pub fn parse_program(content: &str) -> (&str, ProgramAst) {
+    let result = program(content).unwrap();
+    return result;
 }
 
 // Start with '//' and end with '\n'
@@ -1041,21 +1050,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_parse_programs() {
-        let path = Path::new("./tests/testcase/programs.txt");
-        let content = fs::read_to_string(path).unwrap();
-        let programs = content.split("\n--------\n");
-        for formula_program in programs {
-            println!("{:?}", formula_program);
-            let result = program(&formula_program[..]).unwrap();
-            assert_eq!(result.0, "EOF");
-            let program_ast = result.1;
-            let env = program_ast.build_env();
-            //println!("{:#?}", env);
-            //println!("{:#?}", env.model_map);
-            println!("{:#?}", env.transform_map);
-        }
-    }
+    // #[test]
+    // fn test_parse_programs() {
+    //     let path = Path::new("./tests/testcase/programs.txt");
+    //     let content = fs::read_to_string(path).unwrap();
+    //     let programs = content.split("\n--------\n");
+    //     for formula_program in programs {
+    //         println!("{:?}", formula_program);
+    //         let result = program(&formula_program[..]).unwrap();
+    //         assert_eq!(result.0, "EOF");
+    //         let program_ast = result.1;
+    //         let env = program_ast.build_env();
+    //         //println!("{:#?}", env);
+    //         //println!("{:#?}", env.model_map);
+    //         println!("{:#?}", env.transform_map);
+    //     }
+    // }
 
 }

@@ -1,6 +1,7 @@
 use std::borrow::*;
 use std::collections::*;
-use std::fmt::*;
+use std::convert::*;
+use std::fmt;
 use std::sync::*;
 use std::vec::Vec;
 
@@ -21,13 +22,39 @@ pub use base_expr::*;
 /// enum_dispatch does not support trait with associated types.
 // #[enum_dispatch(ExprTrait)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Expr<T> where T: BorrowedTerm {
+pub enum Expr<T> where T: TermStructure {
     BaseExpr(BaseExpr<T>),
     ArithExpr(ArithExpr<T>),
 }
 
-impl<T> Display for Expr<T> where T: BorrowedTerm {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+impl<T> TryFrom<Expr<T>> for BaseExpr<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: Expr<T>) -> Result<Self, Self::Error> {
+        match value {
+            Expr::BaseExpr(base_expr) => {
+                Ok(base_expr)
+            },
+            _ => { Err("It's not a BaseExpr.") }
+        }
+    }
+}
+
+impl<T> TryFrom<Expr<T>> for ArithExpr<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: Expr<T>) -> Result<Self, Self::Error> {
+        match value {
+            Expr::ArithExpr(arith_expr) => {
+                Ok(arith_expr)
+            },
+            _ => { Err("It's not a ArithExpr.") }
+        }
+    }
+}
+
+impl<T> fmt::Display for Expr<T> where T: TermStructure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::BaseExpr(b) => write!(f, "{}", b),
             Expr::ArithExpr(a) => write!(f, "{}", a),
@@ -38,7 +65,7 @@ impl<T> Display for Expr<T> where T: BorrowedTerm {
 // #[enum_dispatch]
 pub trait ExprTrait {
 
-    type TermOutput: BorrowedTerm;
+    type TermOutput: TermStructure;
 
     /// Check if expression contains set comprehension.
     fn has_set_comprehension(&self) -> bool;
@@ -50,7 +77,7 @@ pub trait ExprTrait {
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput>;
 }
 
-impl<T> ExprTrait for Expr<T> where T: BorrowedTerm
+impl<T> ExprTrait for Expr<T> where T: TermStructure
 {
     type TermOutput = T;
 
@@ -76,11 +103,7 @@ impl<T> ExprTrait for Expr<T> where T: BorrowedTerm
     }
 }
 
-impl<T> ExprTrait for Arc<Expr<T>> where T: BorrowedTerm {
-
-}
-
-impl<T> Expression for Expr<T> where T: BorrowedTerm
+impl<T> Expression for Expr<T> where T: TermStructure
 {
     type TermOutput = T;
 

@@ -12,16 +12,8 @@ use crate::util::wrapper::*;
 
 /// A supertrait that includes Borrow<Type>, From<Type> and a bunch of basic traits that allow
 /// the type to be compariable, cloneable, displayable and be able to transmit between threads.
-pub trait BorrowedType: 
-    Borrow<Type> +       // Able to be borrowed as a native type.
-    From<Type> +         // Able to be created from a native type.
-    UniqueForm<String> + // Have an unique form as string and can be accessed as reference.
-    differential_dataflow::ExchangeData +
-    Eq + Clone + Debug + Display + Hash + Ord {}
-
-
-impl From<Type> for Arc<UniqueFormWrapper<String, Type>> {} 
-impl Borrow<Type> for Arc<UniqueFormWrapper<String, Type>> {}
+pub trait BorrowedType: Borrow<Type> + From<Type> + UniqueForm<String> + 
+differential_dataflow::ExchangeData + Eq + Clone + Debug + Display + Hash + Ord {}
 
 pub trait FormulaType {}
 impl<T> FormulaType for T where T: BorrowedType {}
@@ -65,13 +57,22 @@ impl Type {
         Type::RenamedType(
             RenamedType { 
                 scope, 
-                base: Arc::new(base.into()) 
+                base: base.into() 
             }
         )
     }
 
-    /// Unroll RenamedType recursively to find the base type that is not a RenamedType and 
-    /// return a clone if the type is not a RenamedType.
+    /// Unroll RenamedType to return the base type for only one level.
+    pub fn unrename_type(&self) -> &Type {
+        match self {
+            Type::RenamedType(rtype) => {
+                rtype.base.borrow()
+            },
+            _ => { self }
+        }
+    }
+
+    /// Unroll RenamedType recursively to find the base type that is not a RenamedType.
     pub fn base_type(&self) -> &Type {
         match self {
             Type::RenamedType(rtype) => {
@@ -87,17 +88,11 @@ impl Type {
     pub fn undefined() -> Type {
         Type::Undefined(Undefined{})
     }
-
-    /// Create an empty undefined type as AtomicStrType.
-    pub fn atomic_undefined() -> AtomicStrType {
-        Type::undefined().into()
-    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EnumType {
     pub name: String,
-    // Use AtomicTerm by default.
     pub items: Vec<AtomicTerm>,
 }
 
@@ -111,14 +106,13 @@ impl HasUniqueForm<String> for EnumType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RenamedType {
     pub scope: String,
-    pub base: Arc<UniqueFormWrapper<String, Type>>,
+    pub base: AtomicType,
 }
 
 impl FormulaType for RenamedType {}
 impl HasUniqueForm<String> for RenamedType {
     fn derive_unique_form(&self) -> String {
-        let wrapper: &UniqueFormWrapper<String, Type> = self.base.borrow();
-        format!("{:?}.{:?}", self.scope, wrapper.derive_unique_form())
+        format!("{:?}.{:?}", self.scope, self.base.derive_unique_form())
     }
 }
 
@@ -173,7 +167,7 @@ impl HasUniqueForm<String> for BaseType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
     pub name: String,
-    pub arguments: Vec<(Option<String>, AtomicStrType)>
+    pub arguments: Vec<(Option<String>, AtomicType)>
 }
 
 impl FormulaType for CompositeType {}
@@ -186,7 +180,7 @@ impl HasUniqueForm<String> for CompositeType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
     pub name: String,
-    pub subtypes: Vec<AtomicStrType>,
+    pub subtypes: Vec<AtomicType>,
 }
 
 impl FormulaType for UnionType {}

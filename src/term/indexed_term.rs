@@ -1,26 +1,26 @@
-use std::borrow::*;
-use std::sync::*;
-use std::collections::*;
-use std::hash::*;
+// use std::borrow::*;
+// use std::sync::*;
+// use std::collections::*;
+// use std::hash::*;
 
-use serde::{Serialize, Deserialize};
-use derivative::*;
+// use serde::{Serialize, Deserialize};
+// use derivative::*;
 
-use crate::module::*;
-use crate::util::map::*;
-use crate::util::wrapper::*;
-use crate::term::{VisitTerm, Term, BorrowedTerm};
-use crate::type_system::BorrowedType;
+// use crate::module::*;
+// use crate::util::map::*;
+// use crate::util::wrapper::*;
+// use crate::term::{VisitTerm};
+// use crate::type_system::BorrowedType;
 
  
-/// Same as `From<T>` but with index as an additional argument.
-pub trait FromWithIndex<T> where T: BorrowedTerm {
-    fn from_with_index(item: T, index: Arc<RwLock<Model<T>>>) -> Self;
-}
+// Same as `From<T>` but with index as an additional argument.
+// pub trait FromWithIndex<T> where T: TermStructure {
+//     fn from_with_index(item: T, index: Arc<RwLock<Model<T>>>) -> Self;
+// }
 
-pub trait IntoWithIndex<T> where T: BorrowedTerm {
-    fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> T;
-}
+// pub trait IntoWithIndex<T> where T: TermStructure {
+//     fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> T;
+// }
 
 // `FromWithIndex<T>` and `IntoWithIndex<T>` are reflexive.
 
@@ -28,7 +28,7 @@ pub trait IntoWithIndex<T> where T: BorrowedTerm {
 // where
 //     S: BorrowedType,
 //     U: FromWithIndex<S, T>,
-//     T: BorrowedTerm
+//     T: TermStructure
 // {
 //     fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> U {
 //         U::from_with_index(self, index)

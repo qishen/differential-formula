@@ -14,13 +14,13 @@ pub use expr::*;
 /// It provides some functions to return variables in the expressions or replace some variables.
 pub trait Expression {
     
-    type TermOutput: BorrowedTerm;
+    type TermOutput: TermStructure;
 
     /// Return all variables in the expression.
     fn variables(&self) -> HashSet<Self::TermOutput>;
 
     /// Find a term with certain pattern in the expression and replace it with another term.
-    /// The pattern can be any generic term that implemets `BorrowedTerm` trait.
+    /// The pattern can be any generic term that implemets `TermStructure` trait.
     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput);
 
     /// Find set comprehension in the expression and replace it with a don't-care variable to 

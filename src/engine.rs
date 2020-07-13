@@ -1,11 +1,8 @@
 use std::borrow::Borrow;
-use std::hash::Hash;
 use std::convert::*;
 use std::sync::*;
 use std::iter::*;
 use std::vec::Vec;
-use std::fmt::{Debug, Display};
-use std::convert::*;
 use std::collections::{BTreeMap, HashSet, HashMap};
 
 use im::OrdSet;
@@ -18,7 +15,6 @@ use differential_dataflow::hashable::*;
 
 use crate::constraint::*;
 use crate::term::*;
-use crate::type_system::*;
 use crate::expression::*;
 use crate::module::*;
 use crate::rule::*;
@@ -27,7 +23,7 @@ use crate::util::*;
 use crate::util::map::*;
 
 
-pub struct Session<FM, T> where FM: FormulaModule<T>, T: BorrowedTerm {
+pub struct Session<FM, T> where FM: FormulaModule<T>, T: TermStructure {
     module: Arc<RwLock<FM>>,
     worker: timely::worker::Worker<timely::communication::allocator::Thread>,
     input: InputSession<i32, T, isize>,
@@ -35,7 +31,7 @@ pub struct Session<FM, T> where FM: FormulaModule<T>, T: BorrowedTerm {
     step_count: i32,
 }
 
-impl<FM, T> Session<FM, T> where FM: FormulaModule<T>, T: BorrowedTerm
+impl<FM, T> Session<FM, T> where FM: FormulaModule<T>, T: TermStructure
 {
     pub fn new(module: FM, engine: &DDEngine<T>) -> Self {
         // Create a single thread worker.
@@ -68,11 +64,10 @@ impl<FM, T> Session<FM, T> where FM: FormulaModule<T>, T: BorrowedTerm
     pub fn create_term(&self, term_str: &str) -> Option<T> {
         // Add an ending to avoid Incomplete Error in the parser.
         let term_ast = term(&format!("{}{}", term_str, "~")[..]).unwrap().1;
-        let metainfo = self.module.read().unwrap().meta_info();
-        // AtomicTerm -> Term -> T
-        let atomic_term = term_ast.to_atomic_term(&metainfo.atomic_type_map());
-        let term: Term<_,_> = atomic_term.into();
-        Some(term.into())
+        let reader = self.module.read().unwrap();
+        let metainfo = reader.meta_info();
+        let term = T::from_term_ast(&term_ast, metainfo.type_map());
+        Some(term)
     }
 
     /// Add wrapped term into input with its hash and ordering pre-computed.
@@ -107,9 +102,11 @@ impl<FM, T> Session<FM, T> where FM: FormulaModule<T>, T: BorrowedTerm
     }
 
     pub fn load(&mut self) {
+        let mut terms = vec![];
         for term in self.module.read().unwrap().terms().into_iter() {
-            self.add_term(term.clone());
+            terms.push(term.clone());
         }
+        self.add_terms(terms.into_iter());
     }
 }
 
@@ -117,7 +114,7 @@ pub struct StreamIndex<G, T>
 where
     G: Scope,
     G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
-    T: BorrowedTerm,
+    T: TermStructure,
 {
     pub indexes: HashMap<T, Collection<G, QuickHashOrdMap<T, T>>>,
 }
@@ -126,7 +123,7 @@ impl<G, T> StreamIndex<G, T>
 where
     G: Scope,
     G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
-    T: BorrowedTerm,
+    T: TermStructure,
 {
     pub fn find_stream_by_pattern(&self, term: &T) -> Collection<G, QuickHashOrdMap<T, T>> {
         let (normalized_term, _) = term.normalize();
@@ -134,28 +131,24 @@ where
     } 
 }
 
-pub struct DDEngine<T> where T: BorrowedTerm {
+pub struct DDEngine<T> where T: TermStructure {
     pub env: Env<T>,
     pub inspect: bool,
 }
 
-impl<T> DDEngine<T> where T: BorrowedTerm
+impl<T> DDEngine<T> where T: TermStructure
 {
-    pub fn new() -> Self {
+    pub fn new(term: T) -> Self {
         DDEngine {
             env: Env::new(),
             inspect: false,
         }
     }
 
-    /// Parse program text and build env.
-    pub fn load_program(text: String) -> Env<AtomicStrTerm> {
-        load_program(text + " EOF")
-    }
-
     /// Install Env into engine.
     /// TODO: Enable installation of multiple programs and detect conflicts between programs.
-    pub fn install(&mut self, env: Env<T>) {
+    pub fn install(&mut self, text: String) {
+        let env = T::load_program(text + " EOF");
         self.env = env;
     }
 
@@ -164,19 +157,19 @@ impl<T> DDEngine<T> where T: BorrowedTerm
     pub fn add_rule(&mut self, module_name: &str, rule_text: &str) -> bool {
         let rule_ast = rule(rule_text).unwrap().1;
         if self.env.transform_map.contains_key(module_name) {
-            let transform = self.env.transform_map.get_mut(module_name).unwrap();
+            let mut transform = self.env.transform_map.get_mut(module_name).unwrap();
             let rule = rule_ast.to_rule(&transform.meta_info());
-            transform.meta_info().add_rule(rule);
+            transform.add_rule(rule);
         } else if self.env.domain_map.contains_key(module_name) {
-            let domain = self.env.domain_map.get_mut(module_name).unwrap();
+            let mut domain = self.env.domain_map.get_mut(module_name).unwrap();
             let rule = rule_ast.to_rule(&domain.meta_info());
-            domain.meta_info().add_rule(rule);
+            domain.add_rule(rule);
         } else if self.env.model_map.contains_key(module_name) {
             // Every model has a deep copy of the domain so models are actually detached from
             // the original domain and it is safe to modify the domain owned by the model.
-            let model = self.env.model_map.get_mut(module_name).unwrap();
+            let mut model = self.env.model_map.get_mut(module_name).unwrap();
             let rule = rule_ast.to_rule(&model.meta_info());
-            model.meta_info().add_rule(rule);
+            model.add_rule(rule);
         } else {
             return false;
         }
@@ -205,12 +198,11 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         let mut input_term_map = HashMap::new();
 
         for (i, param) in tast.params.iter().enumerate() {
-            let raw_term = param.to_atomic_term(&transform.meta_info().atomic_type_map());
+            let raw_term = T::from_term_ast(param, transform.meta_info().type_map());
             let id = transform.get_id(i).unwrap().clone();
-
-            if let Term::Variable(v) = raw_term.into() {
+            if raw_term.term_type() == TermType::Variable {
                 // Looks like a variable term but actually is a model name.
-                let model_name = v.root;
+                let model_name = format!("{}", raw_term);
                 let model = self.env.get_model_by_name(&model_name[..]).unwrap().clone();
                 input_model_map.insert(id, model);
             } else {
@@ -226,18 +218,9 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice + Ord,
     {
-        let pred: &Term<_,_> = pred_term.borrow();
-        let c: Composite<_,_> = pred.clone().try_into().unwrap();
         terms
             .filter(move |term| {
-                let term_ref: &Term<_,_> = term.borrow();
-                match term_ref {
-                    Term::Composite(composite) => {
-                        if c.sort == composite.sort { true } 
-                        else { false }
-                    },
-                    _ => { false }
-                }
+                term.sort() == pred_term.sort()
             })
     }
 
@@ -265,10 +248,11 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                 }
             })
             .map(move |(term, binding_opt)| {
-                // Create a variable to represent term itself.Predicate
+                // Create a variable to represent term itself.
                 // TODO: what if alias variable is already in existing variables.
                 let mut binding = binding_opt.unwrap();
-                let self_var: T = self_term.clone().into_with_index(model.clone());
+                // let self_var: T = self_term.clone().into_with_index(model.clone());
+                let self_var = T::create_variable_term(None, "~self".to_string(), vec![]);
                 binding.ginsert(self_var, term); // A deep clone occurs here.
                 return binding;
             });
@@ -319,14 +303,15 @@ impl<T> DDEngine<T> where T: BorrowedTerm
     
     /// Split the stream of hash maps into two streams of hash maps that one has "left_keys"
     /// and the other one has "right_keys".
-    pub fn split_binding<G>(
+    pub fn split_binding<FM, G>(
         &self,
-        model: Arc<RwLock<Model<T>>>,
+        model: Arc<RwLock<FM>>,
         bindings: &Collection<G, QuickHashOrdMap<T, T>>, 
         left_keys:  OrdSet<T>,
         right_keys: OrdSet<T>,
     ) -> Collection<G, (QuickHashOrdMap<T, T>, QuickHashOrdMap<T, T>)>
     where 
+        FM: FormulaModule<T>,
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
@@ -359,8 +344,8 @@ impl<T> DDEngine<T> where T: BorrowedTerm
     /// do an extra step to extend the current binding with the variable subterms from the other collection of binding.
     /// if binding1 has key `x.y` and binding2 has key `x.y.z` and `x`, then binding1 must have `x.y.z` as well but won't 
     /// have `x` because you can't derive parent term from subterm backwards. On the other hand binding2 must have `x.y` too.
-    pub fn join_two_bindings<G>(&self, 
-        model: Arc<RwLock<Model<T>>>,
+    pub fn join_two_bindings<FM, G>(&self, 
+        model: Arc<RwLock<FM>>,
         prev_vars: OrdSet<T>,
         prev_col: &Collection<G, QuickHashOrdMap<T, T>>, 
         new_vars: OrdSet<T>,
@@ -368,6 +353,7 @@ impl<T> DDEngine<T> where T: BorrowedTerm
     ) 
     -> (OrdSet<T>, Collection<G, QuickHashOrdMap<T, T>>)
     where
+        FM: FormulaModule<T>,
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice
     {
@@ -380,10 +366,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         // When binding one has `x.y` and binding two has `x.y.z` update binding one with `x.y.z` and vice versa.
         for prev_var in prev_vars.iter() {
             for new_var in new_vars.iter() {
-                if prev_var.has_subterm(new_var).unwrap() && prev_var != new_var {
+                if new_var.is_direct_subterm_of(prev_var) && prev_var != new_var {
                     prev_vars_extra.insert(new_var.clone());
                 }
-                else if new_var.has_subterm(prev_var).unwrap() && new_var != prev_var {
+                else if prev_var.is_direct_subterm_of(new_var) && new_var != prev_var {
                     new_vars_extra.insert(prev_var.clone());
                 }
             }
@@ -455,15 +441,16 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         (all_vars.into_iter().map(|x| x.borrow().clone()).collect(), joint_collection)
     } 
 
-    pub fn dataflow_from_constraints<G>(
+    pub fn dataflow_from_constraints<FM, G>(
         &self, 
-        model: Arc<RwLock<Model<T>>>,
+        model: Arc<RwLock<FM>>,
         terms: &Collection<G, T>, 
         constraints: &Vec<Constraint<T>>,
         cache: &mut Option<StreamIndex<G, T>>,
     ) 
     -> (OrdSet<T>, Collection<G, QuickHashOrdMap<T, T>>)
     where
+        FM: FormulaModule<T>,
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice
     {
@@ -558,7 +545,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                 let mut model_ref = model.clone();
                 let binary: Binary<T> = constraint.clone().try_into().unwrap();
                 let left_base_expr: BaseExpr<T> = binary.left.try_into().unwrap();
-                let var_term: T = left_base_expr.try_into().unwrap();
+                let var_term = match left_base_expr {
+                    BaseExpr::Term(term) => Some(term),
+                    _ => None
+                }.unwrap();
                 let var_term_copy = var_term.clone();
 
                 match binary.right {
@@ -588,8 +578,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                         let updated_col = outer_col.map(move |binding_wrapper| {
                             let mut binding: BTreeMap<T, T> = binding_wrapper.into();
                             let num = right_base_expr.evaluate(&binding).unwrap();
-                            let atom_term: T = AtomEnum::Int(num).into();
-                            binding.insert(var_term.clone(), atom_term.into_with_index(model_ref.clone()));
+                            let atom_enum = AtomEnum::Int(num);
+                            let num_term = T::create_atom_term(None, atom_enum);
+                            // binding.insert(var_term.clone(), num_term.into_with_index(model_ref.clone()));
+                            binding.insert(var_term.clone(), num_term);
                             binding.into()
                         });
 
@@ -613,9 +605,9 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         (vars_ref, final_collection)
     }
 
-    pub fn dataflow_from_set_comprehension<G>(
+    pub fn dataflow_from_set_comprehension<FM, G>(
         &self,
-        model: Arc<RwLock<Model<T>>>,
+        model: Arc<RwLock<FM>>,
         var: T,
         outer_vars: OrdSet<T>,
         ordered_outer_collection: &Collection<G, QuickHashOrdMap<T, T>>, // Binding collection from outer scope of set comprehension.
@@ -624,6 +616,7 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         cache: &mut Option<StreamIndex<G, T>>,
     ) -> Collection<G, QuickHashOrdMap<T, T>>
     where 
+        FM: FormulaModule<T>,
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
@@ -645,7 +638,7 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         // ordered_outer_collection.inspect(|x| println!("Outer collection {:?}", x));
 
         // If inner scope and outer scope don't have shared variables then it means they can be handled separately.
-        match Term::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
+        match T::has_deep_intersection(inner_vars.iter(), outer_vars.iter()) {
             false => {
                 // Inner scope and outer scope have no shared variables then use the stream produced by set
                 // comprehension to aggregate the terms in the set and return an integer.
@@ -653,10 +646,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                     .map(move |binding| {
                         let mut terms = vec![];
                         for head_term in head_terms.iter() {
-                            let term = match head_term.borrow() {
-                                Term::Composite(c) => { head_term.propagate_bindings(&binding) },
-                                Term::Variable(v) => { binding.gget(head_term.borrow()).unwrap().clone() },
-                                Term::Atom(a) => { head_term.clone() }
+                            let term = match head_term.term_type() {
+                                TermType::Composite => { head_term.propagate_bindings(&binding) },
+                                TermType::Variable => { binding.gget(head_term.borrow()).unwrap().clone() },
+                                TermType::Atom => { head_term.clone() }
                             };
                             terms.push(term);
                         }
@@ -677,8 +670,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                     true => {
                         aggregation_stream.map(move |(_, nums)| {
                             let mut binding: BTreeMap<T, T> = BTreeMap::new();
-                            let num_term: Term = AtomEnum::Int(nums.get(0).unwrap().clone().into()).into();
-                            binding.insert(setcompre_var.clone(), num_term.into_with_index(model.clone()));
+                            let atom_enum = AtomEnum::Int(nums.get(0).unwrap().clone());
+                            let num_term = T::create_atom_term(None, atom_enum);
+                            // binding.insert(setcompre_var.clone(), num_term.into_with_index(model.clone()));
+                            binding.insert(setcompre_var.clone(), num_term);
                             binding.into()
                         })
                     },
@@ -689,8 +684,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                             .map(move |(_, (binding_wrapper, nums))| {
                                 // Take the first element in num list when operator is count, sum, maxAll, minAll.
                                 let mut binding: BTreeMap<T, T> = binding_wrapper.into();
-                                let num_term: Term = AtomEnum::Int(nums.get(0).unwrap().clone().into()).into();
-                                binding.insert(setcompre_var.clone(), num_term.into_with_index(model.clone()));
+                                let atom_enum = AtomEnum::Int(nums.get(0).unwrap().clone());
+                                let num_term = T::create_atom_term(None, atom_enum);
+                                // binding.insert(setcompre_var.clone(), num_term.into_with_index(model.clone()));
+                                binding.insert(setcompre_var.clone(), num_term);
                                 binding.into()
                             })
                     }
@@ -726,10 +723,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                         // Each outer binidng as key has points a list of derived terms from inner scope.
                         for (binding, count) in input.into_iter() {
                             for head_term in head_terms.iter() {
-                                let term = match head_term.borrow() {
-                                    Term::Composite(_) => { head_term.propagate_bindings(*binding) },
-                                    Term::Variable(_) => { binding.gget(head_term.borrow()).unwrap().clone() },
-                                    Term::Atom(_) => { head_term.clone() }
+                                let term = match head_term.term_type() {
+                                    TermType::Composite => { head_term.propagate_bindings(*binding) },
+                                    TermType::Variable => { binding.gget(head_term.borrow()).unwrap().clone() },
+                                    TermType::Atom => { head_term.clone() }
                                 };
                                 output.push((term, *count));
                             }
@@ -754,7 +751,8 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                     .map(move |(binding_wrapper, nums)| {
                         let mut binding: BTreeMap<T, T> = binding_wrapper.into();
                         // Take the first element in num list when operator is count, sum, maxAll, minAll.
-                        let num_term: T = AtomEnum::Int(nums.get(0).unwrap().clone()).into();
+                        let atom_enum = AtomEnum::Int(nums.get(0).unwrap().clone());
+                        let num_term = T::create_atom_term(None, atom_enum);
                         binding.insert(setcompre_var.clone(), num_term);
                         binding.into()
 
@@ -771,8 +769,10 @@ impl<T> DDEngine<T> where T: BorrowedTerm
                     .map(move |(mut outer_wrapper, _)| {
                         // Add default value of set comprehension to each binding.
                         let mut outer: BTreeMap<T, T> = outer_wrapper.into();
-                        let num_term: Term = AtomEnum::Int(setcompre_default.clone()).into();
-                        outer.insert(setcompre_var.clone(), num_term.into_with_index(model_ref.clone()));
+                        let atom_enum = AtomEnum::Int(setcompre_default.clone());
+                        let num_term = T::create_atom_term(None, atom_enum);
+                        outer.insert(setcompre_var.clone(), num_term);
+                        // outer.insert(setcompre_var.clone(), num_term.into_with_index(model_ref.clone()));
                         outer.into()
                     });
 
@@ -782,14 +782,15 @@ impl<T> DDEngine<T> where T: BorrowedTerm
         //.inspect(|x| { println!("Aggregation result: {:?}", x); })
     }
 
-    pub fn dataflow_from_single_rule<G>(
+    pub fn dataflow_from_single_rule<FM, G>(
         &self, 
-        model: Arc<RwLock<Model<T>>>,
+        model: Arc<RwLock<FM>>,
         terms: &Collection<G, T>, 
         rule: &Rule<T>,
         cache: &mut Option<StreamIndex<G, T>>,
     ) -> Collection<G, T>
     where 
+        FM: FormulaModule<T>,
         G: Scope,
         G::Timestamp: differential_dataflow::lattice::Lattice,
     {
@@ -896,12 +897,13 @@ impl<T> DDEngine<T> where T: BorrowedTerm
             // .inspect(|x| println!("All terms derived in rule: {:?}", x))
     }
 
-    pub fn create_dataflow(
+    pub fn create_dataflow<FM>(
         &self, 
-        module: Arc<RwLock<Model<T>>>,
+        module: Arc<RwLock<FM>>,
         worker: &mut timely::worker::Worker<timely::communication::allocator::Thread>
     ) 
     -> (InputSession<i32, T, isize>, timely::dataflow::ProbeHandle<i32>) 
+    where FM: FormulaModule<T>
     {
         let mut input = InputSession::<i32, T, isize>::new();
         let probe = worker.dataflow(|scope| {

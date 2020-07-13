@@ -2,8 +2,8 @@ extern crate rand;
 extern crate abomonation_derive;
 extern crate abomonation;
 
-use std::borrow::Borrow;
 use std::collections::*;
+use std::convert::*;
 use std::fmt;
 use std::fmt::{Debug, Display};
 
@@ -12,18 +12,17 @@ use num::*;
 
 use crate::term::*;
 use crate::expression::*;
-use crate::type_system::*;
 use crate::util::*;
 use crate::util::map::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Predicate<T> where T: BorrowedTerm {
+pub struct Predicate<T> where T: TermStructure {
     pub negated: bool,
     pub term: T,
     pub alias: Option<T>, // Must be a variable term and could have fragments
 }
 
-impl<T> Expression for Predicate<T> where T: BorrowedTerm {
+impl<T> Expression for Predicate<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -47,7 +46,7 @@ impl<T> Expression for Predicate<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Display for Predicate<T> where T: BorrowedTerm {
+impl<T> Display for Predicate<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut term_str = format!("{}", self.term);
         let alias_str = match &self.alias {
@@ -66,7 +65,7 @@ impl<T> Display for Predicate<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Predicate<T> where T: BorrowedTerm {
+impl<T> Predicate<T> where T: TermStructure {
     /// Negative predicate constraint is count({setcompre}) = 0 in disguise and a negated predicate
     /// will be converted into two binary constraints with a random variable to hold the set comprehension.
     pub fn convert_negation(&self, var: T) -> Option<(Constraint<T>, Constraint<T>)> {
@@ -77,7 +76,7 @@ impl<T> Predicate<T> where T: BorrowedTerm {
 
         // Give it an alias starting with "~" that cannot be accepted by parser to avoid 
         // collision with other user-defined variables.
-        let alias: T = Term::Variable(Variable::new(None, "~dc".to_string(), vec![])).into();
+        let alias = T::create_variable_term(None, "~dc".to_string(), vec![]);
         let vars: Vec<T> = vec![alias.clone()];
         let pos_predicate = Predicate {
             negated: false,
@@ -104,8 +103,8 @@ impl<T> Predicate<T> where T: BorrowedTerm {
 
         let big_zero = BigInt::from_i64(0 as i64).unwrap();
         let zero_atom_enum = AtomEnum::Int(big_zero);
-        let zero_term: AtomicTerm = AtomicTerm::create_atom(zero_atom_enum);
-        let t: T = zero_term.into();
+        // Create a new type in atom but it's ok here.
+        let t = T::create_atom_term(None, zero_atom_enum);
         let zero_base_expr: BaseExpr<T> = BaseExpr::Term(t);
 
         let binary2 = Binary {
@@ -146,13 +145,13 @@ impl Display for BinOp {
 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Binary<T> where T: BorrowedTerm {
+pub struct Binary<T> where T: TermStructure {
     pub op: BinOp,
     pub left: Expr<T>,
     pub right: Expr<T>,
 }
 
-impl<T> Expression for Binary<T> where T: BorrowedTerm {
+impl<T> Expression for Binary<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -193,13 +192,13 @@ impl<T> Expression for Binary<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Display for Binary<T> where T: BorrowedTerm {
+impl<T> Display for Binary<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.left, self.op, self.right)
     }
 }
 
-impl<T> Binary<T> where T: BorrowedTerm {
+impl<T> Binary<T> where T: TermStructure {
     /// Assume all set comprehensions are separatedly declared like `a = count({..}) and 
     /// will not occur elsewhere in other parts of the expression.
     pub fn variables_current_level(&self) -> HashSet<T> {
@@ -242,12 +241,12 @@ impl<T> Binary<T> where T: BorrowedTerm {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TypeConstraint<T> where T: BorrowedTerm {
+pub struct TypeConstraint<T> where T: TermStructure {
     pub var: T,
     pub sort: T::SortOutput,
 }
 
-impl<T> Expression for TypeConstraint<T> where T: BorrowedTerm {
+impl<T> Expression for TypeConstraint<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -267,7 +266,7 @@ impl<T> Expression for TypeConstraint<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Display for TypeConstraint<T> where T: BorrowedTerm {
+impl<T> Display for TypeConstraint<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} : {}", self.var, self.sort)
     }
@@ -275,19 +274,58 @@ impl<T> Display for TypeConstraint<T> where T: BorrowedTerm {
 
 // #[enum_dispatch]
 // pub trait ConstraintBehavior {}
-// impl<T> ConstraintBehavior for Predicate<T> where T: BorrowedTerm {}
-// impl<T> ConstraintBehavior for TypeConstraint<T> where T: BorrowedTerm {}
-// impl<T> ConstraintBehavior for Binary<T> where T: BorrowedTerm {}
-
-#[enum_dispatch]
+// impl<T> ConstraintBehavior for Predicate<T> where T: TermStructure {}
+// impl<T> ConstraintBehavior for TypeConstraint<T> where T: TermStructure {}
+// impl<T> ConstraintBehavior for Binary<T> where T: TermStructure {}
+// #[enum_dispatch(ConstraintBehavior)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Constraint<T> where T: BorrowedTerm {
+pub enum Constraint<T> where T: TermStructure {
     Predicate(Predicate<T>),
     Binary(Binary<T>),
     TypeConstraint(TypeConstraint<T>),
 }
 
-impl<T> Display for Constraint<T> where T: BorrowedTerm {
+impl<T> TryFrom<Constraint<T>> for Predicate<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+        match value {
+            Constraint::Predicate(pred) => {
+                Ok(pred)
+            },
+            _ => { Err("It's not a predicate constraint.") }
+        }
+    }
+}
+
+impl<T> TryFrom<Constraint<T>> for Binary<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+        match value {
+            Constraint::Binary(binary) => {
+                Ok(binary)
+            },
+            _ => { Err("It's not a binary constraint.") }
+        }
+    }
+}
+
+impl<T> TryFrom<Constraint<T>> for TypeConstraint<T> where T: TermStructure {
+    type Error = &'static str;
+
+    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+        match value {
+            Constraint::TypeConstraint(tc) => {
+                Ok(tc)
+            },
+            _ => { Err("It's not a type constraint.") }
+        }
+    }
+}
+
+
+impl<T> Display for Constraint<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let con_str = match self {
             Constraint::Predicate(p) => { format!("{}", p) },
@@ -299,7 +337,7 @@ impl<T> Display for Constraint<T> where T: BorrowedTerm {
     }
 }
 
-impl<T> Expression for Constraint<T> where T: BorrowedTerm {
+impl<T> Expression for Constraint<T> where T: TermStructure {
 
     type TermOutput = T;
 

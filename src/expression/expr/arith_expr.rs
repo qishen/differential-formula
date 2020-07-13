@@ -34,13 +34,13 @@ impl Display for ArithmeticOp {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArithExpr<T> where T: BorrowedTerm {
+pub struct ArithExpr<T> where T: TermStructure {
     pub op: ArithmeticOp,
     pub left: Arc<Expr<T>>,
     pub right: Arc<Expr<T>>,
 }
 
-impl<T> Expression for ArithExpr<T> where T: BorrowedTerm 
+impl<T> Expression for ArithExpr<T> where T: TermStructure 
 {
     type TermOutput = T;
 
@@ -72,13 +72,13 @@ impl<T> Expression for ArithExpr<T> where T: BorrowedTerm
     }
 }
 
-impl<T> Display for ArithExpr<T> where T: BorrowedTerm {
+impl<T> Display for ArithExpr<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.left, self.op, self.right)
     }
 }
 
-impl<T> ExprTrait for ArithExpr<T> where T: BorrowedTerm {
+impl<T> ExprTrait for ArithExpr<T> where T: TermStructure {
 
     type TermOutput = T;
 
