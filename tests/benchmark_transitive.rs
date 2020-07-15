@@ -7,7 +7,7 @@ use std::intrinsics::type_name;
 use std::marker::*;
 use std::sync::*;
 use std::hash::Hash;
-use std::collections::BTreeMap;
+use std::collections::*;
 use rand::{Rng, SeedableRng, StdRng};
 use num::*;
 
@@ -24,6 +24,7 @@ use differential_dataflow::hashable::*;
 use differential_formula::module::*;
 use differential_formula::term::*;
 use differential_formula::engine::*;
+use differential_formula::util::wrapper::*;
 use differential_formula::util::map::*;
 use differential_formula::parser::combinator::*;
 
@@ -85,13 +86,6 @@ fn main() {
     // hops_formula_hashmap();
     // hops_differential_formula();
 
-    // graph_computation(convert_to_integer, tran_closure_dataflow);
-
-    // graph_computation(
-    //     convert_to_integer,
-    //     Arc::new(|edges: Collection<Child<Worker<Allocator>, i32>, (usize, usize)>| transitive_closure_dataflow(&edges))
-    // );
-
     let program = "
         domain Graph {
             Node ::= new(name: Integer).
@@ -106,40 +100,79 @@ fn main() {
         ".to_string();
 
     let env = AtomicTerm::load_program(program);
-    let mut engine = DDEngine::new(env);
-    let m = engine.create_empty_model("m", "Graph");
-    // let marc = Arc::new(RefCell::new(m));
-    let safem = Arc::new(RwLock::new(m));
-    let node_type = engine.env.get_domain_by_name("Graph").unwrap().meta_info()
-                              .get_type_by_name(&"Node".to_string()).unwrap();
-    let node_type2 = node_type.clone();
-    let env = engine.env.clone();
-    let env2 = env.clone();
+    //let engine = DDEngine::new(env);
+    // let m = engine.create_empty_model("m", "Graph");
+    // // let marc = Arc::new(RefCell::new(m));
+    // let safem = Arc::new(RwLock::new(m));
+    // let node_type = env.get_domain_by_name("Graph").unwrap().meta_info().get_type_by_name(&"Node".to_string()).unwrap();
+    // let node_type2 = node_type.clone();
+
+    let graph_domain = env.get_domain_by_name("Graph").unwrap().clone();
+    let graph_type_map = graph_domain.meta_info().type_map().clone();
+
+    let mut node_type = graph_type_map.get("Node").unwrap().clone();
 
     // Some lambda functions to convert `usize` to other types.
     let convert_to_int = |x: usize| { x };
-
+    
+    // Use UnsignedWrapper that directly use the integer inside as the hashed value.
     let convert_to_wrapped_int = |num: usize| {
         let v1: UnsignedWrapper<usize> = num.into();
         let v2: HashableWrapper<UnsignedWrapper<usize>> = v1.into();
         return OrdWrapper { item: v2 };
     };
 
+    // Integer to BigInt.
     let convert_to_bigint = |x: usize| { BigInt::from(x) };
 
-    let convert_to_wrapped_bigint = |num: usize| {
+    // Also stash the hash of BigInt and use hash to compare ordering.
+    let convert_to_hashed_ord_bigint = |num: usize| {
         let v = BigInt::from(num);
         let v1: HashableWrapper<BigInt> = v.into();
         return OrdWrapper { item: v1 };
     };
 
+    // Need to move a type map into the closure.
+    let mut map = graph_type_map.clone();
     let convert_to_term = move |x: usize| {
-        let graph_domain = env.get_domain_by_name("Graph").unwrap();
         let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
-        let term = AtomicTerm::from_term_ast(&term_ast, graph_domain.meta_info().type_map());
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
+        return term;
+    };
+
+    map = graph_type_map.clone();
+    let convert_to_hashed_term = move |x: usize| {
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
+        let node_with_hash: HashableWrapper<AtomicTerm> = term.clone().into();
+        return node_with_hash;
+    };
+
+    // Convert integer to term Node(x) and use two wrappers to stash hash and compare ordering with hash value.
+    map = graph_type_map.clone();
+    let convert_to_hashed_ord_term = move |x: usize| {
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
         let node_with_hash: HashableWrapper<AtomicTerm> = term.clone().into();
         let wrapped_node = OrdWrapper { item: node_with_hash };
         return wrapped_node;
+    };
+
+    map = graph_type_map.clone();
+    let convert_to_unique_form_term = move |x: usize| {
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
+        let unique_form_term: UniqueFormWrapper<String, AtomicTerm> = term.into();
+        return unique_form_term;
+    };
+
+    map = graph_type_map.clone();
+    let convert_to_hashed_unique_form_term = move |x: usize| {
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
+        let unique_form_term: UniqueFormWrapper<String, AtomicTerm> = term.into();
+        let hashed_unique_form_term: HashableWrapper<UniqueFormWrapper<String, AtomicTerm>> = unique_form_term.into();
+        return hashed_unique_form_term;
     };
 
     // let convert_to_indexed_term = move |x: usize| {
@@ -176,37 +209,65 @@ fn main() {
 
         let mut map = BTreeMap::new();
         map.insert(x.clone(), node.clone());
-        //map.insert(y.clone(), Arc::new(node.clone()));
+        map.insert(y.clone(), node.clone());
         return map;
     };
 
+    node_type = graph_type_map.get("Node").unwrap().clone();
+    let convert_to_ptr_term_hashmap = move |num: usize| {
+        let x: AtomicTerm = "x".into();
+        let y: AtomicTerm = "y".into();
+        let atom_enum = AtomEnum::Int(BigInt::from(num));
+        let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
+        let node: AtomicTerm = AtomicTerm::Composite(
+            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
+        );
+
+        let mut map = BTreeMap::new();
+        map.insert(x.clone(), node.clone());
+        map.insert(y.clone(), node.clone());
+        let ptr_map = PtrHashMap::new(map);
+        return ptr_map;
+    };
+
+    node_type = graph_type_map.get("Node").unwrap().clone();
     let convert_to_term_quick_hashmap = move |num: usize| {
         let x: AtomicTerm = "x".into();
         let y: AtomicTerm = "y".into();
         let atom_enum = AtomEnum::Int(BigInt::from(num));
         let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
         let node: AtomicTerm = AtomicTerm::Composite(
-            AtomicComposite::new(node_type2.clone(), vec![atom_term], None)
+            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
         );
 
         let mut map = BTreeMap::new();
         map.insert(x.clone(), node.clone());
-        //map.insert(y.clone(), Arc::new(node.clone()));
+        map.insert(y.clone(), node.clone());
 
         let wrapped_map: QuickHashOrdMap<AtomicTerm, AtomicTerm> = map.into();
         return wrapped_map;
     };
 
+    println!("/***************** Integer *****************/");
     hops_computation(convert_to_int);
-    hops_computation(convert_to_wrapped_int);
+    // hops_computation(convert_to_wrapped_int);
+
+    println!("/***************** Big Integer *****************/");
     hops_computation(convert_to_bigint);
-    hops_computation(convert_to_wrapped_bigint);
+    // hops_computation(convert_to_hashed_ord_bigint);
+
+    println!("/***************** Formula Term *****************/");
     hops_computation(convert_to_term);
-    // hops_computation(convert_to_indexed_term);
-    
-    // hops_computation(convert_to_int_hashmap);
+    // hops_computation(convert_to_hashed_term);
+    // hops_computation(convert_to_hashed_ord_term);
+    hops_computation(convert_to_unique_form_term);
+    // hops_computation(convert_to_hashed_unique_form_term);
+
+    println!("/***************** Hash Map *****************/");
+    hops_computation(convert_to_int_hashmap);
     // hops_computation(convert_to_int_quick_hashmap);
-    // hops_computation(convert_to_term_hashmap);
+    hops_computation(convert_to_term_hashmap);
+    hops_computation(convert_to_ptr_term_hashmap);
     // hops_computation(convert_to_term_quick_hashmap);
     
     // hops_differential_formula();
@@ -216,15 +277,15 @@ fn main() {
 fn hops_computation<F, N>(convert: F)
 where 
     F: Fn(usize) -> N + Sync + Send + 'static,
-    N: ExchangeData+Hashable,
+    N: ExchangeData + Hashable + Hash,
 {
     timely::execute_from_args(std::env::args(), move |worker| {
         let index = worker.index();
         let peers = worker.peers();
 
         // Default configuration with 2 hops and no inspection.
-        let nodes: usize = std::env::args().nth(2).unwrap_or("100".to_string()).parse().unwrap_or(100);
-        let edges: usize = std::env::args().nth(3).unwrap_or("20".to_string()).parse().unwrap_or(20);
+        let nodes_num: usize = std::env::args().nth(2).unwrap_or("100".to_string()).parse().unwrap_or(100);
+        let edges_num: usize = std::env::args().nth(3).unwrap_or("20".to_string()).parse().unwrap_or(20);
         let hops: i32 = std::env::args().nth(4).unwrap_or("2".to_string()).parse().unwrap_or(2);
         let inspect: bool = std::env::args().nth(5).unwrap_or("false".to_string()).parse().unwrap_or(false);
 
@@ -240,17 +301,18 @@ where
 
         let seed: &[_] = &[1, 2, 3, index];
         let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
+        let mut edges = HashSet::new();
 
-        // Load up graph data. Round-robin among workers.
-        for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
-            // Using BigInt is slower than primitive integer.
-            let num1 = rng1.gen_range(0, nodes);
-            let num2 = rng1.gen_range(0, nodes);
+        for _ in 0 .. (edges_num / peers) + if index < (edges_num % peers) { 1 } else { 0 } {
+            let num1 = rng1.gen_range(0, nodes_num);
+            let num2 = rng1.gen_range(0, nodes_num);
             let edge = (convert(num1), convert(num2));
-            input.update(edge, 1);
-            if inspect {
-                println!("Initial tuple {:?}", (num1, num2));
-            }
+            edges.insert(edge);
+            if inspect { println!("Initial tuple {:?}", (num1, num2)); }
+        }
+
+        for edge in edges {
+            input.insert(edge);
         }
 
         let timer = ::std::time::Instant::now();
@@ -260,7 +322,7 @@ where
         worker.step_while(|| probe.less_than(input.time()));
 
         if index == 0 {
-            println!("Compute hops in {} finished after {:?}", type_name::<N>(), timer.elapsed());
+            println!("Time: {:?} for computing hops with data structure {}", timer.elapsed(), type_name::<N>());
         }
 
     }).unwrap();

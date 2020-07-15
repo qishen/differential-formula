@@ -13,11 +13,6 @@
 // use crate::type_system::BorrowedType;
 
  
-// Same as `From<T>` but with index as an additional argument.
-// pub trait FromWithIndex<T> where T: TermStructure {
-//     fn from_with_index(item: T, index: Arc<RwLock<Model<T>>>) -> Self;
-// }
-
 // pub trait IntoWithIndex<T> where T: TermStructure {
 //     fn into_with_index(self, index: Arc<RwLock<Model<T>>>) -> T;
 // }
@@ -35,7 +30,6 @@
 //     }
 // }
 
-// #[derive(Derivative)]
 // #[derivative(Default, Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone)]
 // #[derive(Serialize, Deserialize)]
 // pub struct IndexedTerm {
@@ -43,14 +37,14 @@
 //     id: usize,
 
 //     // Skip index for some derived traits.
-//     #[derivative(Debug="ignore")]
-//     #[derivative(Hash="ignore")]
-//     #[derivative(PartialOrd="ignore")]
-//     #[derivative(PartialEq="ignore")]
-//     #[derivative(Ord="ignore")]
-//     #[serde(skip)]
+//     // #[derivative(Debug="ignore")]
+//     // #[derivative(Hash="ignore")]
+//     // #[derivative(PartialOrd="ignore")]
+//     // #[derivative(PartialEq="ignore")]
+//     // #[derivative(Ord="ignore")]
+//     // #[serde(skip)]
 //     // Use `RwLock` to maintain a thread safe model store.
-//     index: Arc<RwLock<Model>>
+//     index: Arc<RwLock<Model<IndexedTerm>>>
 // }
 
 // // impl Borrow<Term> for IndexedTerm {
@@ -64,13 +58,6 @@
 // impl From<IndexedTerm> for Term {
 //     fn from(iterm: IndexedTerm) -> Self {
 //         iterm.get_term().clone()
-//     }
-// }
-
-// /// Convert from IndexedTerm to `Arc<Term>` needs a deep copy.
-// impl From<IndexedTerm> for Arc<Term> {
-//     fn from(iterm: IndexedTerm) -> Self {
-//         Arc::new(iterm.get_term().clone())
 //     }
 // }
 

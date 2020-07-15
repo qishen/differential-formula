@@ -79,13 +79,20 @@ impl UniqueForm<String> for AtomicType {
 /******************** AtomicTerm *******************/
 
 /// AtomicTerm is safe to transfer between threads with both type and sub-terms thread safe.
-/// AtomicTerm can be converted into Term<S, T> without copies of 
+/// Note that the equality of composite terms are decided by pointer equality, so the copy of
+/// the term is not equal to the original term.
 #[derive(Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum AtomicTerm {
     Atom(AtomicAtom),
     Variable(AtomicVariable),
     Composite(AtomicComposite)
 }
+
+// impl PartialEq for AtomicTerm {
+//     fn eq(&self, other: &Self) -> bool {
+//         self as *const _ == other as *const _
+//     }
+// }
 
 impl TermStructure for AtomicTerm {
 
@@ -332,6 +339,7 @@ impl From<String> for AtomicTerm {
     }
 }
 
+// Convert &str into a variable term with unknown sort.
 impl From<&str> for AtomicTerm {
     fn from(item: &str) -> Self {
         AtomicTerm::create_variable_term(None, item.to_string(), vec![])
@@ -588,13 +596,16 @@ impl Hash for AtomicComposite {
 
 impl PartialEq for AtomicComposite {
     fn eq(&self, other: &Self) -> bool {
-        self.sort == other.sort && self.arguments == other.arguments
+        // self.sort == other.sort && self.arguments == other.arguments
+        // Use pointer equality for comparing composite terms and need to make sure that
+        // that there is only one copy for the same composite term.
+        self as *const _ == other as *const _
     }
 }
 
 impl AtomicComposite { 
     pub fn new(sort: AtomicType, arguments: Vec<AtomicTerm>, alias: Option<String>) -> Self {
-        let mut composite = AtomicComposite {
+        let composite = AtomicComposite {
             sort,
             arguments,
             alias,
