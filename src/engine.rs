@@ -136,20 +136,19 @@ pub struct DDEngine<T> where T: TermStructure {
     pub inspect: bool,
 }
 
-impl<T> DDEngine<T> where T: TermStructure
-{
-    pub fn new(term: T) -> Self {
+impl<T> DDEngine<T> where T: TermStructure {
+    /// Create a new engine instance given an Env.
+    pub fn new(env: Env<T>) -> Self {
         DDEngine {
-            env: Env::new(),
+            env,
             inspect: false,
         }
     }
 
-    /// Install Env into engine.
-    /// TODO: Enable installation of multiple programs and detect conflicts between programs.
-    pub fn install(&mut self, text: String) {
+    /// Build an environment with generic term specify in the engine from FORMULA program text.
+    pub fn build_env(&mut self, text: String) -> Env<T> {
         let env = T::load_program(text + " EOF");
-        self.env = env;
+        return env;
     }
 
     /// Find module in environment and add a new rule to the module

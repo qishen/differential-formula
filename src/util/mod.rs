@@ -21,7 +21,9 @@ impl NameGenerator {
     }
 
     pub fn generate_name(&mut self) -> String {
-        format!("{}{}", self.prefix, self.counter)
+        let name = format!("{}{}", self.prefix, self.counter);
+        self.counter += 1;
+        name
     }
 
     // Cannot decide what's the exact type of Term<S, T>

@@ -705,7 +705,7 @@ impl ProgramAst {
 
             // TODO: Submodels should be imported as traces.
             // Just make a deep copy as they are all Arc<Term> and rename the whole model.
-            let mut submodel = model_map.get(submodel_name).unwrap().clone();
+            let submodel = model_map.get(submodel_name).unwrap().clone();
             let renamed_submodel = submodel.rename(scope.clone(), submodel.meta_info().type_map());
             let submodel_terms: Vec<_> = renamed_submodel.terms().into_iter().map(|x| x.clone()).collect();
             model_store.extend(submodel_terms);
@@ -725,8 +725,8 @@ impl ProgramAst {
             model_store.insert(new_term);
         }
 
-        for (_, term_arc) in alias_map.iter() {
-            model_store.insert(term_arc.clone());
+        for (_, term) in alias_map.iter() {
+            model_store.insert(term.clone());
         }
 
         let model = Model::new(

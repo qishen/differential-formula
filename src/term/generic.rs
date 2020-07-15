@@ -200,8 +200,6 @@ impl<T> VisitTerm for T where T: TermStructure {
         }
     }
 
-    /// Convert non-ground term into a normalized form with variables replaced with normalized
-    /// variables starting with `~p`.
     fn normalize(&self) -> (Self, HashMap<Self, Self>) {
         let mut generator = NameGenerator::new("~p");
         // Map normalized variables to original variables.
@@ -225,8 +223,8 @@ impl<T> VisitTerm for T where T: TermStructure {
                             dc_var
                         }
                     };
-                    vmap.insert(p.clone(), var_clone);
-                    *var = p.into();
+                    vmap.insert(var_clone, p.clone());
+                    *var = p;
                 }
             }
         );
@@ -248,7 +246,7 @@ impl<T> VisitTerm for T where T: TermStructure {
                 if self.sort() != term.sort() { return false; }
                 for i in 0 .. self.arguments().len() {
                     let xargs = self.arguments();
-                    let yargs = self.arguments();
+                    let yargs = term.arguments();
                     let x = xargs.get(i).unwrap();
                     let y = yargs.get(i).unwrap();
                     let has_binding = x.get_bindings_in_place(binding, y);
@@ -367,6 +365,17 @@ impl<T> VisitTerm for T where T: TermStructure {
             }
         }
         return false;
+    }
+
+    fn find_subterm(&self, var: &Self) -> Option<&Self> {
+        // Find fragments diff between var and its root.
+        let diff = var.root().fragments_diff(var);
+        match diff {
+            Some(diff) => {
+                self.find_subterm_by_labels(&diff)
+            },
+            None => None
+        }
     }
 
     // fn has_conflict<M>(outer: &M, inner: &M) -> bool where M: GenericMap<Self, Self> {

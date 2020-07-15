@@ -1,5 +1,6 @@
 use std::borrow::*;
 use std::collections::*;
+use std::hash::*;
 use std::sync::Arc;
 use std::hash::Hash;
 use std::fmt::*;
@@ -218,7 +219,7 @@ impl TermStructure for AtomicTerm {
                     _ => { false }
                 }
             },
-            AtomicTerm::Atom(atom) => { false }
+            AtomicTerm::Atom(_) => { false }
         }
     }
 
@@ -314,12 +315,26 @@ impl TermStructure for AtomicTerm {
     }
 
     fn load_program(text: String) -> Env<Self> {
+        let text = text + " EOF";
         let result = parse_program(&text[..]);
         // Make sure the whole file is parsed rather than part of the program.
         assert_eq!(result.0, "EOF");
         // println!("{:?}", result.0);
         let program_ast = result.1;
         program_ast.build_env()
+    }
+}
+
+// Convert string into a variable term with unknown sort.
+impl From<String> for AtomicTerm {
+    fn from(item: String) -> Self {
+        AtomicTerm::create_variable_term(None, item, vec![])
+    }
+}
+
+impl From<&str> for AtomicTerm {
+    fn from(item: &str) -> Self {
+        AtomicTerm::create_variable_term(None, item.to_string(), vec![])
     }
 }
 
@@ -404,12 +419,24 @@ impl Debug for AtomicTerm {
     }
 }
 
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicAtom {
     // The type of the atom as Arc<UniqueFormWrapper<String, Type>>
     pub sort: AtomicType,
     // The field holding the value as AtomEnum defined in generic term.
     pub val: AtomEnum,
+}
+
+impl Hash for AtomicAtom {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.val.hash(state);
+    }
+}
+
+impl PartialEq for AtomicAtom {
+    fn eq(&self, other: &Self) -> bool {
+        self.val == other.val
+    }
 }
 
 impl HasUniqueForm<String> for AtomicAtom {
@@ -458,7 +485,7 @@ impl AtomicAtom {
 }
 
 /// A generic variable term that does not require a specific type of reference.
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicVariable {
     // If variable is inside a predicate, the type could be derived otherwise use Undefined.
     // A variable is meaningless without context.
@@ -469,6 +496,22 @@ pub struct AtomicVariable {
     pub fragments: Vec<String>,
     // A reference to the root term but is optional only if the variable has fragments.
     pub root_term: Option<Box<AtomicTerm>>
+}
+
+impl Hash for AtomicVariable {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // TODO: May need to consider the sort with type inference to decide if two variables
+        // with different names mean the same thing, but now we only check root and fragments
+        // of a variable term.
+        self.root.hash(state);
+        self.fragments.hash(state);
+    }
+}
+
+impl PartialEq for AtomicVariable {
+    fn eq(&self, other: &Self) -> bool {
+        self.root == other.root && self.fragments == other.fragments
+    }
 }
 
 impl HasUniqueForm<String> for AtomicVariable {
@@ -526,7 +569,7 @@ impl AtomicVariable {
     }
 }
 
-#[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicComposite {
     // The type of the composite term and has an unique form as string as Arc<UniqueFormWrapper<String, Type>>.
     pub sort: AtomicType,
@@ -534,6 +577,19 @@ pub struct AtomicComposite {
     pub arguments: Vec<AtomicTerm>,
     // May or may not have an string alias.
     pub alias: Option<String>,
+}
+
+impl Hash for AtomicComposite {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.sort.hash(state);
+        self.arguments.hash(state);
+    }
+}
+
+impl PartialEq for AtomicComposite {
+    fn eq(&self, other: &Self) -> bool {
+        self.sort == other.sort && self.arguments == other.arguments
+    }
 }
 
 impl AtomicComposite { 

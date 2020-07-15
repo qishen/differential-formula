@@ -1,4 +1,4 @@
-#![type_length_limit="1120927"]
+// #![type_length_limit="1120927"]
 use differential_formula::term::*;
 use differential_formula::engine::*;
 use differential_formula::module::*;
@@ -12,13 +12,12 @@ use std::collections::HashMap;
 use rand::{Rng, SeedableRng, StdRng};
 
 
-fn load_program(file_path: &str) -> DDEngine {
+fn load_program(file_path: &str) -> DDEngine<AtomicTerm> {
     let path = Path::new(file_path);
     let content = fs::read_to_string(path).unwrap();
-    
-    let mut engine = DDEngine::new();
+    let env = AtomicTerm::load_program(content);
+    let mut engine = DDEngine::new(env);
     engine.inspect = true;
-    engine.install(content);
     return engine;
 }
 
@@ -270,11 +269,11 @@ fn test_print_modules() {
     let little_cycle = engine.env.get_model_by_name("LittleCycle").unwrap().clone();
 
     let pair = engine.env.get_model_by_name("Pair").unwrap().clone();
-    println!("alias_map of model Pair is {:#?}", pair.alias_map);
+    println!("alias_map of model Pair is {:#?}", pair.model_store().alias_map());
     println!("model Pair is {:#?}", pair.terms());
 
     let del_transform = engine.env.get_transform_by_name("Del").unwrap().clone();
-    for rule in del_transform.rules.iter() {
+    for rule in del_transform.meta_info().rules().iter() {
         println!("Original Rule: {}", rule);
     }
 }

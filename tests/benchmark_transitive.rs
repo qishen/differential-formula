@@ -21,6 +21,7 @@ use differential_dataflow::operators::join::*;
 use differential_dataflow::lattice::Lattice;
 use differential_dataflow::hashable::*;
 
+use differential_formula::module::*;
 use differential_formula::term::*;
 use differential_formula::engine::*;
 use differential_formula::util::map::*;
@@ -104,14 +105,13 @@ fn main() {
         }
         ".to_string();
 
-    let mut engine = DDEngine::new();
-
-    // Parse string and install program in the engine.
-    engine.install(program);
+    let env = AtomicTerm::load_program(program);
+    let mut engine = DDEngine::new(env);
     let m = engine.create_empty_model("m", "Graph");
     // let marc = Arc::new(RefCell::new(m));
     let safem = Arc::new(RwLock::new(m));
-    let node_type = engine.env.get_domain_by_name("Graph").unwrap().get_type(&"Node".to_string());
+    let node_type = engine.env.get_domain_by_name("Graph").unwrap().meta_info()
+                              .get_type_by_name(&"Node".to_string()).unwrap();
     let node_type2 = node_type.clone();
     let env = engine.env.clone();
     let env2 = env.clone();
@@ -136,19 +136,19 @@ fn main() {
     let convert_to_term = move |x: usize| {
         let graph_domain = env.get_domain_by_name("Graph").unwrap();
         let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
-        let term = term_ast.to_term(graph_domain);
-        let node_with_hash: HashableWrapper<Term> = term.clone().into();
+        let term = AtomicTerm::from_term_ast(&term_ast, graph_domain.meta_info().type_map());
+        let node_with_hash: HashableWrapper<AtomicTerm> = term.clone().into();
         let wrapped_node = OrdWrapper { item: node_with_hash };
         return wrapped_node;
     };
 
-    let convert_to_indexed_term = move |x: usize| {
-        let graph_domain = env2.get_domain_by_name("Graph").unwrap();
-        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
-        let term = term_ast.to_term(graph_domain);
-        let indexed_term = IndexedTerm::new(&term, safem.clone());
-        return indexed_term;
-    };
+    // let convert_to_indexed_term = move |x: usize| {
+    //     let graph_domain = env2.get_domain_by_name("Graph").unwrap();
+    //     let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+    //     let term = AtomicTerm::from_term_ast(&term_ast, graph_domain.meta_info().type_map());
+    //     let indexed_term = IndexedTerm::new(&term, safem.clone());
+    //     return indexed_term;
+    // };
 
     let convert_to_int_hashmap = |num: usize| {
         let mut map = BTreeMap::new();
@@ -166,34 +166,34 @@ fn main() {
     };
 
     let convert_to_term_hashmap = move |num: usize| {
-        let _x: Term = Variable::new("x".to_string(), vec![]).into();
-        let _y: Term = Variable::new("y".to_string(), vec![]).into();
-        let x = Arc::new(_x);
-        let y = Arc::new(_y);
-
-        let atom: Term = AtomEnum::Int(BigInt::from(num)).into();
-        let node: Term = Composite::new(node_type.clone(), vec![Arc::new(atom)], None).into();
+        let x: AtomicTerm = "x".into();
+        let y: AtomicTerm = "y".into();
+        let atom_enum = AtomEnum::Int(BigInt::from(num));
+        let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
+        let node: AtomicTerm = AtomicTerm::Composite(
+            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
+        );
 
         let mut map = BTreeMap::new();
-        map.insert(x.clone(), Arc::new(node.clone()));
+        map.insert(x.clone(), node.clone());
         //map.insert(y.clone(), Arc::new(node.clone()));
         return map;
     };
 
     let convert_to_term_quick_hashmap = move |num: usize| {
-        let _x: Term = Variable::new("x".to_string(), vec![]).into();
-        let _y: Term = Variable::new("y".to_string(), vec![]).into();
-        let x = Arc::new(_x);
-        let y = Arc::new(_y);
-
-        let atom: Term = AtomEnum::Int(BigInt::from(num)).into();
-        let node: Term = Composite::new(node_type2.clone(), vec![Arc::new(atom)], None).into();
+        let x: AtomicTerm = "x".into();
+        let y: AtomicTerm = "y".into();
+        let atom_enum = AtomEnum::Int(BigInt::from(num));
+        let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
+        let node: AtomicTerm = AtomicTerm::Composite(
+            AtomicComposite::new(node_type2.clone(), vec![atom_term], None)
+        );
 
         let mut map = BTreeMap::new();
-        map.insert(x.clone(), Arc::new(node.clone()));
+        map.insert(x.clone(), node.clone());
         //map.insert(y.clone(), Arc::new(node.clone()));
 
-        let wrapped_map: QuickHashOrdMap<Arc<Term>, Arc<Term>> = map.into();
+        let wrapped_map: QuickHashOrdMap<AtomicTerm, AtomicTerm> = map.into();
         return wrapped_map;
     };
 
@@ -202,7 +202,7 @@ fn main() {
     hops_computation(convert_to_bigint);
     hops_computation(convert_to_wrapped_bigint);
     hops_computation(convert_to_term);
-    hops_computation(convert_to_indexed_term);
+    // hops_computation(convert_to_indexed_term);
     
     // hops_computation(convert_to_int_hashmap);
     // hops_computation(convert_to_int_quick_hashmap);
@@ -289,20 +289,19 @@ fn hops_differential_formula() {
         }
         ".to_string();
 
-    let mut engine = DDEngine::new();
+    let env = AtomicTerm::load_program(program);
+    let mut engine = DDEngine::new(env);
 
-    if inspect { engine.inspect = true; } 
-    else { engine.inspect = false; }
+    if inspect { engine.inspect = true; } else { engine.inspect = false; }
 
     // Parse string and install program in the engine.
-    engine.install(program);
     let m1 = engine.create_empty_model("m1", "Graph").clone();
 
     let seed: &[_] = &[1, 2, 3, index];
     let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
 
     let mut session = Session::new(m1, &engine);
-    let mut terms: Vec<Term> = vec![];
+    let mut terms = vec![];
 
     // Load up graph data. Round-robin among workers.
     for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
@@ -366,94 +365,3 @@ where
 }
 
 
-fn transitive_formula() {
-
-    let result = timely::execute_from_args(std::env::args(), move |worker| {
-
-        let index = worker.index();
-        let peers = worker.peers();
-
-        let nodes: usize = std::env::args().nth(1).unwrap_or("100".to_string()).parse().unwrap_or(100);
-        let edges: usize = std::env::args().nth(2).unwrap_or("200".to_string()).parse().unwrap_or(200);
-        let inspect: bool = std::env::args().nth(3).unwrap_or("false".to_string()).parse().unwrap_or(false);
-
-        let (mut input, probe) = worker.dataflow(|scope| {
-            let (input, edges) = scope.new_collection();
-            let probe = transitive_closure_dataflow(&edges).probe();
-            (input, probe)
-        });
-
-        let program = "
-            domain Graph {
-                Node ::= new(name: Integer).
-                Edge ::= new(src: Node, dst: Node).
-                Path ::= new(src: Node, dst: Node).
-                Line ::= new(a: Node, b: Node, c: Node, d: Node).
-                Nocycle ::= new(node: Node).
-                TwoEdge ::= new(first: Edge, second: Edge).
-
-                Edge(x, z) :- Edge(x, y), Edge(y, z).
-            }
-            ".to_string();
-
-        let mut engine = DDEngine::new();
-
-        if inspect {
-            engine.inspect = true;
-        } else {
-            engine.inspect = false;
-        }
-
-        // Parse string and install program in the engine.
-        engine.install(program);
-        let domain = engine.env.get_domain_by_name("Graph").unwrap().clone();
-        let edge = domain.get_type(&"Edge".to_string());
-        let node = domain.get_type(&"Node".to_string());
-
-        let seed: &[_] = &[1, 2, 3, index];
-        let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
-        //let mut rng2: StdRng = SeedableRng::from_seed(seed);    // rng for edge deletions
-
-        let empty_model = engine.create_empty_model("m", "Graph");
-        let mut session = Session::new(empty_model, &engine);
-        let mut terms: Vec<Term> = vec![];
-
-        // Load up graph data. Round-robin among workers.
-        for _ in 0 .. (edges / peers) + if index < (edges % peers) { 1 } else { 0 } {
-            let num1 = rng1.gen_range(0, nodes);
-            let num2 = rng1.gen_range(0, nodes);
-            //println!("{:?}, {:?}", num1, num2);
-            let atom1: Term = AtomEnum::Int(BigInt::from(num1)).into();
-            let atom2: Term = AtomEnum::Int(BigInt::from(num2)).into();
-            let node1: Term = Composite::new(node.clone(), vec![Arc::new(atom1)], None).into();
-            let node2: Term = Composite::new(node.clone(), vec![Arc::new(atom2)], None).into();
-
-            let edge_tuple = (Arc::new(node1.clone()), Arc::new(node2.clone()));
-            //let edge_tuple = (node1.clone(), node2.clone());
-            input.insert(edge_tuple);
-
-            let edge_term: Term = Composite::new(
-                edge.clone(), 
-                vec![Arc::new(node1), Arc::new(node2)], 
-                None).into();
-
-            terms.insert(0, edge_term);
-        }
-
-        let timer = ::std::time::Instant::now();
-
-        input.advance_to(1);
-        input.flush();
-        worker.step_while(|| probe.less_than(input.time()));
-
-        if index == 0 {
-            println!("Compute transitive closure in terms finished after {:?}", timer.elapsed());
-        }
-
-        let timer = std::time::Instant::now();
-        session.add_terms(terms);
-
-        println!("differential-formula finished after {:?}", timer.elapsed());
-
-    }).unwrap();
-} 
