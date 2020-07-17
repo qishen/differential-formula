@@ -148,3 +148,43 @@ impl<U: Hash, T> Hash for UniqueFormWrapper<U, T> where T: HasUniqueForm<U> {
         self.unique_form.hash(state);
     }
 }
+
+/// `AtomicPtrWrapper` is a simple wrapper over atomic reference of certain type.
+#[derive(PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
+pub struct AtomicPtrWrapper<T> {
+    pub ptr: Arc<T>
+}
+
+impl<T> Display for AtomicPtrWrapper<T> where T: Display{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.ptr.as_ref())
+    }
+}
+
+impl<T> Debug for AtomicPtrWrapper<T> where T: Debug {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        // Rewrite Debug trait in the same way as Display.
+        write!(f, "{:?}", self.ptr.as_ref())
+    }
+}
+
+// Compute hash on the pointer address rather than the value.
+impl<T> Hash for AtomicPtrWrapper<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::ptr::hash(&self.ptr, state)
+    }
+}
+
+// Decide equality by pointer rather than the value.
+impl<T> PartialEq for AtomicPtrWrapper<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.ptr, &other.ptr)
+    }
+}
+
+// Convert into atomic pointer wrapped value.
+impl<T> From<T> for AtomicPtrWrapper<T> {
+    fn from(item: T) -> AtomicPtrWrapper<T> {
+        AtomicPtrWrapper { ptr: Arc::new(item) }
+    }
+}
