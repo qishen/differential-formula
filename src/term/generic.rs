@@ -68,6 +68,11 @@ pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug + differen
     /// e.g. composite `Edge(a, Node(b))` into `scope.Edge(scope.a, scope.Node(scope.b))`
     fn rename(&self, scope: String, types: &mut HashSet<Self::SortOutput>) -> Self;
 
+    /// Given a label as string and check if one of the arguments in composite term is related to the label
+    /// according to the type definition. e.g. Edge ::= new (src: Node, dst: Node) and we have an instance
+    /// e1 = Edge(_,_). The subterm represented by `e1.src` can be derived. 
+    fn find_argument_by_label(&self, label: &str) -> Option<&Self>;
+
     /// Find subterm in the current term given the labels or variable fragments.
     fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self>;
 

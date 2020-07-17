@@ -88,12 +88,6 @@ pub enum AtomicTerm {
     Composite(AtomicComposite)
 }
 
-// impl PartialEq for AtomicTerm {
-//     fn eq(&self, other: &Self) -> bool {
-//         self as *const _ == other as *const _
-//     }
-// }
-
 impl TermStructure for AtomicTerm {
 
     type SortOutput = AtomicType;
@@ -111,7 +105,7 @@ impl TermStructure for AtomicTerm {
         match self {
             AtomicTerm::Composite(composite) => {
                 for arg in composite.arguments.iter() {
-                    args.push(arg);
+                    args.push(arg.ptr.as_ref());
                 }
             },
             _ => {}
@@ -123,7 +117,9 @@ impl TermStructure for AtomicTerm {
         let mut args = vec![];
         match self {
             AtomicTerm::Composite(composite) => {
-                for arg in composite.arguments.iter_mut() {
+                for ptr_arg in composite.arguments.iter_mut() {
+                    // It may make a copy when there are more than one reference to the inner.
+                    let arg = Arc::make_mut(&mut ptr_arg.ptr);
                     args.push(arg);
                 }
             },
@@ -143,7 +139,7 @@ impl TermStructure for AtomicTerm {
     fn root(&self) -> &Self {
         match self {
             AtomicTerm::Variable(var) => {
-                let root = var.root_term.as_ref().map_or(self, |root| &root);
+                let root = var.root_term.as_ref().map_or(self, |root| root.ptr.as_ref());
                 root
             },
             _ => { self } // Return itself for atom and composite term.
@@ -195,6 +191,28 @@ impl TermStructure for AtomicTerm {
         }
     }
 
+    fn find_argument_by_label(&self, label: &str) -> Option<&Self> {
+        if let AtomicTerm::Composite(composite) = self {
+            let native_type: &Type = composite.sort.borrow();
+            let base_type = native_type.base_type();
+            if let Type::CompositeType(ctype) = base_type {
+                let result = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, _t))| {
+                    match arg_label_opt {
+                        Some(arg_label) => {
+                            if arg_label == label {
+                                let arg = composite.arguments.get(i).unwrap();
+                                return Some(arg.ptr.as_ref());
+                            } else { return None; }
+                        },
+                        None => None
+                    }
+                });
+                return result;
+            }
+        } 
+        return None;
+    }
+
     fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self> {
         let mut current_term = self; 
         for label in labels {
@@ -213,7 +231,7 @@ impl TermStructure for AtomicTerm {
             AtomicTerm::Composite(composite) => {
                 for arg in composite.arguments.iter() {
                     // Check if self is equal to one of its arguments.
-                    if self == arg { return true; }
+                    if self == arg.ptr.as_ref() { return true; }
                 }
                 false
             },
@@ -281,7 +299,9 @@ impl TermStructure for AtomicTerm {
             TermAst::CompositeTermAst(cterm_ast) => {
                 let mut term_arguments = vec![];
                 for argument in cterm_ast.arguments.clone() {
-                    let term = AtomicTerm::from_term_ast(argument.as_ref(), type_map);
+                    // TODO: It would be better to include a set of existing terms to avoid duplicates.
+                    let atomic_term = AtomicTerm::from_term_ast(argument.as_ref(), type_map);
+                    let term = AtomicPtrTerm { ptr: Arc::new(atomic_term) };
                     term_arguments.push(term);
                 }
                 let sort_name = cterm_ast.sort.name().unwrap();
@@ -353,59 +373,6 @@ impl HasUniqueForm<String> for AtomicTerm {
             AtomicTerm::Variable(v) => v.derive_unique_form(),
             AtomicTerm::Composite(c) => c.derive_unique_form(),
         }
-    }
-}
-
-/// Put some term-related static methods here.
-impl AtomicTerm {
-    /// Given a string create a nullary composite type with no arguments inside and return the singleton term.
-    pub fn create_constant(constant: String) -> AtomicTerm {
-        let nullary_type = Type::CompositeType(
-            CompositeType { name: constant, arguments: vec![] }
-        );
-
-        let term = AtomicTerm::Composite(
-            AtomicComposite::new(
-                nullary_type.into(), 
-                vec![], 
-                None
-            )
-        );
-
-        return term;
-    }
-
-    /// Given a label as string and check if one of the arguments in composite term is related to the label
-    /// according to the type definition. e.g. Edge ::= new (src: Node, dst: Node) and we have an instance
-    /// e1 = Edge(_,_). The subterm represented by `e1.src` can be derived. 
-    pub fn find_argument_by_label(&self, label: &str) -> Option<&AtomicTerm> {
-        let result = match self {
-            AtomicTerm::Composite(composite) => {
-                let native_type: &Type = composite.sort.borrow();
-                let base_type = native_type.base_type();
-                match base_type {
-                    Type::CompositeType(ctype) => {
-                        let result = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
-                            match arg_label_opt {
-                                Some(arg_label) => {
-                                    if arg_label == label {
-                                        let arg = composite.arguments.get(i).unwrap();
-                                        return Some(arg);
-                                    } else { return None; }
-                                },
-                                None => None
-                            }
-                        });
-
-                        result
-                    },
-                    _ => { None }
-                }
-            },
-            _ => { None }
-        };
-
-        result
     }
 }
 
@@ -503,7 +470,7 @@ pub struct AtomicVariable {
     // The remaining fragments of the variable term.
     pub fragments: Vec<String>,
     // A reference to the root term but is optional only if the variable has fragments.
-    pub root_term: Option<Box<AtomicTerm>>
+    pub root_term: Option<AtomicPtrTerm>
 }
 
 impl Hash for AtomicVariable {
@@ -554,12 +521,13 @@ impl AtomicVariable {
         if fragments.len() == 0 {
             return root_var;
         } else {
-            let root_term = Some(Box::new(AtomicTerm::Variable(root_var)));
+            let atomic_root_term = AtomicTerm::Variable(root_var);
+            let root_term = AtomicPtrTerm { ptr: Arc::new(atomic_root_term) };
             let var = AtomicVariable {
                 sort,
                 root,
                 fragments,
-                root_term
+                root_term: Some(root_term)
             };
             return var;
         }
@@ -582,7 +550,7 @@ pub struct AtomicComposite {
     // The type of the composite term and has an unique form as string as Arc<UniqueFormWrapper<String, Type>>.
     pub sort: AtomicType,
     // The atomically wrapped arguments.
-    pub arguments: Vec<AtomicTerm>,
+    pub arguments: Vec<AtomicPtrTerm>,
     // May or may not have an string alias.
     pub alias: Option<String>,
 }
@@ -590,21 +558,25 @@ pub struct AtomicComposite {
 impl Hash for AtomicComposite {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.sort.hash(state);
-        self.arguments.hash(state);
+        for arg in self.arguments.iter() {
+            arg.ptr.as_ref().hash(state);
+        }
     }
 }
 
 impl PartialEq for AtomicComposite {
     fn eq(&self, other: &Self) -> bool {
-        // self.sort == other.sort && self.arguments == other.arguments
-        // Use pointer equality for comparing composite terms and need to make sure that
-        // that there is only one copy for the same composite term.
-        self as *const _ == other as *const _
+        // Each argument is AtomicPtrTerm and it only checks reference equality rather than the value.
+        self.sort == other.sort && 
+        self.arguments.iter().zip(other.arguments.iter()).all(|(x, y)| {
+            // Force it to check equality on value.
+            x.ptr.as_ref() == y.ptr.as_ref()
+        })
     }
 }
 
 impl AtomicComposite { 
-    pub fn new(sort: AtomicType, arguments: Vec<AtomicTerm>, alias: Option<String>) -> Self {
+    pub fn new(sort: AtomicType, arguments: Vec<AtomicPtrTerm>, alias: Option<String>) -> Self {
         let composite = AtomicComposite {
             sort,
             arguments,
@@ -659,7 +631,7 @@ impl HasUniqueForm<String> for AtomicComposite {
         // The same as display name but not exactly we skip the alias here. e.g T(a, 1, E(1))
         let mut args = vec![];
         for arg in self.arguments.iter() {
-            args.push(arg.derive_unique_form());
+            args.push(arg.ptr.as_ref().derive_unique_form());
         }
         let args_str = args.join(", ");
         let term_str = format!("{}({})", self.sort.unique_form(), args_str);
@@ -683,5 +655,187 @@ impl Display for AtomicComposite {
         let type_ref: &Type = self.sort.borrow();
         let term_str = format!("{}({})", type_ref, args_str);
         write!(f, "{}{}", alias_str, term_str)
+    }
+}
+
+/// AtomicTerm wrapped by AtomicPtrWrapper as an atomic reference because we want to compare
+/// equality based on the reference rather than recursively compare each field in the term, 
+/// but sometimes we still need to look into the inner value of the wrapper to see if two terms
+/// are really equal even they don't share the same reference.
+pub type AtomicPtrTerm = AtomicPtrWrapper<AtomicTerm>;
+
+// pub struct AtomicPtrTerm {
+//     ptr: Arc<AtomicTerm>
+// }
+
+// Check equality by comparing inner pointers.
+// impl PartialEq for AtomicPtrTerm {
+//     fn eq(&self, other: &AtomicPtrTerm) -> bool {
+//         Arc::ptr_eq(&self.ptr, &other.ptr)
+//     }
+// }
+
+// impl Display for AtomicPtrTerm {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+//         write!(f, "{}", self.ptr.as_ref())
+//     }
+// }
+
+// impl Debug for AtomicPtrTerm {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+//         // Rewrite Debug trait in the same way as Display.
+//         write!(f, "{}", self)
+//     }
+// }
+
+// impl From<AtomicTerm> for AtomicPtrTerm {
+//     fn from(item: AtomicTerm) -> AtomicPtrTerm {
+//         AtomicPtrTerm { ptr: Arc::new(item) }
+//     }
+// }
+
+impl TermStructure for AtomicPtrTerm {
+
+    type SortOutput = AtomicType;
+
+    fn sort(&self) -> &Self::SortOutput {
+        self.ptr.as_ref().sort()
+    }
+
+    fn arguments(&self) -> Vec<&Self> {
+        let mut args = vec![];
+        match self.ptr.as_ref() {
+            AtomicTerm::Composite(composite) => {
+                for arg in composite.arguments.iter() {
+                    args.push(arg);
+                }
+            },
+            _ => {}
+        }
+        args
+    }
+
+    fn arguments_mut(&mut self) -> Vec<&mut Self> {
+        let mut args = vec![];
+        // It may make a copy when there are more than one reference to the inner.
+        match Arc::make_mut(&mut self.ptr) {
+            AtomicTerm::Composite(composite) => {
+                for ptr_arg in composite.arguments.iter_mut() {
+                    args.push(ptr_arg);
+                }
+            },
+            _ => {}
+        }
+        args
+    }
+    
+    fn term_type(&self) -> TermType {
+        self.ptr.as_ref().term_type()
+    }
+
+    fn root(&self) -> &Self {
+        match self.ptr.as_ref() {
+            AtomicTerm::Variable(var) => {
+                match &var.root_term {
+                    Some(root) => root,
+                    None => self
+                }
+            },
+            _ => { self } // Return itself for atom and composite term.
+        }
+    }
+
+    fn create_variable_term(sort: Option<Self::SortOutput>, root: String, fragments: Vec<String>) -> Self {
+        let atomic_term = AtomicTerm::create_variable_term(sort, root, fragments);
+        AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
+    }
+
+    fn create_atom_term(sort: Option<Self::SortOutput>, atom_enum: AtomEnum) -> Self {
+        let atomic_term = AtomicTerm::create_atom_term(sort, atom_enum);
+        AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
+    }
+
+    fn create_constant(constant: String) -> (Self::SortOutput, Self) {
+        let (sort, atomic_term) = AtomicTerm::create_constant(constant);
+        let ptr_term = AtomicPtrWrapper { ptr: Arc::new(atomic_term) };
+        (sort, ptr_term)
+    }
+
+    fn is_dc_variable(&self) -> bool {
+        self.ptr.as_ref().is_dc_variable()
+    }
+
+    fn rename(&self, scope: String, types: &mut HashSet<Self::SortOutput>) -> Self {
+        let atomic_term = self.ptr.as_ref().rename(scope, types);
+        let ptr_term = AtomicPtrWrapper { ptr: Arc::new(atomic_term) };
+        ptr_term
+    }
+
+    fn find_argument_by_label(&self, label: &str) -> Option<&Self> {
+        if let AtomicTerm::Composite(composite) = self.ptr.as_ref() {
+            let native_type: &Type = composite.sort.borrow();
+            let base_type = native_type.base_type();
+            if let Type::CompositeType(ctype) = base_type {
+                let result = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
+                    match arg_label_opt {
+                        Some(arg_label) => {
+                            if arg_label == label {
+                                let arg = composite.arguments.get(i).unwrap();
+                                return Some(arg);
+                            } else { return None; }
+                        },
+                        None => None
+                    }
+                });
+                return result;
+            }
+        } 
+        return None;
+    }
+
+    fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self> {
+        let mut current_term = self; 
+        for label in labels {
+            let subterm_opt = current_term.find_argument_by_label(label);
+            if let Some(subterm) = subterm_opt {
+                current_term = subterm;
+            } else {
+                return None;
+            }
+        }
+        Some(current_term)
+    }
+
+    fn is_direct_subterm_of(&self, term: &Self) -> bool {
+        self.ptr.as_ref().is_direct_subterm_of(term.ptr.as_ref())
+    }
+
+    fn fragments_diff<'a>(&'a self, term: &'a Self) -> Option<Vec<&'a String>> {
+        self.ptr.as_ref().fragments_diff(term.ptr.as_ref())
+    }
+
+    fn into_atom_enum(&self) -> Option<AtomEnum> {
+        self.ptr.as_ref().into_atom_enum()
+    }
+
+    fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, Self::SortOutput>) -> Self {
+        let atomic_term = AtomicTerm::from_term_ast(ast, type_map);
+        AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
+    }
+
+    fn remove_alias(&mut self) -> Option<String> {
+        // May make a copy when there are more than one reference pointing to the inner.
+        let ptr = Arc::make_mut(&mut self.ptr);
+        ptr.remove_alias()
+    }
+
+    fn load_program(text: String) -> Env<Self> {
+        let text = text + " EOF";
+        let result = parse_program(&text[..]);
+        // Make sure the whole file is parsed rather than part of the program.
+        assert_eq!(result.0, "EOF");
+        // println!("{:?}", result.0);
+        let program_ast = result.1;
+        program_ast.build_env()
     }
 }
