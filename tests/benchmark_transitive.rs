@@ -58,9 +58,6 @@ where
     G: Scope,
     G::Timestamp: Lattice+Ord,
     N: ExchangeData+Hashable,
-    //R: ExchangeData+Abelian,
-    //R: Mul<R, Output=R>,
-    //R: From<i8>,
 {
     edges.iterate(|inner| {
         let edges = edges.enter(&inner.scope());
@@ -100,13 +97,6 @@ fn main() {
         ".to_string();
 
     let env = AtomicTerm::load_program(program);
-    //let engine = DDEngine::new(env);
-    // let m = engine.create_empty_model("m", "Graph");
-    // // let marc = Arc::new(RefCell::new(m));
-    // let safem = Arc::new(RwLock::new(m));
-    // let node_type = env.get_domain_by_name("Graph").unwrap().meta_info().get_type_by_name(&"Node".to_string()).unwrap();
-    // let node_type2 = node_type.clone();
-
     let graph_domain = env.get_domain_by_name("Graph").unwrap().clone();
     let graph_type_map = graph_domain.meta_info().type_map().clone();
 
@@ -138,6 +128,16 @@ fn main() {
         let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
         let term = AtomicTerm::from_term_ast(&term_ast, &map);
         return term;
+    };
+
+    let mut map = graph_type_map.clone();
+    let convert_to_ptr_term = move |x: usize| {
+        // Use term_store to make sure there is no duplicates that has different allocations.
+        let mut term_store = AtomicPtrTermStore::new(HashSet::new(), HashMap::new());
+        let term_ast = term(&format!("Node({}){}", x, "~")[..]).unwrap().1;
+        let term = AtomicTerm::from_term_ast(&term_ast, &map);
+        let ptr_term = term_store.intern(term);
+        return ptr_term.clone();
     };
 
     map = graph_type_map.clone();
@@ -190,13 +190,13 @@ fn main() {
         return map;
     };
 
-    let convert_to_int_quick_hashmap = |num: usize| {
-        let mut map = BTreeMap::new();
-        map.insert(num, num);
-        //map.insert(num+1, num+1);
-        let wrapped_map: QuickHashOrdMap<usize, usize> = map.into();
-        return wrapped_map;
-    };
+    // let convert_to_int_quick_hashmap = |num: usize| {
+    //     let mut map = BTreeMap::new();
+    //     map.insert(num, num);
+    //     //map.insert(num+1, num+1);
+    //     let wrapped_map: QuickHashOrdMap<usize, usize> = map.into();
+    //     return wrapped_map;
+    // };
 
     let convert_to_term_hashmap = move |num: usize| {
         let x: AtomicTerm = "x".into();
@@ -204,7 +204,7 @@ fn main() {
         let atom_enum = AtomEnum::Int(BigInt::from(num));
         let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
         let node: AtomicTerm = AtomicTerm::Composite(
-            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
+            AtomicComposite::new(node_type.clone(), vec![atom_term.into()], None)
         );
 
         let mut map = BTreeMap::new();
@@ -220,7 +220,7 @@ fn main() {
         let atom_enum = AtomEnum::Int(BigInt::from(num));
         let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
         let node: AtomicTerm = AtomicTerm::Composite(
-            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
+            AtomicComposite::new(node_type.clone(), vec![atom_term.into()], None)
         );
 
         let mut map = BTreeMap::new();
@@ -230,23 +230,23 @@ fn main() {
         return ptr_map;
     };
 
-    node_type = graph_type_map.get("Node").unwrap().clone();
-    let convert_to_term_quick_hashmap = move |num: usize| {
-        let x: AtomicTerm = "x".into();
-        let y: AtomicTerm = "y".into();
-        let atom_enum = AtomEnum::Int(BigInt::from(num));
-        let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
-        let node: AtomicTerm = AtomicTerm::Composite(
-            AtomicComposite::new(node_type.clone(), vec![atom_term], None)
-        );
+    // node_type = graph_type_map.get("Node").unwrap().clone();
+    // let convert_to_term_quick_hashmap = move |num: usize| {
+    //     let x: AtomicTerm = "x".into();
+    //     let y: AtomicTerm = "y".into();
+    //     let atom_enum = AtomEnum::Int(BigInt::from(num));
+    //     let atom_term = AtomicTerm::create_atom_term(None, atom_enum); 
+    //     let node: AtomicTerm = AtomicTerm::Composite(
+    //         AtomicComposite::new(node_type.clone(), vec![atom_term], None)
+    //     );
 
-        let mut map = BTreeMap::new();
-        map.insert(x.clone(), node.clone());
-        map.insert(y.clone(), node.clone());
+    //     let mut map = BTreeMap::new();
+    //     map.insert(x.clone(), node.clone());
+    //     map.insert(y.clone(), node.clone());
 
-        let wrapped_map: QuickHashOrdMap<AtomicTerm, AtomicTerm> = map.into();
-        return wrapped_map;
-    };
+    //     let wrapped_map: QuickHashOrdMap<AtomicTerm, AtomicTerm> = map.into();
+    //     return wrapped_map;
+    // };
 
     println!("/***************** Integer *****************/");
     hops_computation(convert_to_int);
@@ -258,6 +258,7 @@ fn main() {
 
     println!("/***************** Formula Term *****************/");
     hops_computation(convert_to_term);
+    hops_computation(convert_to_ptr_term);
     // hops_computation(convert_to_hashed_term);
     // hops_computation(convert_to_hashed_ord_term);
     hops_computation(convert_to_unique_form_term);

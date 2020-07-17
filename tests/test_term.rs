@@ -80,11 +80,17 @@ fn test_term_bindings() {
     let edge_a_a = model.model_store().get_term_by_alias(&"ev5".into());
     let two_edge_x_y = model.model_store().get_term_by_alias(&"tev1".into());
 
-
     println!("// -------- Test Term Equality -------- //");
-    // assert_eq!(node1, node1x);
-    // assert_eq!(edge_n1_n2, edge_n1_n2x);
-    // assert_eq!(e2, e2x);
+    // A clone of AtomicTerm is equal to itself.
+    let node1_copy = node1.clone();
+    assert_eq!(node1, &node1_copy);
+    
+    // A clone of AtomicPtrTerm is equal to itself only when the inner reference remains the same.
+    let ptr_node1: AtomicPtrTerm = node1.clone().into();
+    let ptr_node1_copy = ptr_node1.clone();
+    let ptr_node1x: AtomicPtrTerm = node1.clone().into();
+    assert_eq!(ptr_node1, ptr_node1_copy);
+    assert_ne!(ptr_node1, ptr_node1x);
 
     // Without alias.
     let mut node1_no_alias = session.create_term("Node(1)").unwrap();
