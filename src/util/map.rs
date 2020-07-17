@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::*;
 use std::hash::{Hash, Hasher};
-use std::iter::Iterator;
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
 use differential_dataflow::hashable::*;

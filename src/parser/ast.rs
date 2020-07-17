@@ -250,9 +250,7 @@ impl ProgramAst {
         ast_map: &mut HashMap<String, TypeDefAst>,      // Only has type ASTs in current domain.
         type_map: &mut HashMap<String, S>,  // Recursively put new created type into type map.
         generator: &mut NameGenerator,
-    ) -> S
-    where S: BorrowedType + Into<AtomicType>
-    {
+    ) -> S where S: BorrowedType + Into<AtomicType> {
         if type_map.contains_key(&t) {
             let existing_type = type_map.get(&t).unwrap();
             return existing_type.clone();
@@ -362,7 +360,9 @@ impl ProgramAst {
                     let term = AtomicTerm::from_term_ast(&term_ast, &atomic_type_map);
                     if let AtomicTerm::Variable(v) = term {
                         // Create a constant from variable term with a nullary type.
-                        let constant = AtomicTerm::create_constant(v.root).into();
+                        let (constant_sort, constant) = AtomicTerm::create_constant(v.root);
+                        let native_sort: &Type = constant_sort.borrow();
+                        type_map.insert(format!("{}", constant_sort), native_sort.clone().into());
                         items.push(constant);
                     } else if let AtomicTerm::Atom(_) = term {
                         items.push(term);

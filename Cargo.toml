@@ -43,7 +43,7 @@ derivative = "2"
 # z3 = {version="0.5.0", features = ["static-link-z3"]}
 # fasthash = "0.4"
 fnv = "1"
-
+weak-table = "0.3.0"
 # clap = "2.33.0"
 # clap v3 is not quite compatible with clap v2 while the documentation is still on v2.
 # Here we use the github repo to get the latest clap v3.  
