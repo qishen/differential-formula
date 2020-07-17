@@ -42,7 +42,7 @@ impl<T> MetaInfo<T> where T: TermStructure
     /// instances of the same domain.
     pub fn rename(&self, scope: String) -> Self {
         let mut renamed_type_map = HashMap::new();
-        for (type_name, formula_type) in self.type_map.iter() {
+        for (_type_name, formula_type) in self.type_map.iter() {
             let formula_type = formula_type.clone();
             match formula_type.borrow() {
                 Type::BaseType(_) => {},
@@ -116,6 +116,99 @@ impl<T> MetaInfo<T> where T: TermStructure
     }
 }
 
+pub trait AccessModel {
+
+    type Output: TermStructure;
+
+    /// Return alias map.
+    fn alias_map(&self) -> &BiMap<Self::Output, Self::Output>;
+
+    /// Return all terms as references in a vector.
+    fn terms(&self) -> Vec<&Self::Output>;
+
+    /// Check if a term exists with term reference.
+    fn contains_term(&self, term: &Self::Output) -> bool;
+
+    /// Add a new term and return its integer id.
+    fn add_term(&mut self, term: Self::Output) -> &Self::Output;
+
+    /// Remove a term by looking up with term reference and return a tuple of id and term.
+    fn remove_term(&mut self, term: &Self::Output) -> Option<Self::Output>;
+}
+
+pub struct AtomicPtrTermStore {
+    // Map AtomicTerm to AtomicPtrTerm that contains a copy of itself.
+    term_map: HashMap<AtomicTerm, AtomicPtrTerm>,
+    // A bi-directional hash map that maps alias as variable term to another term.
+    alias_map: BiMap<AtomicPtrTerm, AtomicPtrTerm>
+}
+
+impl AtomicPtrTermStore {
+    pub fn new(terms: HashSet<AtomicTerm>, raw_alias_map: HashMap<AtomicTerm, AtomicTerm>) -> Self {
+        let mut term_map: HashMap<AtomicTerm, AtomicPtrTerm> = HashMap::new();
+        let mut alias_map: BiMap<AtomicPtrTerm, AtomicPtrTerm> = BiMap::new();
+
+        for atomic_term in terms {
+            term_map.insert(atomic_term.clone(), atomic_term.into());
+        }
+
+        for (key, val) in raw_alias_map {
+            let key_ptr = term_map.get(&key).unwrap();
+            let val_ptr = term_map.get(&val).unwrap();
+            alias_map.insert(key_ptr.clone(), val_ptr.clone());
+        }
+
+        AtomicPtrTermStore {
+            term_map,
+            alias_map,
+        }
+    }
+
+    /// Add AtomicTerm into the store and index it.
+    pub fn intern(&mut self, term: AtomicTerm) -> &AtomicPtrTerm {
+        if !self.term_map.contains_key(&term) {
+            let ptr_term: AtomicPtrTerm = term.clone().into();
+            let term_ref = term.clone(); // TODO: Remove the copy here.
+            self.term_map.insert(term, ptr_term); 
+            return self.term_map.get(&term_ref).unwrap();
+        } 
+        else { return self.term_map.get(&term).unwrap(); }
+    }
+}
+
+impl AccessModel for AtomicPtrTermStore {
+    
+    type Output = AtomicPtrTerm;
+
+    fn alias_map(&self) -> &BiMap<Self::Output, Self::Output> {
+        &self.alias_map
+    }
+
+    fn terms(&self) -> Vec<&Self::Output> {
+        let mut victor = vec![];
+        for (_, ptr_term) in self.term_map.iter() {
+            victor.push(ptr_term);
+        }
+        victor
+    }
+
+    fn contains_term(&self, term: &Self::Output) -> bool {
+        self.term_map.contains_key(term.ptr.as_ref())
+    }
+
+    fn add_term(&mut self, term: Self::Output) -> &Self::Output {
+        if !self.term_map.contains_key(term.ptr.as_ref()) {
+            let atomic_term = term.ptr.as_ref().clone();
+            self.term_map.insert(atomic_term.clone(), term); // TODO: Remove the copy here.
+            return self.term_map.get(&atomic_term).unwrap();
+        } 
+        else { return self.term_map.get(term.ptr.as_ref()).unwrap(); }
+    }
+
+    fn remove_term(&mut self, term: &Self::Output) -> Option<Self::Output> {
+        self.term_map.remove(term.ptr.as_ref())
+    }
+}
 
 /// ModelStore efficiently stores all terms indexed in two hash maps, the first one map an unique
 /// id to a term and the other one maps alias string to a term, while there is no specific requirement
@@ -123,7 +216,7 @@ impl<T> MetaInfo<T> where T: TermStructure
 /// in single thread scenario or just `Term` if you don't care about too many duplicates as long as it 
 /// implements the required traits that make it look like a term.
 #[derive(Clone, Debug)]
-pub struct ModelStore<T> where T: TermStructure {
+pub struct UUIdTermStore<T> where T: TermStructure {
     // Map each term to an unique id bi-directionally.
     term_map: BiMap<usize, T>,
     // Map alias string as a variable term to term.
@@ -132,7 +225,40 @@ pub struct ModelStore<T> where T: TermStructure {
     counter: usize,
 }
 
-impl<T> ModelStore<T> where T: TermStructure {
+impl<T> AccessModel for UUIdTermStore<T> where T: TermStructure {
+
+    type Output = T;
+
+    fn alias_map(&self) -> &BiMap<Self::Output, Self::Output> {
+        &self.alias_map
+    }
+
+    fn terms(&self) -> Vec<&Self::Output> {
+        self.term_map.right_values().collect()
+    }
+
+    fn contains_term(&self, term: &Self::Output) -> bool {
+        self.term_map.contains_right(term)
+    }
+
+    fn add_term(&mut self, term: T) -> &Self::Output {
+        if !self.term_map.contains_right(&term) {
+            let id = self.counter;
+            self.term_map.insert(id, term.clone()); // TODO: Remove the copy here.
+            self.counter += 1;
+        }
+        let tid = self.term_map.get_by_right(&term).unwrap();
+        return self.term_map.get_by_left(&tid).unwrap();
+    }
+
+    fn remove_term(&mut self, term: &T) -> Option<Self::Output>{
+        if self.term_map.contains_right(term) {
+            return self.term_map.remove_by_right(term).map(|(_id, term)| term);
+        } else { return None; }
+    }
+}
+
+impl<T> UUIdTermStore<T> where T: TermStructure {
     pub fn new(terms: HashSet<T>, alias_map: HashMap<T, T>) -> Self {
         let mut counter = 0;
         let mut term_map = BiMap::new();
@@ -146,7 +272,7 @@ impl<T> ModelStore<T> where T: TermStructure {
             alias_bimap.insert(k, v);
         }
 
-        ModelStore {
+        UUIdTermStore {
             term_map,
             alias_map: alias_bimap,
             counter
@@ -163,7 +289,7 @@ impl<T> ModelStore<T> where T: TermStructure {
         }
 
         for term_ref in self.terms().into_iter() {
-            let mut renamed_term = term_ref.clone();
+            let renamed_term = term_ref.clone();
             renamed_term.rename(scope.clone(), &mut type_set);
             renamed_terms.insert(renamed_term);
         }
@@ -174,53 +300,14 @@ impl<T> ModelStore<T> where T: TermStructure {
             renamed_alias_map.insert(new_key, new_val);
         }
 
-        ModelStore::new(renamed_terms, renamed_alias_map)
-    }
-
-    // Return alias map.
-    pub fn alias_map(&self) -> &BiMap<T, T> {
-        &self.alias_map
-    }
-
-    // Return all terms as references in a vector.
-    pub fn terms(&self) -> Vec<&T> {
-        self.term_map.right_values().collect()
-    }
-
-    // Check if a term exists with term reference.
-    pub fn contains_term(&self, term: &T) -> bool {
-        self.term_map.contains_right(term)
-    }
-
-    /// Add a new term and return its integer id.
-    pub fn add_term(&mut self, term: T) -> usize {
-        // Don't insert if the term is found in the map.
-        if self.term_map.contains_right(&term) {
-            return *self.term_map.get_by_right(&term).unwrap();
-        }
-        // Increment the counter after insertion.
-        let id = self.counter;
-        self.term_map.insert(id, term);
-        self.counter += 1;
-        return id;
-    }
-
-    /// Remove a term by looking up with term reference and return a tuple of id and term.
-    pub fn remove_term(&mut self, term: &T) -> Option<(usize, T)>{
-        if self.term_map.contains_right(term) {
-            return self.term_map.remove_by_right(term);
-        } else {
-            return None;
-        }
+        UUIdTermStore::new(renamed_terms, renamed_alias_map)
     }
 
     /// Remove a term by looking up with id and return a tuple of id and term.
     pub fn remove_term_by_id(&mut self, id: usize) -> Option<(usize, T)> {
         if self.term_map.contains_left(&id) {
             return self.term_map.remove_by_left(&id);
-        } else {
-            return None;
-        }
+        } else { return None; }
     }
 
     /// Return a term reference by looking up its id.
@@ -255,7 +342,7 @@ pub struct Transform<T> where T: TermStructure {
     // Meta information including the ones from input and output domains.
     pub metainfo: MetaInfo<T>,
     // Store terms defined in the transform module.
-    pub store: ModelStore<T>,
+    pub store: UUIdTermStore<T>,
     // A list of strings representing the Ids of params.
     pub params: Vec<String>,
     // Some parameters in transform are terms.
@@ -276,7 +363,7 @@ impl<T> Transform<T> where T: TermStructure {
         output_domain_map: HashMap<String, Domain<T>>, 
         terms: HashSet<T>
     ) -> Self {
-        let store = ModelStore::new(terms, HashMap::new());
+        let store = UUIdTermStore::new(terms, HashMap::new());
         let metainfo = MetaInfo::new(type_map, rules);
         
         Transform {
@@ -315,7 +402,7 @@ pub struct Transformation<T> where T: TermStructure {
     // Meta model information.
     pub metainfo: MetaInfo<T>,
     // Term store.
-    pub store: ModelStore<T>,
+    pub store: UUIdTermStore<T>,
     // The domain of Transformation.
     pub transform: Transform<T>,
     // Map string to term which is an input param.
@@ -334,7 +421,7 @@ impl<T> FormulaModule<T> for Transformation<T> where T: TermStructure
         // Includes all terms in submodels and terms defined in Transform.
         let mut merged_terms = vec![];
 
-        for (id, model) in self.input_model_map.iter() {
+        for (_id, model) in self.input_model_map.iter() {
             for term_ref in model.terms() {
                 merged_terms.push(term_ref);
             }
@@ -404,10 +491,10 @@ impl<T> Transformation<T> where T: TermStructure {
         }
 
         // Rename all input models.
-        for (id, model) in input_model_map.into_iter() {
+        //for (id, model) in input_model_map.into_iter() {
             // let renamed_model = model.rename(id.clone(), metainfo.type_map());
             // renamed_input_model_map.insert(id, renamed_model);
-        }
+        //}
 
         // Replace parameter like %id in transform rules with term from `input_term_map`.
         for (key, replacement) in input_term_map.iter() {
@@ -460,7 +547,7 @@ impl<T> Domain<T> where T: TermStructure {
 
     pub fn rename(&self, scope: String) -> Self {
         let mut renamed_type_map = HashMap::new();
-        for (type_name, formula_type) in self.metainfo.type_map.iter() {
+        for (_type_name, formula_type) in self.metainfo.type_map.iter() {
             let formula_type = formula_type.clone();
             match formula_type.borrow() {
                 Type::BaseType(_) => {},
@@ -488,7 +575,7 @@ pub struct Model<T> where T: TermStructure {
     // Meta info and rules that terms in the model need to conform.
     metainfo: MetaInfo<T>,
     // A model store with generic term type.
-    store: ModelStore<T>,
+    store: UUIdTermStore<T>,
 }
 
 impl<T> FormulaModule<T> for Model<T> where T: TermStructure {
@@ -509,7 +596,7 @@ impl<T> Model<T> where T: TermStructure {
     /// Provide domain, terms and alias mapping to create a new model.
     pub fn new(name: String, domain: &Domain<T>, terms: HashSet<T>, alias_map: HashMap<T, T>) -> Self {
         let metainfo = domain.metainfo.clone();
-        let store = ModelStore::new(terms, alias_map);
+        let store = UUIdTermStore::new(terms, alias_map);
 
         Model { 
             name, 
@@ -519,7 +606,7 @@ impl<T> Model<T> where T: TermStructure {
     }
 
     /// Return a model store reference
-    pub fn model_store(&self) -> &ModelStore<T> {
+    pub fn model_store(&self) -> &UUIdTermStore<T> {
         &self.store
     }
 
