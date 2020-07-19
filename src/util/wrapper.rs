@@ -150,7 +150,7 @@ impl<U: Hash, T> Hash for UniqueFormWrapper<U, T> where T: HasUniqueForm<U> {
 }
 
 /// `AtomicPtrWrapper` is a simple wrapper over atomic reference of certain type.
-#[derive(PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct AtomicPtrWrapper<T> {
     pub ptr: Arc<T>
 }
@@ -168,17 +168,42 @@ impl<T> Debug for AtomicPtrWrapper<T> where T: Debug {
     }
 }
 
-// Compute hash on the pointer address rather than the value.
-impl<T> Hash for AtomicPtrWrapper<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        std::ptr::hash(&self.ptr, state)
+impl<T> PartialOrd for AtomicPtrWrapper<T> where T: Ord {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
+impl<T> Ord for AtomicPtrWrapper<T> where T: Ord {
+    fn cmp(&self, other: &Self) -> Ordering {
+        //Ordering::Equal // Don't care about ordering.
+        if Arc::ptr_eq(&self.ptr, &other.ptr) {
+            return Ordering::Equal;
+        }
+        self.ptr.cmp(&other.ptr)
+    }
+}
+
+// Compute hash on the pointer address of the inner value rather than the value itself.
+impl<T> Hash for AtomicPtrWrapper<T> where T: Hash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // IMPORTANT: Change to pointer hashing may have unexpected consequences in situations like
+        // when try to find if a AtomicTerm (which has AtomicPtrTerm inside as arguments) is in the 
+        // hash map because they return different hash values even for the same terms that should be
+        // equal but with different allocations on some of the fields.
+        //std::ptr::hash(&self.ptr.as_ref(), state)
+        self.ptr.as_ref().hash(state)
+    }
+}
+
+impl<T> Eq for AtomicPtrWrapper<T> where T: Eq {}
+
 // Decide equality by pointer rather than the value.
-impl<T> PartialEq for AtomicPtrWrapper<T> {
+impl<T> PartialEq for AtomicPtrWrapper<T> where T: PartialEq {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.ptr, &other.ptr)
+        //Arc::ptr_eq(&self.ptr, &other.ptr)
+        //std::ptr::eq(self.ptr.as_ref(), other.ptr.as_ref())
+        self.ptr.as_ref() == other.ptr.as_ref()
     }
 }
 

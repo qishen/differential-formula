@@ -137,7 +137,9 @@ pub trait AccessModel {
 }
 
 pub struct AtomicPtrTermStore {
-    // Map AtomicTerm to AtomicPtrTerm that contains a copy of itself.
+    // Map AtomicTerm to AtomicPtrTerm that contains a copy of itself. The map maintain a copy of 
+    // redundant data because some methods require the store to return a reference of the atomic
+    // pointer term instead of value, otherwise a hashset of Arc<AtomicTerm> is enough.
     term_map: HashMap<AtomicTerm, AtomicPtrTerm>,
     // A bi-directional hash map that maps alias as variable term to another term.
     alias_map: BiMap<AtomicPtrTerm, AtomicPtrTerm>
@@ -164,8 +166,13 @@ impl AtomicPtrTermStore {
         }
     }
 
-    /// Add AtomicTerm into the store and index it.
+    /// Add AtomicTerm into the store and index it in the hashmap
     pub fn intern(&mut self, term: AtomicTerm) -> &AtomicPtrTerm {
+        // IMPORTANT! Change the default hash implementation of AtomicPtrTerm from value to pointer comparison
+        // may cause error when hash an AtomicTerm which may contains AtomicPtrTerm. e.g. Two `Node(1)` AtomicTerm
+        // have AtomicPtrTerm(1) as their arguments but with different allocations for the integer, then the hash
+        // value for two AtomicPtrTerm(1) are actually different so even the hash map has the key but still tell you
+        // no because the hash values don't match.
         if !self.term_map.contains_key(&term) {
             let ptr_term: AtomicPtrTerm = term.clone().into();
             let term_ref = term.clone(); // TODO: Remove the copy here.

@@ -4,11 +4,11 @@ use crate::util::map::*;
 
 mod atomic;
 mod generic;
-mod indexed_term;
+mod matches;
 
 pub use atomic::*;
 pub use generic::*;
-pub use indexed_term::*;
+pub use matches::*;
 pub use crate::type_system::*;
 
 /// `TermStructure` trait must be implemented before implementing `VisitTerm` trait because

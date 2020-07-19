@@ -366,6 +366,13 @@ impl From<&str> for AtomicTerm {
     }
 }
 
+impl From<usize> for AtomicTerm {
+    fn from(item: usize) -> Self {
+        let atom_enum = AtomEnum::Int(num::BigInt::from(item));
+        AtomicTerm::create_atom_term(None, atom_enum)
+    }
+}
+
 impl HasUniqueForm<String> for AtomicTerm {
     fn derive_unique_form(&self) -> String {
         match self {

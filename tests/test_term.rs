@@ -81,6 +81,11 @@ fn test_term_bindings() {
     let two_edge_x_y = model.model_store().get_term_by_alias(&"tev1".into());
 
     println!("// -------- Test Term Equality -------- //");
+    // Two different variable terms converted from strings.
+    let a: AtomicTerm = "a".into();
+    let b: AtomicTerm = "b".into();
+    assert_ne!(a, b);
+
     // A clone of AtomicTerm is equal to itself.
     let node1_copy = node1.clone();
     assert_eq!(node1, &node1_copy);
@@ -94,6 +99,8 @@ fn test_term_bindings() {
 
     // Without alias.
     let mut node1_no_alias = session.create_term("Node(1)").unwrap();
+    let node1_no_aliasx = session.create_term("Node(1)").unwrap();
+    assert_eq!(node1_no_alias, node1_no_aliasx);
     assert_eq!(node1, &node1_no_alias);
 
     // Add random alias to `n1y` and see if it's still equal to `n1`.
