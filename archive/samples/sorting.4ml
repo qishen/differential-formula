@@ -11,3 +11,7 @@ domain Sorting {
     trace(W, Y, X, Z) :- trace(W, X, Y, Z), X >Y.
     trace(W, X, Z, Y) :- trace(W, X, Y, Z), Y >Z.
 }
+
+model m of Sorting {
+    input(3,2,6,5).
+}
