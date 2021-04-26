@@ -1,0 +1,36 @@
+domain Maze {
+    Val ::= Coord + { XC, YC }. 
+    Coord ::= { 0..3 }.
+
+    Walls ::= new (Pred). 
+    Start ::= new (Loc). 
+    Not ::= new (Pred). 
+    And ::= new (any Pred, any Pred). 
+    LEq ::= new (any Val, any Val). 
+    Loc ::= new (any Coord, any Coord). 
+    Pred ::= Not + And + GEq + LEq + Boolean.
+
+    Rch ::= (Loc). 
+    Hrz ::= (Loc). 
+    Sub ::= (Pred + Val). 
+    EvlPred ::= (Loc, Pred, Boolean). 
+    EvlVal ::= (Loc, Val, { 0..3 }). 
+
+    Sub(p) :- Walls(p); Sub(Not(p)). 
+    Sub(p), Sub(p') :- Sub(And(p, p')); Sub(GEq(p, p')); Sub(LEq(p, p')).
+    EvlVal(Loc(x, y), v, c) :- Hrz(Loc(x, y)), Sub(v), v : Coord, c = v; 
+                               Hrz(Loc(x, y)), Sub(v), v = XC, c = x; 
+                               Hrz(Loc(x, y)), Sub(v), v = YC, c = y.
+                               
+    EvlPred(l, p, TRUE) :- Hrz(l), p = TRUE. 
+    EvlPred(l, p, TRUE) :- Sub(p), p = Not(p'), EvlPred(l, p', FALSE). 
+    EvlPred(l, p, TRUE) :- Sub(p), p = And(p', p''), EvlPred(l, p', TRUE), EvlPred(l, p'', TRUE).
+    EvlPred(l, p, TRUE) :- Sub(p), p = LEq(u, v), EvlVal(l, u, c), EvlVal(l, v, d), c <= d.
+}
+
+model m1 of Maze {
+    Start(Loc(0, 0)). 
+    Start(Loc(3, 3)). 
+    
+    Walls(And(LEq(3, XC), LEq(XC, 2))). 
+}
