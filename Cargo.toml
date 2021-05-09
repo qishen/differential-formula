@@ -16,7 +16,7 @@ exclude = [
 [dependencies]
 abomonation = "0.7.3"
 abomonation_derive = "0.5.0"
-bimap = "0.4.0"
+bimap = "0.6.1"
 
 # Enable `bincode` feature to use serde instead of Abomonation for serialization.
 # timely = { version = "0.11.1", features = ["bincode"] } 
@@ -30,10 +30,16 @@ timely_sort = "0.1.6"
 # differential-dataflow = "0.11.0"
 differential-dataflow = { path = "../differential-dataflow" }
 # differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git", branch = "add-serde-fields" }
+
+# Import a local differential-datalog library.
+differential_datalog = { path = "../differential-datalog/rust/template/differential_datalog" }
+differential_datalog_test = { path = "../differential-datalog/rust/template/differential_datalog_test" }
+
 rand = "0.4"
 enum_dispatch = "0.3.1"
 nom = "5"
-num = { version = "0.2", features = ["serde"] }
+num = { version = "0.3", features = ["serde"] }
+ordered-float = { version = "2.0.0", features = ["serde"] }
 im = { version = "14", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc", "std"] }
 readonly = "0.1"
