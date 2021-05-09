@@ -66,14 +66,16 @@ impl<T> Expression for SetComprehension<T> where T: TermStructure {
     type TermOutput = T;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
-        let mut vars = self.vars.variables();
-        vars.extend(self.condition.variables());
-        vars
+        // let mut vars = self.vars.variables();
+        // vars.extend(self.condition.variables());
+        // vars
+        unimplemented!()
     }
 
     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        self.vars.replace_pattern(pattern, replacement);
-        self.condition.replace_pattern(pattern, replacement);
+        // self.vars.replace_pattern(pattern, replacement);
+        // self.condition.replace_pattern(pattern, replacement);
+        unimplemented!()
     }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
@@ -83,7 +85,8 @@ impl<T> Expression for SetComprehension<T> where T: TermStructure {
         // let var = generator.generate_dc_term();
         // Set comprehension may have set comprehension expression inside itself.
         // TODO: convert it to a rule and do some changes.
-        self.condition.replace_set_comprehension(generator)
+        // self.condition.replace_set_comprehension(generator)
+        unimplemented!()
     }
 }
 

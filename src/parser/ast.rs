@@ -1,6 +1,7 @@
 use std::collections::*;
+use std::iter::*;
 use std::sync::Arc;
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use num::*;
 
 use crate::term::*;
@@ -13,11 +14,72 @@ use crate::util::*;
 use crate::util::map::*;
 use crate::util::wrapper::*;
 
+use differential_datalog::record::*;
+
 // #[enum_dispatch]
 // trait TermAstBehavior {}
 // impl TermAstBehavior for CompositeTermAst {}
 // impl TermAstBehavior for VariableTermAst {}
 // impl TermAstBehavior for AtomEnum {}
+
+
+// TermAst can be turned into a DDLog record only with `MetaInfo` domain information.  
+// fn into_ddlog_record<T: TermStructure>(term_ast: &'static TermAst, metainfo: &MetaInfo<T>) -> Record {
+//     let dd_record = match term_ast {
+//         TermAst::AtomTermAst(atom) => {
+//             atom.clone().into_record()
+//         },
+//         TermAst::CompositeTermAst(composite_ast) => {
+//             // let mut term_arguments = vec![];
+//             // for argument in &composite_ast.arguments {
+//             //     let atomic_term = into_ddlog_record(argument.as_ref(), metainfo);
+//             //     term_arguments.push(atomic_term);
+//             // }
+//             let term_arguments: Vec<Record> = composite_ast.arguments.iter().map(|arg_ast| { 
+//                 into_ddlog_record(arg_ast.as_ref(), metainfo)
+//             }).collect();
+//             // let type_name = metainfo.get_type_by_name(&composite_ast.sort.name().unwrap());
+//             // The type name can only be the name of specific composite type.
+//             let type_name = composite_ast.sort.name().unwrap();
+//             Record::PosStruct(Cow::from(type_name), term_arguments)
+//         },
+//         TermAst::VariableTermAst(variable_ast) => {
+//             // TODO: It could be symbolic value too.
+//             Record::Variable(Cow::from(&variable_ast.root))
+//         }
+//     };
+//     dd_record
+// }
+
+// Translate `TermAst` into ddlog `Record` without context of type information.
+impl IntoRecord for TermAst {
+    fn into_record(self) -> Record {
+        let dd_record = match self {
+            TermAst::AtomTermAst(atom) => {
+                // TODO: Use internment when the data is large like a big string.
+                atom.clone().into_record()
+            },
+            TermAst::CompositeTermAst(composite_ast) => {
+                // TODO: Too much deep copy here. 
+                // 1. Copy of subtree for each layer of traversal
+                // 2. The type name could be Cow<&'static str> to save more memory.
+                let term_arguments: Vec<Record> = composite_ast.arguments.iter().map(|argument_ast| { 
+                    // into_ddlog_record(arg_ast.as_ref(), metainfo)
+                    argument_ast.as_ref().clone().into_record()
+                }).collect();
+                // The type name can only be the name of specific composite type, which is the relation
+                // name in ddlog.
+                let type_name = composite_ast.sort.name().unwrap();
+                Record::PosStruct(Cow::from(type_name), term_arguments)
+            },
+            TermAst::VariableTermAst(variable_ast) => {
+                // TODO: It could be symbolic value too.
+                Record::Variable(Cow::from(variable_ast.root))
+            }
+        };
+        dd_record
+    }
+}
 
 // #[enum_dispatch(TermAstBehavior)]
 #[derive(Debug, Clone)]
@@ -29,7 +91,7 @@ pub enum TermAst {
 
 #[derive(Debug, Clone)]
 pub struct CompositeTermAst {
-    pub sort: TypeDefAst,
+    pub sort: RawTypeDefAst,
     pub arguments: Vec<Box<TermAst>>,
     pub alias: Option<String>
 }
@@ -45,7 +107,7 @@ pub trait TypeDefAstBehavior {
 }
 
 #[derive(Debug, Clone)]
-pub enum TypeDefAst {
+pub enum RawTypeDefAst {
     AliasTypeDefAst(AliasTypeDefAst),
     CompositeTypeDefAst(CompositeTypeDefAst),
     UnionTypeDefAst(UnionTypeDefAst),
@@ -53,14 +115,14 @@ pub enum TypeDefAst {
     EnumTypeDefAst(EnumTypeDefAst),
 }
 
-impl TypeDefAstBehavior for TypeDefAst {
+impl TypeDefAstBehavior for RawTypeDefAst {
     fn name(&self) -> Option<String> {
         match self {
-            TypeDefAst::AliasTypeDefAst(a) => a.name(),
-            TypeDefAst::CompositeTypeDefAst(a) => a.name(),
-            TypeDefAst::UnionTypeDefAst(a) => a.name(),
-            TypeDefAst::RangeTypeDefAst(a) => a.name(),
-            TypeDefAst::EnumTypeDefAst(a) => a.name(),
+            RawTypeDefAst::AliasTypeDefAst(a) => a.name(),
+            RawTypeDefAst::CompositeTypeDefAst(a) => a.name(),
+            RawTypeDefAst::UnionTypeDefAst(a) => a.name(),
+            RawTypeDefAst::RangeTypeDefAst(a) => a.name(),
+            RawTypeDefAst::EnumTypeDefAst(a) => a.name(),
         }
     }
 }
@@ -83,7 +145,7 @@ impl TypeDefAstBehavior for AliasTypeDefAst {
 #[derive(Debug, Clone)]
 pub struct CompositeTypeDefAst {
     pub name: String,
-    pub args: Vec<(Option<String>, Box<TypeDefAst>)>,
+    pub args: Vec<(Option<String>, Box<RawTypeDefAst>)>,
 }
 
 impl TypeDefAstBehavior for CompositeTypeDefAst {
@@ -96,7 +158,7 @@ impl TypeDefAstBehavior for CompositeTypeDefAst {
 #[derive(Debug, Clone)]
 pub struct UnionTypeDefAst {
     pub name: Option<String>,
-    pub subtypes: Vec<Box<TypeDefAst>>,
+    pub subtypes: Vec<Box<RawTypeDefAst>>,
 }
 
 impl TypeDefAstBehavior for UnionTypeDefAst {
@@ -134,7 +196,7 @@ impl TypeDefAstBehavior for EnumTypeDefAst {
 
 #[derive(Clone, Debug)]
 pub enum ModuleSentenceAst {
-    Type(TypeDefAst),
+    Type(RawTypeDefAst),
     Rule(RuleAst),
     Term(TermAst),
 }
@@ -155,7 +217,7 @@ pub struct TaggedDomainAst {
 #[derive(Clone, Debug)]
 pub struct TaggedTypeAst {
     pub tag: String,
-    pub formula_type: TypeDefAst,
+    pub formula_type: RawTypeDefAst,
 }
 
 #[derive(Clone, Debug)]
@@ -169,7 +231,7 @@ pub struct TransformAst {
     pub transform_name: String, 
     pub inputs: Vec<TransformParamAst>,
     pub output: Vec<TaggedDomainAst>, 
-    pub typedefs: Vec<TypeDefAst>,
+    pub typedefs: Vec<RawTypeDefAst>,
     pub rules: Vec<RuleAst>,
     pub terms: Vec<TermAst>,
 }
@@ -184,7 +246,7 @@ pub struct TransformationAst {
 #[derive(Clone, Debug)]
 pub struct DomainAst {
     pub name: String,
-    pub types: Vec<TypeDefAst>,
+    pub types: Vec<RawTypeDefAst>,
     pub rules: Vec<RuleAst>,
     // includes or extends [scope :: subdomain]
     pub inherit_type: String,
@@ -211,30 +273,29 @@ pub struct ProgramAst {
 }
 
 impl ProgramAst {
-    pub fn build_env<T>(&self) -> Env<T> 
-    where 
-        T: TermStructure, 
-        T::SortOutput: Into<AtomicType>
-    {
+    pub fn build_env<T>(&self) -> Env<T> where T: TermStructure {
         let mut domain_map = HashMap::new();
         let mut model_map = HashMap::new();
         let mut transform_map = HashMap::new();
 
+        // Recursively build domains in the program.
         for domain_name in self.domain_ast_map.keys() {
             self.create_domain(domain_name.clone(), &mut domain_map);
         }
 
+        // Build models based on the type information from domains.
         for model_name in self.model_ast_map.keys() {
             self.create_model(model_name.clone(), &mut model_map, &domain_map);
         }
 
-        for transform_name in self.transform_ast_map.keys() {
-            self.create_transform(
-                transform_name.clone(), 
-                &mut transform_map, 
-                &mut domain_map
-            );
-        }
+        // Build transformation based on the type informaton from daomins.
+        // for transform_name in self.transform_ast_map.keys() {
+        //     self.create_transform(
+        //         transform_name.clone(), 
+        //         &mut transform_map, 
+        //         &mut domain_map
+        //     );
+        // }
 
         Env {
             domain_map,
@@ -245,12 +306,12 @@ impl ProgramAst {
 
     /// Recursively create atomic type `AtomicStrType`, add the new created type into the type map
     /// and return the new created type or just return what already exists in the type map.
-    fn create_atomic_type<S>(
+    fn create_raw_type(
         &self, t: String, 
-        ast_map: &mut HashMap<String, TypeDefAst>,      // Only has type ASTs in current domain.
-        type_map: &mut HashMap<String, S>,  // Recursively put new created type into type map.
+        ast_map: &mut HashMap<String, RawTypeDefAst>,      // Only has type ASTs in current domain.
+        type_map: &mut HashMap<String, RawType>,  // Recursively put new created type into type map.
         generator: &mut NameGenerator,
-    ) -> S where S: BorrowedType + Into<AtomicType> {
+    ) -> RawType {
         if type_map.contains_key(&t) {
             let existing_type = type_map.get(&t).unwrap();
             return existing_type.clone();
@@ -258,16 +319,16 @@ impl ProgramAst {
 
         let type_ast = ast_map.get(&t).unwrap();
         let new_type = match type_ast.clone() {
-            TypeDefAst::AliasTypeDefAst(aliastypedef) => {
+            RawTypeDefAst::AliasTypeDefAst(aliastypedef) => {
                 // At this point, type from subdomains should be available in `type_map`.
                 let full_name = aliastypedef.name().unwrap();
                 if type_map.contains_key(&full_name) {
                     type_map.get(&full_name).unwrap().clone()
                 } else {
-                    self.create_atomic_type(full_name, ast_map, type_map, generator)
+                    self.create_raw_type(full_name, ast_map, type_map, generator)
                 }
             },
-            TypeDefAst::CompositeTypeDefAst(ctypedef) => {
+            RawTypeDefAst::CompositeTypeDefAst(ctypedef) => {
                 let mut args = vec![];
                 let typename = ctypedef.name().unwrap();
                 for (id_opt, arg_ast) in ctypedef.args.iter() {
@@ -286,7 +347,7 @@ impl ProgramAst {
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
                         None => { 
-                            self.create_atomic_type(name, ast_map, type_map, generator)
+                            self.create_raw_type(name, ast_map, type_map, generator)
                         }
                     };
 
@@ -295,7 +356,7 @@ impl ProgramAst {
                     args.push(arg);
                 }
 
-                let composite_type = Type::CompositeType(
+                let composite_type = RawType::CompositeType(
                     CompositeType {
                         name: typename,
                         arguments: args,
@@ -304,7 +365,7 @@ impl ProgramAst {
 
                 composite_type.into()
             },
-            TypeDefAst::UnionTypeDefAst(utypedef) => {
+            RawTypeDefAst::UnionTypeDefAst(utypedef) => {
                 let mut subtypes = vec![];
                 let typename = match utypedef.name() {
                     Some(name) => name,
@@ -331,14 +392,14 @@ impl ProgramAst {
                     let subtype_opt = type_map.get(&name);
                     let subtype = match subtype_opt {
                         Some(t) => { t.clone() },
-                        None => { self.create_atomic_type(name, ast_map, type_map, generator) }
+                        None => { self.create_raw_type(name, ast_map, type_map, generator) }
                     };
 
                     // Convert from associated type into AtomicType.
                     subtypes.push(subtype.into());
                 }
 
-                let union_type = Type::UnionType(
+                let union_type = RawType::UnionType(
                     UnionType {
                         name: typename,
                         subtypes: subtypes,
@@ -347,10 +408,10 @@ impl ProgramAst {
                 
                 union_type.into()
             },
-            TypeDefAst::EnumTypeDefAst(etypedef) => {
+            RawTypeDefAst::EnumTypeDefAst(etypedef) => {
                 let mut items = vec![];
                 // Convert generic type map into atomic type map only for EnumType.
-                let mut atomic_type_map: HashMap<String, AtomicType> = HashMap::new();
+                let mut atomic_type_map: HashMap<String, RawType> = HashMap::new();
                 for (key, val) in type_map.iter() {
                     atomic_type_map.insert(key.clone(), val.clone().into());
                 }
@@ -361,7 +422,7 @@ impl ProgramAst {
                     if let AtomicTerm::Variable(v) = term {
                         // Create a constant from variable term with a nullary type.
                         let (constant_sort, constant) = AtomicTerm::create_constant(v.root);
-                        let native_sort: &Type = constant_sort.borrow();
+                        let native_sort: &RawType = constant_sort.borrow();
                         type_map.insert(format!("{}", constant_sort), native_sort.clone().into());
                         items.push(constant);
                     } else if let AtomicTerm::Atom(_) = term {
@@ -379,7 +440,7 @@ impl ProgramAst {
                     }
                 };
 
-                let enum_type = Type::EnumType(EnumType { name, items });
+                let enum_type = RawType::EnumType(EnumType { name, items });
                 enum_type.into()
             },
             _ => { 
@@ -387,168 +448,161 @@ impl ProgramAst {
             }
         };
 
-        // Add new type to the type map.
         type_map.insert(t, new_type.clone());
         return new_type;
     }
 
-    pub fn import_builtin_types<S: BorrowedType>(&self, type_map: &mut HashMap<String, S>) {
+    pub fn import_builtin_types(&self, type_map: &mut HashMap<String, RawType>) {
         // TODO: There are more types to add here.
-        let string_type = Type::BaseType(BaseType::String);
-        let integer_type = Type::BaseType(BaseType::Integer);
-        let bool_type = Type::BaseType(BaseType::Boolean);
-        let undefined_type = Type::undefined();
+        let string_type = RawType::BaseType(BaseType::String);
+        let integer_type = RawType::BaseType(BaseType::Integer);
+        let bool_type = RawType::BaseType(BaseType::Boolean);
+        let undefined_type = RawType::undefined();
         type_map.insert("String".to_string(), string_type.into());
         type_map.insert("Integer".to_string(), integer_type.into());
         type_map.insert("Boolean".to_string(), bool_type.into());
         type_map.insert("~Undefined".to_string(), undefined_type.into());
     }
 
-    pub fn create_transform<T>(
-        &self, transform_name: String, 
-        transform_map: &mut HashMap<String, Transform<T>>,
-        domain_map: &mut HashMap<String, Domain<T>>
-    ) -> Transform<T> 
-    where 
-        T: TermStructure, 
-        T::SortOutput: Into<AtomicType>
-    {
-        if transform_map.contains_key(&transform_name) {
-            return transform_map.get(&transform_name).unwrap().clone();
-        }
+    // pub fn create_transform<T>(
+    //     &self, transform_name: String, 
+    //     transform_map: &mut HashMap<String, Transform<T>>,
+    //     domain_map: &mut HashMap<String, Domain<T>>
+    // ) -> Transform<T> where T: TermStructure {
+    //     if transform_map.contains_key(&transform_name) {
+    //         return transform_map.get(&transform_name).unwrap().clone();
+    //     }
 
-        let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", transform_name)[..]);
+    //     let mut generator = NameGenerator::new(&format!("{}_AUTOTYPE", transform_name)[..]);
 
-        // Those are the params and returns for transform(x1, x2 ... x3) -> (y1, y2, y3)
-        let mut input_type_map = HashMap::new();
-        let mut input_domain_map = HashMap::new();
-        let mut output_domain_map = HashMap::new();
+    //     // Those are the params and returns for transform(x1, x2 ... x3) -> (y1, y2, y3)
+    //     let mut input_type_map = HashMap::new();
+    //     let mut input_domain_map = HashMap::new();
+    //     let mut output_domain_map = HashMap::new();
 
-        let transform_ast = self.transform_ast_map.get(&transform_name).unwrap();
+    //     let transform_ast = self.transform_ast_map.get(&transform_name).unwrap();
 
-        let mut params = vec![];
-        let mut input_type_ast_map = HashMap::new();
-        let mut tagged_domain_asts = vec![];
+    //     let mut params = vec![];
+    //     let mut input_type_ast_map = HashMap::new();
+    //     let mut tagged_domain_asts = vec![];
 
-        // Need to store the position of each param in transformation.
-        for param in transform_ast.inputs.iter() {
-            match param {
-                TransformParamAst::TaggedDomain(d) => {
-                    params.push(d.tag.clone());
-                },
-                TransformParamAst::TaggedType(t) => {
-                    params.push(t.tag.clone());
-                }
-            }
-        }
+    //     // Need to store the position of each param in transformation.
+    //     for param in transform_ast.inputs.iter() {
+    //         match param {
+    //             TransformParamAst::TaggedDomain(d) => {
+    //                 params.push(d.tag.clone());
+    //             },
+    //             TransformParamAst::TaggedType(t) => {
+    //                 params.push(t.tag.clone());
+    //             }
+    //         }
+    //     }
 
-        for output_tagged_domain_ast in transform_ast.output.clone() {
-            // Find the domain and add it as one of the params for transform's output.
-            let tag = output_tagged_domain_ast.tag.clone();
-            let domain_name = output_tagged_domain_ast.domain.clone();
-            let domain = self.create_domain(domain_name.clone(), domain_map);
-            output_domain_map.insert(domain_name, domain);
-            tagged_domain_asts.push(output_tagged_domain_ast);
-        }
+    //     for output_tagged_domain_ast in transform_ast.output.clone() {
+    //         // Find the domain and add it as one of the params for transform's output.
+    //         let tag = output_tagged_domain_ast.tag.clone();
+    //         let domain_name = output_tagged_domain_ast.domain.clone();
+    //         let domain = self.create_domain(domain_name.clone(), domain_map);
+    //         output_domain_map.insert(domain_name, domain);
+    //         tagged_domain_asts.push(output_tagged_domain_ast);
+    //     }
 
-        for input in transform_ast.inputs.clone() {
-            match input {
-                TransformParamAst::TaggedDomain(input_tagged_domain_ast) => {
-                    let tag = input_tagged_domain_ast.tag.clone();
-                    let domain_name = input_tagged_domain_ast.domain.clone();
-                    let domain = self.create_domain(domain_name.clone(), domain_map);
-                    input_domain_map.insert(domain_name, domain);
-                    tagged_domain_asts.push(input_tagged_domain_ast);
-                },
-                TransformParamAst::TaggedType(tagged_type) => {
-                    //let type_ast = tagged_type.formula_type;
-                    input_type_ast_map.insert(tagged_type.tag.clone(), tagged_type.formula_type.clone());
-                }
-            }
-        }
+    //     for input in transform_ast.inputs.clone() {
+    //         match input {
+    //             TransformParamAst::TaggedDomain(input_tagged_domain_ast) => {
+    //                 let tag = input_tagged_domain_ast.tag.clone();
+    //                 let domain_name = input_tagged_domain_ast.domain.clone();
+    //                 let domain = self.create_domain(domain_name.clone(), domain_map);
+    //                 input_domain_map.insert(domain_name, domain);
+    //                 tagged_domain_asts.push(input_tagged_domain_ast);
+    //             },
+    //             TransformParamAst::TaggedType(tagged_type) => {
+    //                 //let type_ast = tagged_type.formula_type;
+    //                 input_type_ast_map.insert(tagged_type.tag.clone(), tagged_type.formula_type.clone());
+    //             }
+    //         }
+    //     }
 
-        // Include all types from inputs, output and ones defined in transformation.
-        let mut type_map = HashMap::new();
-        self.import_builtin_types(&mut type_map);
+    //     // Include all types from inputs, output and ones defined in transformation.
+    //     let mut type_map = HashMap::new();
+    //     self.import_builtin_types(&mut type_map);
 
-        // Get all type maps from each domain and merge them together with renamed types.
-        for tagged_domain_ast in tagged_domain_asts.iter() {
-            let tag = tagged_domain_ast.tag.clone();
-            let domain_name = tagged_domain_ast.domain.clone();
-            let domain = self.create_domain(domain_name, domain_map);
+    //     // Get all type maps from each domain and merge them together with renamed types.
+    //     for tagged_domain_ast in tagged_domain_asts.iter() {
+    //         let tag = tagged_domain_ast.tag.clone();
+    //         let domain_name = tagged_domain_ast.domain.clone();
+    //         let domain = self.create_domain(domain_name, domain_map);
 
-            for (type_name, formula_type) in domain.meta_info().type_map().iter() {
-                let formula_type: &Type = formula_type.borrow();
-                match formula_type {
-                    Type::BaseType(_) => {},
-                    _ => {
-                        let renamed_type = formula_type.rename_type(tag.clone());
-                        let atomic_renamed_type: T::SortOutput = renamed_type.into();
-                        let new_name = atomic_renamed_type.unique_form();
-                        type_map.insert(new_name.clone(), atomic_renamed_type);
-                    }
-                }
-            }
-        }
+    //         for (type_name, formula_type) in domain.meta_info().type_map().iter() {
+    //             let formula_type: &RawType = formula_type.borrow();
+    //             match formula_type {
+    //                 RawType::BaseType(_) => {},
+    //                 _ => {
+    //                     let renamed_type = formula_type.rename_type(tag.clone());
+    //                     let atomic_renamed_type: RawType = renamed_type.into();
+    //                     let new_name = atomic_renamed_type.derive_unique_form();
+    //                     type_map.insert(new_name.clone(), atomic_renamed_type);
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        // Add types that are defined in transform.
-        let mut type_ast_map = HashMap::new();
-        for type_ast in transform_ast.typedefs.iter() {
-            let name = match type_ast.name() {
-                Some(name) => name,
-                None => {
-                    generator.generate_name()
-                }
-            };
-            type_ast_map.insert(name, type_ast.clone());
-        } 
+    //     // Add types that are defined in transform.
+    //     let mut type_ast_map = HashMap::new();
+    //     for type_ast in transform_ast.typedefs.iter() {
+    //         let name = match type_ast.name() {
+    //             Some(name) => name,
+    //             None => {
+    //                 generator.generate_name()
+    //             }
+    //         };
+    //         type_ast_map.insert(name, type_ast.clone());
+    //     } 
 
-        let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
-        for type_name in type_names {
-            self.create_atomic_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
-        }
+    //     let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
+    //     for type_name in type_names {
+    //         self.create_raw_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
+    //     }
 
-        let temp_metainfo = MetaInfo::new(type_map, vec![]);
+    //     let temp_metainfo = MetaInfo::new(type_map, vec![]);
 
-        // Add rules into domain and converting rule ASTs need type information in domain.
-        let mut rules = vec![];
-        for rule_ast in transform_ast.rules.iter() {
-            rules.push(rule_ast.to_rule(&temp_metainfo));
-        }
+    //     // Add rules into domain and converting rule ASTs need type information in domain.
+    //     let mut rules = vec![];
+    //     for rule_ast in transform_ast.rules.iter() {
+    //         rules.push(rule_ast.to_rule(&temp_metainfo));
+    //     }
 
-        // Add terms that defined in the transform.
-        let mut terms = HashSet::new();
-        for term_ast in transform_ast.terms.iter() {
-            let term = T::from_term_ast(term_ast, temp_metainfo.type_map());
-            terms.insert(term.into());
-        }
+    //     // Add terms that defined in the transform.
+    //     let mut terms = HashSet::new();
+    //     for term_ast in transform_ast.terms.iter() {
+    //         let term = T::from_term_ast(term_ast, temp_metainfo.type_map());
+    //         terms.insert(term.into());
+    //     }
 
-        // Some parameters that are known types in `type_map`
-        for (_, type_ast) in input_type_ast_map {
-            let input_type = temp_metainfo.type_map().get(&type_ast.name().unwrap()).unwrap();
-        }
+    //     // Some parameters that are known types in `type_map`
+    //     for (_, type_ast) in input_type_ast_map {
+    //         let input_type = temp_metainfo.type_map().get(&type_ast.name().unwrap()).unwrap();
+    //     }
 
-        let transform = Transform::new(
-            transform_name.clone(),
-            temp_metainfo.type_map().clone(),
-            rules,
-            params,
-            input_type_map,
-            input_domain_map,
-            output_domain_map,
-            terms
-        );
+    //     let transform = Transform::new(
+    //         transform_name.clone(),
+    //         temp_metainfo.type_map().clone(),
+    //         rules,
+    //         params,
+    //         input_type_map,
+    //         input_domain_map,
+    //         output_domain_map,
+    //         terms
+    //     );
 
-        transform_map.insert(transform_name.clone(), transform.clone());
-        transform
-    }
+    //     transform_map.insert(transform_name.clone(), transform.clone());
+    //     transform
+    // }
 
     pub fn create_domain<T>(&self, 
         domain_name: String, 
         domain_map: &mut HashMap<String, Domain<T>>
-    ) -> Domain<T> 
-    where T: TermStructure, T::SortOutput: Into<AtomicType>
-    {
+    ) -> Domain<T> where T: TermStructure {
         if domain_map.contains_key(&domain_name) { 
             return domain_map.get(&domain_name).unwrap().clone(); 
         }
@@ -561,7 +615,6 @@ impl ProgramAst {
         for subdomain_name in domain_ast.subdomains.iter() {
             let subdomain = self.create_domain(subdomain_name.clone(), domain_map);
             type_map.extend(subdomain.meta_info().type_map().clone());
-
             if domain_ast.inherit_type == "extends" {
                 // TODO: import comformance rules if inheritance type is `extends`.
             }
@@ -570,12 +623,12 @@ impl ProgramAst {
         for (scope, subdomain_name) in domain_ast.renamed_subdomains.iter() {
             let subdomain = self.create_domain(subdomain_name.clone(), domain_map);
             for (type_name, formula_type) in subdomain.meta_info().type_map().iter() {
-                let formula_type: &Type = formula_type.borrow();
+                let formula_type: &RawType = formula_type.borrow();
                 match formula_type {
-                    Type::BaseType(_) => {},
+                    RawType::BaseType(_) => {},
                     _ => {
-                        let atomic_renamed_type: T::SortOutput = formula_type.rename_type(scope.clone()).into();
-                        let name = atomic_renamed_type.unique_form();
+                        let atomic_renamed_type: RawType = formula_type.rename_type(scope.clone()).into();
+                        let name = atomic_renamed_type.derive_unique_form();
                         type_map.insert(name.clone(), atomic_renamed_type);
                     }
                 }
@@ -601,7 +654,7 @@ impl ProgramAst {
 
         let type_names: Vec<String> = type_ast_map.keys().map(|x| x.clone()).collect();
         for type_name in type_names {
-            self.create_atomic_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
+            self.create_raw_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
         let empty_rules: Vec<Rule<T>> = vec![];
@@ -628,39 +681,27 @@ impl ProgramAst {
         &self, 
         model_name: String,
         model_map: &mut HashMap<String, Model<T>>, 
-        domain_map: &HashMap<String, Domain<T>>) 
-    where 
-        T: TermStructure,
-        // T::SortOutput: Into<AtomicType>
-    {
+        domain_map: &HashMap<String, Domain<T>>
+    ) where T: TermStructure {
         if model_map.contains_key(&model_name) { return; }
         
         let model_ast = self.model_ast_map.get(&model_name).unwrap();
         let domain = domain_map.get(&model_ast.domain_name).unwrap();
         let undefined_sort = domain.meta_info().type_map().get("~Undefined").unwrap();
 
-        // Store terms that don't have alias.
-        let mut raw_terms = vec![];
-        // Map alias to term while the term could have variable that points to another term.
-        let mut raw_alias_map = HashMap::new();
-
-        // alias map and terms store after variable propagation.
+        let mut term_set = HashSet::new();
         let mut alias_map = HashMap::new();
-        let mut model_store = HashSet::new();
-        
-        for term_ast in model_ast.models.iter() {
-            // Something tricky here: A renamed alias could be treated as a variable.
-            // e.g. Iso(Left.v1, Right.v2) after parsing the arguments are variables with fragments.
-            // Terms in the model should not contain variables with fragments not even in partial model.
-            let mut term = T::from_term_ast(term_ast, domain.meta_info().type_map());
 
-            // Reursively traverse the term to find all variables with fragments and fix them.
+        for term_ast in model_ast.models.iter() {
+            // Something tricky here: A renamed alias is treated as a variable.
+            // e.g. Iso(Left.v1, Right.v2) after parsing the arguments are variables with fragments.
+            // Terms in the model should not contain variable with fragments not even in partial model.
+            let mut term = T::from_term_ast(term_ast, domain.meta_info().type_map());
             term.traverse_mut(
                 &|t| { 
-                    t != t.root() // Check if that's a variable term with fragments.
+                    t != t.root() 
                 }, 
-                &mut |mut t| {
-                    // Use display name as the root name for the new variable term.
+                &mut |t| {
                     let name = format!("{}", t); 
                     *t = T::create_variable_term(Some(undefined_sort.clone()), name, vec![]);
                 }
@@ -668,73 +709,64 @@ impl ProgramAst {
 
             // Remove alias from term and return alias.
             let alias = term.remove_alias();
+            term_set.insert(term.clone());
 
             match alias {
-                None => {
-                    // if term does not have alias, add it to model store.
-                    raw_terms.push(term);
-                },
                 Some(alias) => {
-                    // alias here shouldn't have fragments and add term to model store later.
-                    let vterm = T::create_variable_term(Some(undefined_sort.clone()), alias, vec![]);
-                    raw_alias_map.insert(vterm, term);
-                }
+                    alias_map.insert(alias, term);
+                },
+                _ => {}
             }
         }
+
+        let uuid_term_store = UUIdTermStore::new(term_set, alias_map);
 
         // TODO: Need to check if they are duplicates from sub-models.
         // Import sub-models into `model_store` with a copy of Arc<Term>.
-        for submodel_name in model_ast.submodels.iter() {
-            self.create_model(submodel_name.clone(), model_map, domain_map);
-            let submodel = model_map.get(submodel_name).unwrap();
+        // for submodel_name in model_ast.submodels.iter() {
+        //     self.create_model(submodel_name.clone(), model_map, domain_map);
+        //     let submodel = model_map.get(submodel_name).unwrap();
 
-            // Copy all terms.
-            for term_ref in submodel.terms() {
-                if !model_store.contains(term_ref) {
-                    model_store.insert(term_ref.clone());
-                }
-            }
-            // Copy alias map to raw alias map.
-            raw_alias_map.extend(submodel.model_store().alias_map().clone());
-        }
+        //     // Copy all terms.
+        //     for term_ref in submodel.terms() {
+        //         if !model_store.contains(term_ref) {
+        //             model_store.insert(term_ref.clone());
+        //         }
+        //     }
+        //     // Copy alias map to raw alias map.
+        //     raw_alias_map.extend(submodel.model_store().alias_map().clone());
+        // }
 
-        // Import renamed sub-models with the type changed.
-        for scope in model_ast.renamed_submodels.keys() {
-            let submodel_name = model_ast.renamed_submodels.get(scope).unwrap();
-            self.create_model(submodel_name.clone(), model_map, domain_map);
+        // // Import renamed sub-models with the type changed.
+        // for scope in model_ast.renamed_submodels.keys() {
+        //     let submodel_name = model_ast.renamed_submodels.get(scope).unwrap();
+        //     self.create_model(submodel_name.clone(), model_map, domain_map);
 
-            // TODO: Submodels should be imported as traces.
-            // Just make a deep copy as they are all Arc<Term> and rename the whole model.
-            let submodel = model_map.get(submodel_name).unwrap().clone();
-            let renamed_submodel = submodel.rename(scope.clone(), submodel.meta_info().type_map());
-            let submodel_terms: Vec<_> = renamed_submodel.terms().into_iter().map(|x| x.clone()).collect();
-            model_store.extend(submodel_terms);
-            alias_map.extend(renamed_submodel.model_store().alias_map().clone());
-        }
+        //     // TODO: Submodels should be imported as traces.
+        //     // Just make a deep copy as they are all Arc<Term> and rename the whole model.
+        //     let submodel = model_map.get(submodel_name).unwrap().clone();
+        //     let renamed_submodel = submodel.rename(scope.clone(), submodel.meta_info().type_map());
+        //     let submodel_terms: Vec<_> = renamed_submodel.terms().into_iter().map(|x| x.clone()).collect();
+        //     model_store.extend(submodel_terms);
+        //     alias_map.extend(renamed_submodel.model_store().alias_map().clone());
+        // }
 
         // Alias in the raw term is treated as variables and needs to be replaced with the real term.
         // Term propagations have to follow the order that for example n1 = Node(x) needs to be handled 
         // prior to e1 is Edge(n1, n1), otherwise the raw term may be used in propagation.
-        for key in raw_alias_map.keys() {
-            self.propagate_alias_map(key.clone(), &raw_alias_map, &mut alias_map);
-        }
 
-        // Propagate binding to composite terms that don't have alias associated with them.
-        for term in raw_terms {
-            let new_term = term.propagate_bindings(&alias_map);
-            model_store.insert(new_term);
-        }
+        // let model = Model::new(
+        //     model_name.clone(), 
+        //     domain, 
+        //     uuid_term_store, 
+        //     alias_map
+        // );
 
-        for (_, term) in alias_map.iter() {
-            model_store.insert(term.clone());
-        }
-
-        let model = Model::new(
-            model_name.clone(), 
-            domain, 
-            model_store, 
-            alias_map
-        );
+        let model = Model {
+            name: model_name.clone(),
+            metainfo: domain.meta_info().clone(),
+            store: uuid_term_store
+        };
 
         model_map.insert(model_name.clone(), model);
     }
@@ -818,8 +850,6 @@ impl BaseExprAstBehavior for SetComprehensionAst {
     fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: TermStructure {
         let mut vars = vec![];
         let mut condition = vec![];
-        // Need HashMap<String, AtomicStrType> instead of HashMap<String, S>.
-        let atomic_type_map = metainfo.atomic_type_map();
         for term_ast in self.vars.iter() {
             let term = T::from_term_ast(term_ast, metainfo.type_map());
             vars.push(term);
@@ -897,7 +927,7 @@ impl ConstraintAstBehavior for ConstraintAst {
 #[derive(Clone, Debug)]
 pub struct TypeConstraintAst {
     pub var: TermAst,
-    pub sort: TypeDefAst,
+    pub sort: RawTypeDefAst,
 }
 
 impl ConstraintAstBehavior for TypeConstraintAst {
@@ -979,7 +1009,6 @@ pub struct RuleAst {
 impl RuleAst {
     pub fn to_rule<T>(&self, metainfo: &MetaInfo<T>) -> Rule<T> where T: TermStructure {
         let mut head = vec![];
-        let atomic_type_map = metainfo.atomic_type_map();
         for term_ast in self.head.iter() {
             let term = T::from_term_ast(term_ast, metainfo.type_map());
             head.push(term);
@@ -991,5 +1020,31 @@ impl RuleAst {
         }
 
         Rule::new(head, body)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::combinator::parse_program;
+    use std::path::Path;
+    use std::fs;
+
+    #[test]
+    fn test_parse_models() {
+        let path = Path::new("./tests/testcase/p0.4ml");
+        let content = fs::read_to_string(path).unwrap() + "EOF";
+        let (_, program_ast) = parse_program(&content);
+          
+        let terms = program_ast.model_ast_map.get("m").unwrap().clone().models;
+        for term_ast in terms {
+            let record: Record = term_ast.into_record();
+            println!("Record: {}", record);
+        }
+          
+        let env: Env<AtomicTerm> = program_ast.build_env();
+        // println!("{:#?}", env.get_domain_by_name("Graph").unwrap());
+        println!("{:#?}", env.get_model_by_name("m").unwrap());
     }
 }

@@ -12,6 +12,7 @@ use std::collections::*;
 use nom::character::*;
 use nom::character::complete::*;
 use nom::number::complete::*;
+use ordered_float::*;
 use num::*;
 
 
@@ -68,19 +69,19 @@ named!(param_id<&str, VariableTermAst>,
 // There are two types of typename: 
 // 1. Native type referenced by alias. e.g. Node or Edge.
 // 2. Chained renamed type carrying information about scopes. e.g. left.Node or right.x.y.z.Node
-named!(typename<&str, TypeDefAst>,
+named!(typename<&str, RawTypeDefAst>,
     map!(separated_nonempty_list!(tag!("."), id), |mut names| {
         let name = names.remove(names.len()-1);
         let alias_ast = AliasTypeDefAst {
             chained_scopes: names,
             name,
         };
-        TypeDefAst::AliasTypeDefAst(alias_ast)
+        RawTypeDefAst::AliasTypeDefAst(alias_ast)
     })
 );
 
 // Two types of typename: 1. Node ::= new (id: String). 2. Node ::= new (String).
-named!(tagged_type<&str, (Option<String>, TypeDefAst)>,
+named!(tagged_type<&str, (Option<String>, RawTypeDefAst)>,
     alt!(
         map!(
             tuple!(id, delimited!(space0, tag!(":"), space0), union_typedef_inline),
@@ -94,7 +95,7 @@ named!(tagged_type<&str, (Option<String>, TypeDefAst)>,
     )
 );
 
-named!(composite_typedef<&str, TypeDefAst>,
+named!(composite_typedef<&str, RawTypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
@@ -109,7 +110,7 @@ named!(composite_typedef<&str, TypeDefAst>,
     )
 );
 
-fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -> TypeDefAst {
+fn parse_composite_typedef(t: String, args: Vec<(Option<String>, RawTypeDefAst)>) -> RawTypeDefAst {
     let mut boxed_args = vec![];
     for (id, typedef) in args {
         boxed_args.push((id, Box::new(typedef)));
@@ -120,10 +121,10 @@ fn parse_composite_typedef(t: String, args: Vec<(Option<String>, TypeDefAst)>) -
         args: boxed_args,
     };
 
-    TypeDefAst::CompositeTypeDefAst(composite_ast)
+    RawTypeDefAst::CompositeTypeDefAst(composite_ast)
 }
 
-named!(enum_typedef_inline<&str, TypeDefAst>,
+named!(enum_typedef_inline<&str, RawTypeDefAst>,
     do_parse!(
         tag!("{") >>
         space0 >>
@@ -134,7 +135,7 @@ named!(enum_typedef_inline<&str, TypeDefAst>,
     )
 );
 
-named!(enum_typedef<&str, TypeDefAst>,
+named!(enum_typedef<&str, RawTypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
@@ -147,16 +148,16 @@ named!(enum_typedef<&str, TypeDefAst>,
     )
 );
 
-fn parse_enum_typedef(t_opt: Option<String>, items: Vec<TermAst>) -> TypeDefAst {
+fn parse_enum_typedef(t_opt: Option<String>, items: Vec<TermAst>) -> RawTypeDefAst {
     let enum_ast = EnumTypeDefAst { 
         name: t_opt, 
         items 
     };
-    TypeDefAst::EnumTypeDefAst(enum_ast)
+    RawTypeDefAst::EnumTypeDefAst(enum_ast)
 }
 
 // Union of defined type or enum type expression.
-named!(union_typedef_inline<&str, TypeDefAst>,
+named!(union_typedef_inline<&str, RawTypeDefAst>,
     do_parse!(
         subs: separated_list!(
             delimited!(space0, tag!("+"), space0), 
@@ -165,7 +166,7 @@ named!(union_typedef_inline<&str, TypeDefAst>,
     )
 );
 
-named!(union_typedef<&str, TypeDefAst>,
+named!(union_typedef<&str, RawTypeDefAst>,
     do_parse!(
         t: id >>
         delimited!(space0, tag!("::="), space0) >>
@@ -178,7 +179,7 @@ named!(union_typedef<&str, TypeDefAst>,
     )
 );
 
-fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<TypeDefAst>) -> TypeDefAst {
+fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<RawTypeDefAst>) -> RawTypeDefAst {
     if subtypes.len() == 1 {
         return subtypes.get(0).unwrap().clone();
     } else {
@@ -187,7 +188,7 @@ fn parse_union_typedef(t_opt: Option<String>, subtypes: Vec<TypeDefAst>) -> Type
             boxed_subtypes.push(Box::new(subtype));
         }
         let union_ast = UnionTypeDefAst { name: t_opt, subtypes: boxed_subtypes };
-        TypeDefAst::UnionTypeDefAst(union_ast)
+        RawTypeDefAst::UnionTypeDefAst(union_ast)
     }
 }
 
@@ -735,7 +736,7 @@ named!(type_constraint<&str, TypeConstraintAst>,
     )
 );
 
-fn parse_type_constraint(var: TermAst, sort: TypeDefAst) -> TypeConstraintAst{
+fn parse_type_constraint(var: TermAst, sort: RawTypeDefAst) -> TypeConstraintAst{
     TypeConstraintAst {
         var,
         sort
@@ -822,7 +823,7 @@ named!(composite<&str, TermAst>,
     )
 );
 
-fn parse_composite(alias: Option<String>, sort: TypeDefAst, args: Vec<TermAst>) -> TermAst {
+fn parse_composite(alias: Option<String>, sort: RawTypeDefAst, args: Vec<TermAst>) -> TermAst {
     let composite_ast = CompositeTermAst {
         sort,
         arguments: args.into_iter().map(|x| Box::new(x)).collect(),
@@ -913,7 +914,7 @@ named!(atom_float<&str, AtomEnum>,
                 return atom_enum;
             } else {
                 let num = f32::from_str(float_str).unwrap();
-                let atom_enum = AtomEnum::Float(BigRational::from_f32(num).unwrap()); 
+                let atom_enum = AtomEnum::Float(num.into()); 
                 return atom_enum;
             }
         }
@@ -1060,7 +1061,7 @@ mod tests {
     //         let result = program(&formula_program[..]).unwrap();
     //         assert_eq!(result.0, "EOF");
     //         let program_ast = result.1;
-    //         let env = program_ast.build_env();
+    //         let env: Env<AtomicTerm> = program_ast.build_env();
     //         //println!("{:#?}", env);
     //         //println!("{:#?}", env.model_map);
     //         println!("{:#?}", env.transform_map);

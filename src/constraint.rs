@@ -22,29 +22,29 @@ pub struct Predicate<T> where T: TermStructure {
     pub alias: Option<T>, // Must be a variable term and could have fragments
 }
 
-impl<T> Expression for Predicate<T> where T: TermStructure {
+// impl<T> Expression for Predicate<T> where T: TermStructure {
 
-    type TermOutput = T;
+//     type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::TermOutput> {
-        let mut var_set = HashSet::new();
-        var_set.extend(self.term.variables());
-        // Don't forget to add alias to variable set.
-        if let Some(var) = self.alias.clone() {
-            var_set.insert(var);
-        }
-        var_set
-    }
+//     fn variables(&self) -> HashSet<Self::TermOutput> {
+//         let mut var_set = HashSet::new();
+//         var_set.extend(self.term.variables());
+//         // Don't forget to add alias to variable set.
+//         if let Some(var) = self.alias.clone() {
+//             var_set.insert(var);
+//         }
+//         var_set
+//     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        self.term.replace_pattern(pattern, replacement);
-        self.alias.replace_pattern(pattern, replacement);
-    }
+//     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+//         self.term.replace_pattern(pattern, replacement);
+//         self.alias.replace_pattern(pattern, replacement);
+//     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
-        HashMap::new()
-    }
-}
+//     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+//         HashMap::new()
+//     }
+// }
 
 impl<T> Display for Predicate<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -243,28 +243,28 @@ impl<T> Binary<T> where T: TermStructure {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TypeConstraint<T> where T: TermStructure {
     pub var: T,
-    pub sort: T::SortOutput,
+    pub sort: RawType,
 }
 
-impl<T> Expression for TypeConstraint<T> where T: TermStructure {
+// impl<T> Expression for TypeConstraint<T> where T: TermStructure {
 
-    type TermOutput = T;
+//     type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::TermOutput> {
-        let mut set = HashSet::new();
-        set.insert(self.var.clone());
-        set
-    }
+//     fn variables(&self) -> HashSet<Self::TermOutput> {
+//         let mut set = HashSet::new();
+//         set.insert(self.var.clone());
+//         set
+//     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        self.var.replace_pattern(pattern, replacement);
-    }
+//     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+//         self.var.replace_pattern(pattern, replacement);
+//     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
-        HashMap::new()
-    }
-}
+//     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+//     -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+//         HashMap::new()
+//     }
+// }
 
 impl<T> Display for TypeConstraint<T> where T: TermStructure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -337,37 +337,37 @@ impl<T> Display for Constraint<T> where T: TermStructure {
     }
 }
 
-impl<T> Expression for Constraint<T> where T: TermStructure {
+// impl<T> Expression for Constraint<T> where T: TermStructure {
 
-    type TermOutput = T;
+//     type TermOutput = T;
 
-    fn variables(&self) -> HashSet<Self::TermOutput> {
-        match self {
-            Constraint::Predicate(p) => p.variables(),
-            Constraint::Binary(b) => b.variables(),
-            Constraint::TypeConstraint(t) => t.variables()
-        }
-    }
+//     fn variables(&self) -> HashSet<Self::TermOutput> {
+//         match self {
+//             Constraint::Predicate(p) => p.variables(),
+//             Constraint::Binary(b) => b.variables(),
+//             Constraint::TypeConstraint(t) => t.variables()
+//         }
+//     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        match self {
-            Constraint::Predicate(p) => p.replace_pattern(pattern, replacement),
-            Constraint::Binary(b) => b.replace_pattern(pattern, replacement),
-            Constraint::TypeConstraint(t) => t.replace_pattern(pattern, replacement),
-        };
-    }
+//     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+//         match self {
+//             Constraint::Predicate(p) => p.replace_pattern(pattern, replacement),
+//             Constraint::Binary(b) => b.replace_pattern(pattern, replacement),
+//             Constraint::TypeConstraint(t) => t.replace_pattern(pattern, replacement),
+//         };
+//     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
-        match self {
-            Constraint::Predicate(p) => {
-                return p.replace_set_comprehension(generator);
-            },
-            Constraint::Binary(b) => {
-                return b.replace_set_comprehension(generator);
-            },
-            Constraint::TypeConstraint(t) => {
-                return t.replace_set_comprehension(generator);
-            },
-        };
-    }
-}
+//     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+//         match self {
+//             Constraint::Predicate(p) => {
+//                 return p.replace_set_comprehension(generator);
+//             },
+//             Constraint::Binary(b) => {
+//                 return b.replace_set_comprehension(generator);
+//             },
+//             Constraint::TypeConstraint(t) => {
+//                 return t.replace_set_comprehension(generator);
+//             },
+//         };
+//     }
+// }

@@ -132,45 +132,45 @@ fn test_ord_map() {
     println!("{:?}", map);
 }
 
-#[test]
-fn test_matches() {
-    let mut term_store = AtomicPtrTermStore::new(HashSet::new(), HashMap::new());
-    let mut match_store = AtomicPtrMatchStore::new();
+// #[test]
+// fn test_matches() {
+//     let mut term_store = AtomicPtrTermStore::new(HashSet::new(), HashMap::new());
+//     let mut match_store = AtomicPtrMatchStore::new();
 
-    let a: AtomicTerm = "a".into();
-    let b: AtomicTerm = "b".into();
-    let ptr_a = term_store.intern(a).clone();
-    let ptr_b = term_store.intern(b).clone();
+//     let a: AtomicTerm = "a".into();
+//     let b: AtomicTerm = "b".into();
+//     let ptr_a = term_store.intern(a).clone();
+//     let ptr_b = term_store.intern(b).clone();
 
-    let one: AtomicTerm = 1.into();
-    let two: AtomicTerm = 2.into();
-    let ptr_one = term_store.intern(one).clone();
-    let ptr_two = term_store.intern(two).clone();
+//     let one: AtomicTerm = 1.into();
+//     let two: AtomicTerm = 2.into();
+//     let ptr_one = term_store.intern(one).clone();
+//     let ptr_two = term_store.intern(two).clone();
 
-    assert_eq!(ptr_one, ptr_one.clone());
+//     assert_eq!(ptr_one, ptr_one.clone());
 
-    let mut mapx = BTreeMap::new();
-    mapx.insert(ptr_a.clone(), ptr_one.clone());
-    mapx.insert(ptr_b.clone(), ptr_two.clone());
+//     let mut mapx = BTreeMap::new();
+//     mapx.insert(ptr_a.clone(), ptr_one.clone());
+//     mapx.insert(ptr_b.clone(), ptr_two.clone());
 
-    let mut mapx1 = BTreeMap::new();
-    mapx1.insert(ptr_a.clone(), ptr_one.clone());
-    mapx1.insert(ptr_b.clone(), ptr_two.clone());
+//     let mut mapx1 = BTreeMap::new();
+//     mapx1.insert(ptr_a.clone(), ptr_one.clone());
+//     mapx1.insert(ptr_b.clone(), ptr_two.clone());
 
-    assert_eq!(mapx, mapx1);
+//     assert_eq!(mapx, mapx1);
 
-    let matchx: Match<AtomicPtrTerm> = mapx.into();
-    let matchx1: Match<AtomicPtrTerm> = mapx1.into();
+//     let matchx: Match<AtomicPtrTerm> = mapx.into();
+//     let matchx1: Match<AtomicPtrTerm> = mapx1.into();
 
-    assert_eq!(matchx, matchx1);
+//     assert_eq!(matchx, matchx1);
 
-    let ptr_matchx = match_store.intern(matchx);
-    let ptr_matchx1 = match_store.intern(matchx1);
+//     let ptr_matchx = match_store.intern(matchx);
+//     let ptr_matchx1 = match_store.intern(matchx1);
     
-    assert_eq!(ptr_matchx, ptr_matchx.clone());
-    assert_eq!(match_store.matches.len(), 1);
-    assert_eq!(ptr_matchx.ptr, ptr_matchx1.ptr); // Compare two Arc<T>.
-    assert_eq!(ptr_matchx.ptr.as_ref(), ptr_matchx1.ptr.as_ref()); // Compare two T.
-    assert_eq!(ptr_matchx, ptr_matchx1); // Compare the location of allocation.
+//     assert_eq!(ptr_matchx, ptr_matchx.clone());
+//     assert_eq!(match_store.matches.len(), 1);
+//     assert_eq!(ptr_matchx.ptr, ptr_matchx1.ptr); // Compare two Arc<T>.
+//     assert_eq!(ptr_matchx.ptr.as_ref(), ptr_matchx1.ptr.as_ref()); // Compare two T.
+//     assert_eq!(ptr_matchx, ptr_matchx1); // Compare the location of allocation.
 
-}
+// }

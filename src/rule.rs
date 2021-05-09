@@ -31,18 +31,21 @@ impl<T> Expression for Rule<T> where T: TermStructure {
     // All variables are found recursively including the ones in set comprehension.
     fn variables(&self) -> HashSet<Self::TermOutput> {
         // Head is ignored because the variables it has already exist in the body.
-        self.body.variables()
+        // self.body.variables()
+        unimplemented!()
     }
 
     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        self.head.replace_pattern(pattern, replacement);
-        self.body.replace_pattern(pattern, replacement);
+        // self.head.replace_pattern(pattern, replacement);
+        // self.body.replace_pattern(pattern, replacement);
+        unimplemented!()
     }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
     -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
     {
-        self.body.replace_set_comprehension(generator)
+        // self.body.replace_set_comprehension(generator)
+        unimplemented!()
     }
 }
 
@@ -170,23 +173,24 @@ impl<T> Rule<T> where T: TermStructure {
 
     /// Return all existing variables in the body of a rule including the ones in set comprehension.
     pub fn variables_current_level(&self) -> HashSet<T> {
-        let mut var_set = HashSet::new();
-        for constraint in self.body.iter() {
-            match constraint {
-                Constraint::Predicate(predicate) => {
-                    var_set.extend(predicate.variables());
-                },
-                Constraint::Binary(binary) => {
-                    // Skip variables in set comprehension.
-                    var_set.extend(binary.variables_current_level());
-                },
-                Constraint::TypeConstraint(type_constraint) => {
-                    var_set.insert(type_constraint.var.clone());
-                }
-            }
-        }
+        // let mut var_set = HashSet::new();
+        // for constraint in self.body.iter() {
+        //     match constraint {
+        //         Constraint::Predicate(predicate) => {
+        //             var_set.extend(predicate.variables());
+        //         },
+        //         Constraint::Binary(binary) => {
+        //             // Skip variables in set comprehension.
+        //             var_set.extend(binary.variables_current_level());
+        //         },
+        //         Constraint::TypeConstraint(type_constraint) => {
+        //             var_set.insert(type_constraint.var.clone());
+        //         }
+        //     }
+        // }
 
-        var_set
+        // var_set
+        unimplemented!()
     }
 
     /// Return derived variables by simply deducting matched variables from all variables.
@@ -215,18 +219,19 @@ impl<T> Rule<T> where T: TermStructure {
     /// Find all variables that are matched in the predicates of the current rule and the rules 
     /// in set comprehension are not included in this method.
     pub fn predicate_matched_variables(&self) -> HashSet<T> {
-        let mut var_set = HashSet::new();
-        for constraint in self.body.iter() {
-            match constraint {
-                Constraint::Predicate(predicate) => {
-                    let vars = predicate.variables();
-                    var_set.extend(vars);
-                },
-                _ => {}
-            }
-        }
+        // let mut var_set = HashSet::new();
+        // for constraint in self.body.iter() {
+        //     match constraint {
+        //         Constraint::Predicate(predicate) => {
+        //             let vars = predicate.variables();
+        //             var_set.extend(vars);
+        //         },
+        //         _ => {}
+        //     }
+        // }
 
-        var_set
+        // var_set
+        unimplemented!()
     }
 
     pub fn validate(&self) -> bool {

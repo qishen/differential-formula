@@ -75,30 +75,31 @@ impl<T> ExprTrait for BaseExpr<T> where T: TermStructure {
     }
 
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
-        let atom_enum = match self {
-            BaseExpr::Term(term) => {
-                if term == term.root() {
-                    let bigint_term = match binding.contains_gkey(term) {
-                        true => binding.gget(term).unwrap(),
-                        false => term,
-                    };
-                    let bigint_enum = bigint_term.into_atom_enum().unwrap();
-                    Some(bigint_enum)
-                } else {
-                    // The term is not in the binding but the root of term is in the binding.
-                    let var_term = binding.gget(term.root()).unwrap();
-                    let fragment_diff = term.fragments_diff(term.root()).unwrap();
-                    let subterm = var_term.find_subterm_by_labels(&fragment_diff).unwrap();
-                    subterm.into_atom_enum()
-                }
-            },
-            _ => { None } // No evaluation on set comprehension.
-        }.unwrap();
+        // let atom_enum = match self {
+        //     BaseExpr::Term(term) => {
+        //         if term == term.root() {
+        //             let bigint_term = match binding.contains_gkey(term) {
+        //                 true => binding.gget(term).unwrap(),
+        //                 false => term,
+        //             };
+        //             let bigint_enum = bigint_term.into_atom_enum().unwrap();
+        //             Some(bigint_enum)
+        //         } else {
+        //             // The term is not in the binding but the root of term is in the binding.
+        //             let var_term = binding.gget(term.root()).unwrap();
+        //             let fragment_diff = term.fragments_diff(term.root()).unwrap();
+        //             let subterm = var_term.find_subterm_by_labels(&fragment_diff).unwrap();
+        //             subterm.into_atom_enum()
+        //         }
+        //     },
+        //     _ => { None } // No evaluation on set comprehension.
+        // }.unwrap();
 
-        match atom_enum {
-            AtomEnum::Int(i) => Some(i),
-            _ => None
-        }
+        // match atom_enum {
+        //     AtomEnum::Int(i) => Some(i),
+        //     _ => None
+        // }
+        unimplemented!()
     }
 }
 

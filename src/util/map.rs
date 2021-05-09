@@ -159,7 +159,7 @@ where
 /// `QuickHashOrdMap is actually an `BTreeMap` wrapped twice to stash the hash of the map
 /// and compare the hash first when deciding the ordering of two maps. When two maps have
 /// the same hash, compare the unique forms of the maps instead of recursively
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct QuickHashOrdMap<K, V> 
 where 
     K: Hash + Ord, 
