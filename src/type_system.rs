@@ -9,24 +9,76 @@ use serde::{Serialize, Deserialize};
 use crate::term::*;
 use crate::util::wrapper::*;
 
-/// A supertrait that includes Borrow<Type>, From<Type> and a bunch of basic traits that allow
-/// the type to be compariable, cloneable, displayable and be able to transmit between threads.
-// pub trait BorrowedType: Borrow<Type> + 
-//                         From<Type> + 
-//                         UniqueForm<String> + 
-//                         differential_dataflow::ExchangeData + 
-//                         Eq + 
-//                         Clone + 
-//                         Debug + 
-//                         Display + 
-//                         Hash + 
-//                         Ord {}
-
 pub trait FormulaTypeTrait {}
 
-/// `RawType` is the type created directly from type definition in the domain without optimization. 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Clone, Serialize, Deserialize)]
 pub enum RawType {
+    TypeId(Cow<'static, str>),
+    Type(FormulaTypeEnum),
+    Undefined,
+}
+
+impl HasUniqueForm<String> for RawType{
+    fn derive_unique_form(&self) -> String {
+        match self {
+            RawType::TypeId(type_id) => type_id.clone().into_owned(),
+            RawType::Type(formula_type) => formula_type.derive_unique_form(),
+            _ => "Undefined".to_string()
+        }
+    }
+}
+
+impl Display for RawType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.derive_unique_form())
+    }
+}
+
+impl RawType {
+    /// Wrap the base type to create a new type with an additional prefix.
+    pub fn rename_type(&self, scope: String) -> RawType {
+        match self {
+            RawType::Type(raw_type_enum) => {
+                match raw_type_enum {
+                    FormulaTypeEnum::BaseType(_) => {
+                        self.clone()
+                    },
+                    _ => {
+                        let base = raw_type_enum.clone();
+                        let type_enum = FormulaTypeEnum::RenamedType(
+                            RenamedType { scope, base: Box::new(RawType::Type(base)) }
+                        );
+                        RawType::Type(type_enum)
+                    }
+                }
+            },
+            RawType::TypeId(type_id) => {
+                let renamed_typeid = format!("{}.{}", scope, type_id); 
+                RawType::TypeId(Cow::from(renamed_typeid))
+            },
+            _ => RawType::Undefined
+        }
+    }
+
+    /// Unroll RenamedType to return the base type for only one level.
+    pub fn unrename_type(&self) -> Option<RawType> {
+        match self {
+            RawType::Type(raw_type_enum) => {
+                match raw_type_enum {
+                    FormulaTypeEnum::RenamedType(rtype) => {
+                        Some(rtype.base.as_ref().clone())
+                    },
+                    _ => { None }
+                }
+            },
+            _ => None
+        }
+    }
+}
+
+/// `FormulaTypeEnum` is the type created directly from type definition in the domain without optimization. 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Clone, Serialize, Deserialize)]
+pub enum FormulaTypeEnum {
     // Built-in primitive type e.g. integer, float, string. 
     BaseType(BaseType),
     // A ::= new (src: B, dst: C). A term with variables can be used to represent the type
@@ -40,11 +92,9 @@ pub enum RawType {
     RenamedType(RenamedType),
     // A union of several types e.g. D ::= A + B + {1, 2, "hi"}
     UnionType(UnionType),
-    // Undefined type for variables without context.
-    Undefined(Undefined)
 }
 
-impl Display for RawType {
+impl Display for FormulaTypeEnum {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.derive_unique_form())
     }
@@ -52,57 +102,16 @@ impl Display for RawType {
 
 /// Each type has an unique form as string.
 /// TODO: implement HasUniqueForm<RegularType>
-impl HasUniqueForm<String> for RawType {
+impl HasUniqueForm<String> for FormulaTypeEnum {
     fn derive_unique_form(&self) -> String {
         match self {
-            RawType::BaseType(t) => t.derive_unique_form(),
-            RawType::CompositeType(t) => t.derive_unique_form(),
-            RawType::EnumType(t) => t.derive_unique_form(),
-            RawType::RangeType(t) => t.derive_unique_form(),
-            RawType::RenamedType(t) => t.derive_unique_form(),
-            RawType::UnionType(t) => t.derive_unique_form(),
-            RawType::Undefined(t) => t.derive_unique_form(),
+            FormulaTypeEnum::BaseType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::CompositeType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::EnumType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::RangeType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::RenamedType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::UnionType(t) => t.derive_unique_form(),
         }
-    }
-}
-
-impl RawType {
-    /// Wrap the base type to create a new type with an additional prefix.
-    pub fn rename_type(&self, scope: String) -> RawType {
-        let base = self.clone();
-        RawType::RenamedType(
-            RenamedType { 
-                scope, 
-                base: base.into() 
-            }
-        )
-    }
-
-    /// Unroll RenamedType to return the base type for only one level.
-    pub fn unrename_type(&self) -> &RawType {
-        match self {
-            RawType::RenamedType(rtype) => {
-                rtype.base.borrow()
-            },
-            _ => { self }
-        }
-    }
-
-    /// Unroll RenamedType recursively to find the base type that is not a RenamedType.
-    pub fn base_type(&self) -> &RawType {
-        match self {
-            RawType::RenamedType(rtype) => {
-                // Peel off Arc and UniqueFormWrapper.
-                let type_ref: &RawType = rtype.base.borrow();
-                type_ref.base_type()
-            },
-            _ => { self }
-        }
-    }
-
-    /// Create an empty undefined type as pure Type.
-    pub fn undefined() -> RawType {
-        RawType::Undefined(Undefined{})
     }
 }
 

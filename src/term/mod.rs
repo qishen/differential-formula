@@ -13,7 +13,7 @@ pub use crate::type_system::*;
 
 /// `TermStructure` trait must be implemented before implementing `VisitTerm` trait because
 /// it only works for those types that look like a Formula term with tree data structure to traverse.
-pub trait VisitTerm: TermStructure {
+pub trait TermTraversal: TermStructure {
     
     /// Traverse the term recursively to find the pattern without mutating the found term.
     fn traverse<F1, F2>(&self, pattern: &F1, logic: &F2) 
@@ -39,9 +39,12 @@ pub trait VisitTerm: TermStructure {
     // / types too. `K` and `V` must implement trait `From<Term>` because a clone is made and then automatically
     // / converted to the instance of `K` or `V`.
     // fn get_bindings_in_place<M>(&self, binding: &mut M, term: &Self) -> bool where M: GenericMap<Self, Self>;
+    // fn get_bindings_in_place(&self, binding: &mut HashMap<&Self, &Self>, term: &Self) -> bool;
+    fn match_in_place<'a>(&'a self, binding: &mut HashMap<&'a Self, &'a Self>, term: &'a Self) -> bool;
     
     // / Simply return a hash map that maps variables to terms.
-    // fn get_bindings(&self, term: &Self) -> Option<HashMap<Self, Self>>;
+    // fn get_bindings(&self, term: &Self) -> Option<HashMap<&Self, &Self>>;
+    fn match_to<'a>(&'a self, term: &'a Self) -> Option<HashMap<&'a Self, &'a Self>>;
 
     // / Use `BTreeMap` when there is additional requirement that the map needs to implement `Ord` trait.
     // fn get_ordered_bindings(&self, term: &Self) -> Option<BTreeMap<Self, Self>>;

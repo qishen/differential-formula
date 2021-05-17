@@ -1,5 +1,4 @@
 use std::collections::{HashSet, HashMap};
-use std::borrow::*;
 use std::vec::Vec;
 use std::fmt::*;
 
@@ -55,13 +54,8 @@ impl<T> MetaInfo<T> where T: TermStructure {
     pub fn rename(&self, scope: String) -> Self {
         let mut renamed_type_map = HashMap::new();
         for (_, formula_type) in self.type_map.iter() {
-            match formula_type {
-                RawType::BaseType(_) => {},
-                _ => {
-                    let renamed_type: RawType = formula_type.rename_type(scope.clone());
-                    renamed_type_map.insert(format!("{}", renamed_type), renamed_type);
-                }
-            }
+            let renamed_type: RawType = formula_type.rename_type(scope.clone());
+            renamed_type_map.insert(format!("{}", renamed_type), renamed_type);
         }
 
         // TODO: rename all rules.
@@ -239,18 +233,17 @@ impl<T> UUIdTermStore<T> where T: TermStructure {
     }
 
     fn replace_alias_in_term(&self, term: &mut T) {
-        term.traverse_mut(&|t| {
-            t.term_type() == TermType::Variable && 
-            self.alias_bimap.contains_left(&format!("{}", t))
-        }, 
-        &mut |t| {
-            let var_name = format!("{}", t);
-            let mut replacement = self.alias_bimap.get_by_left(&var_name).unwrap().clone();
-            // Recursively replace all variables in both `term` and the replacement because
-            // The replacement in raw alias map may still have variables inside.
-            self.replace_alias_in_term(&mut replacement);
-            *t = replacement;
-        });
+        term.traverse_mut(
+            &|t| { t.is_var() && self.alias_bimap.contains_left(&format!("{}", t)) }, 
+            &mut |t| {
+                let var_name = format!("{}", t);
+                let mut replacement = self.alias_bimap.get_by_left(&var_name).unwrap().clone();
+                // Recursively replace all variables in both `term` and the replacement because
+                // The replacement in raw alias map may still have variables inside.
+                self.replace_alias_in_term(&mut replacement);
+                *t = replacement;
+            }
+        );
     }
 
     pub fn replace_alias(&mut self) {
@@ -284,12 +277,12 @@ impl<T> UUIdTermStore<T> where T: TermStructure {
 
         for term_ref in self.terms().into_iter() {
             let renamed_term = term_ref.clone();
-            renamed_term.rename(scope.clone(), &mut type_set);
+            renamed_term.rename(scope.clone());
             renamed_terms.insert(renamed_term);
         }
 
         for (key, val) in self.alias_bimap.clone().into_iter() {
-            let v = val.rename(scope.clone(), &mut type_set);
+            let v = val.rename(scope.clone());
             renamed_alias_map.insert(format!("{}.{}", scope, key), v);
         }
 
@@ -469,7 +462,7 @@ impl<T> Transformation<T> where T: TermStructure {
 
         // Some additional terms may be defined in transform even with alias like %id that need to be replaced.
         for (key, replacement) in input_term_map.iter() {
-            let pattern = T::create_variable_term(None, key.clone(), vec![]);
+            let pattern = T::gen_raw_variable_term(key.clone(), vec![]);
             for raw_term in transform.terms() {
                 let mut term = raw_term.clone();
                 // FIXME
@@ -486,7 +479,7 @@ impl<T> Transformation<T> where T: TermStructure {
 
         // Replace parameter like %id in transform rules with term from `input_term_map`.
         for (key, replacement) in input_term_map.iter() {
-            let pattern = T::create_variable_term(None, key.clone(), vec![]);
+            let pattern = T::gen_raw_variable_term(key.clone(), vec![]);
             for mut rule in transform.meta_info().rules() {
                 rule.replace_pattern(&pattern, replacement);
                 inherited_rules.push(rule);
@@ -537,18 +530,11 @@ impl<T> Domain<T> where T: TermStructure {
         let mut renamed_type_map = HashMap::new();
         for (_type_name, formula_type) in self.metainfo.type_map.iter() {
             let formula_type = formula_type.clone();
-            match formula_type.borrow() {
-                RawType::BaseType(_) => {},
-                _ => {
-                    let renamed_type: RawType = formula_type.borrow().rename_type(scope.clone()).into();
-                    renamed_type_map.insert(format!("{}", renamed_type), renamed_type);
-                }
-            }
+            let renamed_type = formula_type.rename_type(scope.clone());
+            renamed_type_map.insert(format!("{}", renamed_type), renamed_type);
         }
-
         let metainfo = MetaInfo::new(renamed_type_map, vec![]);
         let new_name = format!("{}.{}", scope.clone(), self.name);
-
         Domain {
             name: new_name,
             metainfo,

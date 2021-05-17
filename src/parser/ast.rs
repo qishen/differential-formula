@@ -355,15 +355,13 @@ impl ProgramAst {
                     let arg = (id_opt.clone(), subtype.into());
                     args.push(arg);
                 }
-
-                let composite_type = RawType::CompositeType(
+                let composite_type = FormulaTypeEnum::CompositeType(
                     CompositeType {
                         name: typename,
                         arguments: args,
                     }
                 );
-
-                composite_type.into()
+                RawType::Type(composite_type)
             },
             RawTypeDefAst::UnionTypeDefAst(utypedef) => {
                 let mut subtypes = vec![];
@@ -376,7 +374,6 @@ impl ProgramAst {
                         auto_name
                     }
                 };
-
                 for subtype_ast in utypedef.subtypes.iter() {
                     // It could be a enum type without name.
                     let name = match subtype_ast.name() {
@@ -396,17 +393,15 @@ impl ProgramAst {
                     };
 
                     // Convert from associated type into AtomicType.
-                    subtypes.push(subtype.into());
+                    subtypes.push(subtype);
                 }
-
-                let union_type = RawType::UnionType(
+                let union_type_enum = FormulaTypeEnum::UnionType(
                     UnionType {
                         name: typename,
                         subtypes: subtypes,
                     }
                 );
-                
-                union_type.into()
+                RawType::Type(union_type_enum)
             },
             RawTypeDefAst::EnumTypeDefAst(etypedef) => {
                 let mut items = vec![];
@@ -440,8 +435,8 @@ impl ProgramAst {
                     }
                 };
 
-                let enum_type = RawType::EnumType(EnumType { name, items });
-                enum_type.into()
+                let enum_type = FormulaTypeEnum::EnumType(EnumType { name, items });
+                RawType::Type(enum_type)
             },
             _ => { 
                 unimplemented!()
@@ -454,14 +449,13 @@ impl ProgramAst {
 
     pub fn import_builtin_types(&self, type_map: &mut HashMap<String, RawType>) {
         // TODO: There are more types to add here.
-        let string_type = RawType::BaseType(BaseType::String);
-        let integer_type = RawType::BaseType(BaseType::Integer);
-        let bool_type = RawType::BaseType(BaseType::Boolean);
-        let undefined_type = RawType::undefined();
-        type_map.insert("String".to_string(), string_type.into());
-        type_map.insert("Integer".to_string(), integer_type.into());
-        type_map.insert("Boolean".to_string(), bool_type.into());
-        type_map.insert("~Undefined".to_string(), undefined_type.into());
+        let string_type = FormulaTypeEnum::BaseType(BaseType::String);
+        let integer_type = FormulaTypeEnum::BaseType(BaseType::Integer);
+        let bool_type = FormulaTypeEnum::BaseType(BaseType::Boolean);
+        type_map.insert("String".to_string(), RawType::Type(string_type));
+        type_map.insert("Integer".to_string(), RawType::Type(integer_type));
+        type_map.insert("Boolean".to_string(), RawType::Type(bool_type));
+        type_map.insert("~Undefined".to_string(), RawType::Undefined);
     }
 
     // pub fn create_transform<T>(
@@ -624,16 +618,9 @@ impl ProgramAst {
             let subdomain = self.create_domain(subdomain_name.clone(), domain_map);
             for (type_name, formula_type) in subdomain.meta_info().type_map().iter() {
                 let formula_type: &RawType = formula_type.borrow();
-                match formula_type {
-                    RawType::BaseType(_) => {},
-                    _ => {
-                        let atomic_renamed_type: RawType = formula_type.rename_type(scope.clone()).into();
-                        let name = atomic_renamed_type.derive_unique_form();
-                        type_map.insert(name.clone(), atomic_renamed_type);
-                    }
-                }
+                let atomic_renamed_type: RawType = formula_type.rename_type(scope.clone());
+                type_map.insert(format!("{}", atomic_renamed_type), atomic_renamed_type);
             }
-
             if domain_ast.inherit_type == "extends" {
                 // TODO: import comformance rules if inheritance type is `extends`.
             }
@@ -699,11 +686,11 @@ impl ProgramAst {
             let mut term = T::from_term_ast(term_ast, domain.meta_info().type_map());
             term.traverse_mut(
                 &|t| { 
-                    t != t.root() 
+                    t != &t.root() 
                 }, 
                 &mut |t| {
                     let name = format!("{}", t); 
-                    *t = T::create_variable_term(Some(undefined_sort.clone()), name, vec![]);
+                    *t = T::gen_raw_variable_term(name, vec![]);
                 }
             );
 
@@ -955,7 +942,7 @@ impl ConstraintAstBehavior for PredicateAst {
         let alias = match self.alias.clone() {
             None => None,
             Some(a) => {
-                let term = T::create_variable_term(None, a, vec![]);
+                let term = T::gen_raw_variable_term(a, vec![]);
                 Some(term)
             }
         };

@@ -8,7 +8,7 @@ use std::fmt::{Debug, Display};
 
 use num::*;
 
-use crate::expression::{Expr, ExprTrait, Expression, SetComprehension};
+use crate::expression::*;
 use crate::term::*;
 use crate::util::*;
 use crate::util::map::*;
@@ -40,7 +40,13 @@ pub struct ArithExpr<T> where T: TermStructure {
     pub right: Arc<Expr<T>>,
 }
 
-impl<T> Expression for ArithExpr<T> where T: TermStructure 
+impl<T> Display for ArithExpr<T> where T: TermStructure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} {} {})", self.left, self.op, self.right)
+    }
+}
+
+impl<T> BasicExprOps for ArithExpr<T> where T: TermStructure 
 {
     type TermOutput = T;
 
@@ -59,10 +65,23 @@ impl<T> Expression for ArithExpr<T> where T: TermStructure
         let right = Arc::make_mut(&mut self.right);
         right.replace_pattern(pattern, replacement);
     }
+}
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
-    {
+impl<T> SetCompreOps for ArithExpr<T> where T: TermStructure {
+    fn has_set_comprehension(&self) -> bool {
+        self.left.has_set_comprehension() || self.right.has_set_comprehension()
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        let mut list = vec![];
+        let mut left_vec = self.left.set_comprehensions();
+        let mut right_vec = self.right.set_comprehensions();
+        list.append(&mut left_vec);
+        list.append(&mut right_vec);
+        list
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
         let mut map = HashMap::new();
         let left_map = Arc::make_mut(&mut self.left).replace_set_comprehension(generator);
         let right_map = Arc::make_mut(&mut self.right).replace_set_comprehension(generator);
@@ -72,28 +91,9 @@ impl<T> Expression for ArithExpr<T> where T: TermStructure
     }
 }
 
-impl<T> Display for ArithExpr<T> where T: TermStructure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.left, self.op, self.right)
-    }
-}
-
 impl<T> ExprTrait for ArithExpr<T> where T: TermStructure {
 
     type TermOutput = T;
-
-    fn has_set_comprehension(&self) -> bool {
-        return self.left.has_set_comprehension() || self.right.has_set_comprehension();
-    }
-
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>> {
-        let mut list = vec![];
-        let mut left_vec = self.left.set_comprehensions();
-        let mut right_vec = self.right.set_comprehensions();
-        list.append(&mut left_vec);
-        list.append(&mut right_vec);
-        list
-    }
 
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
         let lvalue = self.left.evaluate(binding).unwrap();

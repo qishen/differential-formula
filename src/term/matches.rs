@@ -17,7 +17,7 @@ use crate::util::map::*;
 use crate::util::wrapper::*;
 
 /// AtomicPtrMatch matches only check pointer equality.
-pub type AtomicPtrMatch<T> = AtomicPtrWrapper<Match<T>>;
+// pub type AtomicPtrMatch<T> = AtomicPtrWrapper<Match<T>>;
 
 /// A match is a hash map mapping variable term to another term.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -31,106 +31,106 @@ impl<T> From<BTreeMap<T, T>> for Match<T> where T: TermStructure {
     }
 }
 
-pub struct AtomicPtrMatchStore<T> where T: TermStructure {
-    matches: HashSet<Arc<Match<T>>>
-}
+// pub struct AtomicPtrMatchStore<T> where T: TermStructure {
+//     matches: HashSet<Arc<Match<T>>>
+// }
 
-impl<T> AtomicPtrMatchStore<T> where T: TermStructure {
-    /// Create an empty hashset for storing all matches.
-    pub fn new() -> Self {
-        AtomicPtrMatchStore {
-            matches: HashSet::new()
-        }
-    }
+// impl<T> AtomicPtrMatchStore<T> where T: TermStructure {
+//     /// Create an empty hashset for storing all matches.
+//     pub fn new() -> Self {
+//         AtomicPtrMatchStore {
+//             matches: HashSet::new()
+//         }
+//     }
 
-    /// Intern a native Match and return a match wrapped with atomic reference wrapper. 
-    pub fn intern(&mut self, term_match: Match<T>) -> AtomicPtrMatch<T> {
-        if let Some(arc_match) = self.matches.get(&term_match) {
-            // println!("Found a match {:?}", term_match);
-            return AtomicPtrWrapper { ptr: arc_match.clone() };
-        } else {
-            // println!("Need to create a new allocation.");
-            let new_arc_match = Arc::new(term_match.clone());
-            let arc_match = new_arc_match.clone();
-            self.matches.insert(new_arc_match);
-            return AtomicPtrWrapper { ptr: arc_match };
-        }
-    }
-}
+//     /// Intern a native Match and return a match wrapped with atomic reference wrapper. 
+//     pub fn intern(&mut self, term_match: Match<T>) -> AtomicPtrMatch<T> {
+//         if let Some(arc_match) = self.matches.get(&term_match) {
+//             // println!("Found a match {:?}", term_match);
+//             return AtomicPtrWrapper { ptr: arc_match.clone() };
+//         } else {
+//             // println!("Need to create a new allocation.");
+//             let new_arc_match = Arc::new(term_match.clone());
+//             let arc_match = new_arc_match.clone();
+//             self.matches.insert(new_arc_match);
+//             return AtomicPtrWrapper { ptr: arc_match };
+//         }
+//     }
+// }
 
-impl<T> GenericMap<T, T> for Match<T> where T: TermStructure {
-    fn gkeys(&self) -> Vec<&T> {
-        let mut list = vec![];
-        let keys = BTreeMap::keys(&self.map);
-        for key in keys {
-            list.push(key);
-        }
-        list
-    }
+// impl<T> GenericMap<T, T> for Match<T> where T: TermStructure {
+//     fn gkeys(&self) -> Vec<&T> {
+//         let mut list = vec![];
+//         let keys = BTreeMap::keys(&self.map);
+//         for key in keys {
+//             list.push(key);
+//         }
+//         list
+//     }
 
-    fn contains_gkey<Q>(&self, k: &Q) -> bool
-    where
-        T: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        BTreeMap::contains_key(&self.map, k)
-    }
+//     fn contains_gkey<Q>(&self, k: &Q) -> bool
+//     where
+//         T: Borrow<Q>,
+//         Q: Hash + Eq + Ord,
+//     {
+//         BTreeMap::contains_key(&self.map, k)
+//     }
 
-    fn gget<Q>(&self, k: &Q) -> Option<&T>
-    where
-        T: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        BTreeMap::get(&self.map, k)
-    }
+//     fn gget<Q>(&self, k: &Q) -> Option<&T>
+//     where
+//         T: Borrow<Q>,
+//         Q: Hash + Eq + Ord,
+//     {
+//         BTreeMap::get(&self.map, k)
+//     }
 
-    fn ginsert(&mut self, k: T, v: T) -> Option<T> {
-        BTreeMap::insert(&mut self.map, k, v)
-    }
-}
+//     fn ginsert(&mut self, k: T, v: T) -> Option<T> {
+//         BTreeMap::insert(&mut self.map, k, v)
+//     }
+// }
 
-impl<T> GenericMap<T, T> for AtomicPtrMatch<T> where T: TermStructure {
-    fn gkeys(&self) -> Vec<&T> {
-        let mut list = vec![];
-        let keys = BTreeMap::keys(&self.ptr.as_ref().map);
-        for key in keys {
-            list.push(key);
-        }
-        list
-    }
+// impl<T> GenericMap<T, T> for AtomicPtrMatch<T> where T: TermStructure {
+//     fn gkeys(&self) -> Vec<&T> {
+//         let mut list = vec![];
+//         let keys = BTreeMap::keys(&self.ptr.as_ref().map);
+//         for key in keys {
+//             list.push(key);
+//         }
+//         list
+//     }
 
-    fn contains_gkey<Q>(&self, k: &Q) -> bool
-    where
-        T: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        BTreeMap::contains_key(&self.ptr.as_ref().map, k)
-    }
+//     fn contains_gkey<Q>(&self, k: &Q) -> bool
+//     where
+//         T: Borrow<Q>,
+//         Q: Hash + Eq + Ord,
+//     {
+//         BTreeMap::contains_key(&self.ptr.as_ref().map, k)
+//     }
 
-    fn gget<Q>(&self, k: &Q) -> Option<&T>
-    where
-        T: Borrow<Q>,
-        Q: Hash + Eq + Ord,
-    {
-        BTreeMap::get(&self.ptr.as_ref().map, k)
-    }
+//     fn gget<Q>(&self, k: &Q) -> Option<&T>
+//     where
+//         T: Borrow<Q>,
+//         Q: Hash + Eq + Ord,
+//     {
+//         BTreeMap::get(&self.ptr.as_ref().map, k)
+//     }
 
-    fn ginsert(&mut self, k: T, v: T) -> Option<T> {
-        let term_match = Arc::make_mut(&mut self.ptr);
-        BTreeMap::insert(&mut term_match.map, k, v)
-    }
-}
+//     fn ginsert(&mut self, k: T, v: T) -> Option<T> {
+//         let term_match = Arc::make_mut(&mut self.ptr);
+//         BTreeMap::insert(&mut term_match.map, k, v)
+//     }
+// }
 
-#[test]
-fn test_ord_map() {
-    let mut map = OrdMap::new();
-    let a: AtomicPtrWrapper<usize> = 1.into();
-    let b: AtomicPtrWrapper<usize> = 2.into();
-    map.insert(a, 100);
-    map.insert(b, 200);
-    assert_eq!(map.len(), 1);
-    println!("{:?}", map);
-}
+// #[test]
+// fn test_ord_map() {
+//     let mut map = OrdMap::new();
+//     let a: AtomicPtrWrapper<usize> = 1.into();
+//     let b: AtomicPtrWrapper<usize> = 2.into();
+//     map.insert(a, 100);
+//     map.insert(b, 200);
+//     assert_eq!(map.len(), 1);
+//     println!("{:?}", map);
+// }
 
 // #[test]
 // fn test_matches() {

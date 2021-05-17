@@ -8,7 +8,7 @@ use std::string::String;
 
 use num::*;
 
-use crate::expression::Expression;
+use crate::expression::*;
 use crate::term::*;
 use crate::type_system::*;
 use crate::rule::*;
@@ -61,7 +61,7 @@ impl<T> SetComprehension<T> where T: TermStructure {
     }
 }
 
-impl<T> Expression for SetComprehension<T> where T: TermStructure {
+impl<T> BasicExprOps for SetComprehension<T> where T: TermStructure {
 
     type TermOutput = T;
 
@@ -77,17 +77,24 @@ impl<T> Expression for SetComprehension<T> where T: TermStructure {
         // self.condition.replace_pattern(pattern, replacement);
         unimplemented!()
     }
+}
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
-    {
+impl<T> SetCompreOps for SetComprehension<T> where T: TermStructure {
+    fn has_set_comprehension(&self) -> bool {
+        true
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        vec![self]
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
         // let dc_name = generator.generate_name();
         // let var = generator.generate_dc_term();
-        // Set comprehension may have set comprehension expression inside itself.
-        // TODO: convert it to a rule and do some changes.
-        // self.condition.replace_set_comprehension(generator)
-        unimplemented!()
+        // Recursively replace set comprehension inside the condition of current set comprehension.
+        self.condition.replace_set_comprehension(generator)
     }
+
 }
 
 // Turn SetComprehension into a headless rule.
@@ -138,40 +145,43 @@ impl SetCompreOp {
                 num
             },
             SetCompreOp::Sum => {
-                let mut sum = BigInt::from_i64(0).unwrap();
-                for (term, count) in terms {
-                    let atom_enum = term.into_atom_enum().unwrap();
-                    match atom_enum {
-                        AtomEnum::Int(i) => { sum += i.clone() * count },
-                        _ => {}
-                    }
-                }
-                sum
+                // let mut sum = BigInt::from_i64(0).unwrap();
+                // for (term, count) in terms {
+                //     let atom_enum = term.into_atom_enum().unwrap();
+                //     match atom_enum {
+                //         AtomEnum::Int(i) => { sum += i.clone() * count },
+                //         _ => {}
+                //     }
+                // }
+                // sum
+                todo!()
             },
             SetCompreOp::MaxAll => {
-                let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
-                for (term, count) in terms {
-                    let atom_enum = term.into_atom_enum().unwrap();
-                    match atom_enum {
-                        AtomEnum::Int(i) => { if i > max { max = i.clone(); } },
-                        _ => {}
-                    }
-                }
-                max
+                // let mut max = BigInt::from_i64(std::isize::MIN as i64).unwrap();
+                // for (term, count) in terms {
+                //     let atom_enum = term.into_atom_enum().unwrap();
+                //     match atom_enum {
+                //         AtomEnum::Int(i) => { if i > max { max = i.clone(); } },
+                //         _ => {}
+                //     }
+                // }
+                // max
+                todo!()
             },
             //SetCompreOp::MinAll => {
             _ => {
-                let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
-                for (term, count) in terms {
-                    let atom_enum = term.into_atom_enum().unwrap();
-                    match atom_enum {
-                        AtomEnum::Int(i) => { 
-                            if i < min { min = i.clone(); } 
-                        },
-                        _ => {}
-                    }
-                }
-                min
+                // let mut min = BigInt::from_i64(std::isize::MAX as i64).unwrap();
+                // for (term, count) in terms {
+                //     let atom_enum = term.into_atom_enum().unwrap();
+                //     match atom_enum {
+                //         AtomEnum::Int(i) => { 
+                //             if i < min { min = i.clone(); } 
+                //         },
+                //         _ => {}
+                //     }
+                // }
+                // min
+                todo!()
             },
             /*
             SetCompreOp::TopK => {

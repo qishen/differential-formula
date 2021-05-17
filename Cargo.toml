@@ -32,8 +32,11 @@ differential-dataflow = { path = "../differential-dataflow" }
 # differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git", branch = "add-serde-fields" }
 
 # Import a local differential-datalog library.
+# types = { path = "../differential-datalog/rust/template/types" }
 differential_datalog = { path = "../differential-datalog/rust/template/differential_datalog" }
 differential_datalog_test = { path = "../differential-datalog/rust/template/differential_datalog_test" }
+# ddlog_lib = { path = "../differential-datalog/lib"}
+ddlog_derive = { path = "../differential-datalog/rust/template/ddlog_derive" }
 
 rand = "0.4"
 enum_dispatch = "0.3.1"
@@ -41,8 +44,12 @@ nom = "5"
 num = { version = "0.3", features = ["serde"] }
 ordered-float = { version = "2.0.0", features = ["serde"] }
 im = { version = "14", features = ["serde"] }
-serde = { version = "1", features = ["derive", "rc", "std"] }
-readonly = "0.1"
+# serde = { version = "1.0", features = ["derive", "rc", "std"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1" }
+erased-serde = "0.3"
+
+readonly = "0.2"
 petgraph = "0.5"
 num-iter = "0.1"
 derivative = "2"

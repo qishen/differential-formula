@@ -1,11 +1,12 @@
 use std::borrow::*;
 use std::collections::*;
-use std::hash::*;
-use std::sync::Arc;
-use std::hash::Hash;
 use std::fmt::*;
+use std::hash::*;
+use std::hash::Hash;
 
 use serde::{Serialize, Deserialize};
+use differential_datalog::record::*;
+use ddlog_derive::*;
 
 use crate::module::Env;
 use super::generic::*;
@@ -18,25 +19,98 @@ use crate::parser::combinator::parse_program;
 /// Note that the equality of composite terms are decided by pointer equality, so the copy of
 /// the term is not equal to the original term.
 /// A sub-term may be shared by multiple terms to reduce redundancy.
-#[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+// #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Eq, Ord, Clone, Hash, PartialEq, PartialOrd, 
+        //  Mutator, 
+         Serialize, Deserialize)]
 pub enum AtomicTerm {
     Atom(AtomicAtom),
     Variable(AtomicVariable),
     Composite(AtomicComposite)
 }
 
+impl Default for AtomicTerm {
+    fn default() -> Self {
+        AtomicTerm::Atom(AtomicAtom { 
+            sort: RawType::Undefined,
+            val: AtomEnum::Int(0.into()),
+        })
+    }
+}
+
+impl Mutator<AtomicTerm> for Record {
+    fn mutate(&self, v: &mut AtomicTerm) -> std::result::Result<(), String> {
+        todo!()
+    }
+}
+
+impl IntoRecord for AtomicTerm {
+    fn into_record(self) -> Record {
+        match self {
+            AtomicTerm::Atom(atom) => {
+                atom.val.into_record()
+            },
+            AtomicTerm::Variable(var) => {
+                Record::Variable(Cow::from(format!("{}", var)))
+            },
+            AtomicTerm::Composite(composite) => {
+                let type_name = composite.sort.derive_unique_form();
+                let mut arguments = vec![];
+                for arg in composite.arguments {
+                    let r = arg.into_record();
+                    arguments.push(r);
+                }
+                Record::PosStruct(Cow::from(type_name), arguments)
+            }
+        }
+    }
+}
+
+impl FromRecord for AtomicTerm {
+    fn from_record(val: &Record) -> std::result::Result<Self, String> {
+        match val {
+            Record::Bool(bool) => {
+                let val = AtomEnum::Bool(bool.clone());
+                let atom = AtomicAtom::new(val);
+                Ok(AtomicTerm::Atom(atom)) 
+            },
+            Record::Int(integer) => {
+                let val = AtomEnum::Int(integer.clone());
+                let atom = AtomicAtom::new(val);
+                Ok(AtomicTerm::Atom(atom))
+            },
+            Record::String(string) => {
+                let val = AtomEnum::Str(string.clone());
+                let atom = AtomicAtom::new(val);
+                Ok(AtomicTerm::Atom(atom))
+            },
+            Record::Float(float) => {
+                let val = AtomEnum::Float(float.clone());
+                let atom = AtomicAtom::new(val);
+                Ok(AtomicTerm::Atom(atom))
+            },
+            Record::PosStruct(name, arguments) => {
+                let mut subterms = Vec::new();
+                for arg in arguments {
+                    if let Ok(term) = AtomicTerm::from_record(arg) {
+                        subterms.push(term);
+                    } else {
+                        return Err(format!("Cannot convert argument of PosStruct Record into AtomicTerm."));
+                    }
+                }
+                let composite = AtomicComposite {
+                    sort: RawType::TypeId(name.clone()),
+                    arguments: subterms,
+                    alias: None
+                };
+                Ok(AtomicTerm::Composite(composite))
+            },
+            _ => { Err(format!("Cannot convert Record into AtomicTerm."))}
+        }
+    }
+}
+
 impl TermStructure for AtomicTerm {
-
-    // type SortOutput = RawType;
-
-    // fn sort(&self) -> &Self::SortOutput {
-    //     match self {
-    //         AtomicTerm::Atom(atom) => &atom.sort,
-    //         AtomicTerm::Composite(composite) => &composite.sort,
-    //         AtomicTerm::Variable(variable) => &variable.sort
-    //     }
-    // }
-
     fn arguments(&self) -> Vec<&Self> {
         let mut args = vec![];
         match self {
@@ -63,173 +137,76 @@ impl TermStructure for AtomicTerm {
         args
     }
     
-    fn term_type(&self) -> TermType {
+    fn is_atom(&self) -> bool {
+        if let AtomicTerm::Atom(_) = self { true } else { false }
+    }
+
+    fn is_var(&self) -> bool {
+        if let AtomicTerm::Variable(_) = self { true } else { false }
+    }
+
+    fn is_composite(&self) -> bool {
+        if let AtomicTerm::Composite(_) = self { true } else { false }
+    }
+
+    fn is_fragmented_var(&self) -> bool {
         match self {
-            AtomicTerm::Atom(_) => TermType::Atom,
-            AtomicTerm::Composite(_) => TermType::Composite,
-            AtomicTerm::Variable(_) => TermType::Variable
+            AtomicTerm::Variable(var) => { var.fragments.len() > 0 },
+            _ => { false }
         }
     }
 
-    fn root(&self) -> &Self {
+    fn is_donot_care_variable(&self) -> bool {
+        // Don't care vars start with underscore.
         match self {
-            AtomicTerm::Variable(var) => {
-                let root = var.root_term.as_ref().map_or(self, |root| root.ptr.as_ref());
-                root
-            },
-            _ => { self } // Return itself for atom and composite term.
+            AtomicTerm::Variable(var) => { var.root == "_" },
+            _ => { false }
         }
     }
 
-    fn create_variable_term(sort: Option<RawType>, root: String, fragments: Vec<String>) -> Self {
-        // Use undefined for the sort because it is unknown without context if no sort in provided in params.
-        let var_sort = match sort {
-            Some(sort) => sort,
-            None => RawType::undefined().into()
-        };
-        let var = AtomicVariable::new(var_sort, root, fragments);
+    fn root(&self) -> Self {
+        match self {
+            AtomicTerm::Variable(var) => { Self::gen_raw_variable_term(var.root.clone(), vec![]) },
+            _ => { self.clone() } 
+        }
+    }
+
+    fn gen_raw_variable_term(root: String, fragments: Vec<String>) -> Self {
+        let var = AtomicVariable::new(RawType::Undefined, root, fragments);
         AtomicTerm::Variable(var)
     }
 
-    fn create_atom_term(sort: Option<RawType>, atom_enum: AtomEnum) -> Self {
-        let atom = AtomicAtom::new(sort, atom_enum);
+    fn gen_atom_term(atom_enum: AtomEnum) -> Self {
+        let atom = AtomicAtom::new(atom_enum);
         AtomicTerm::Atom(atom)
     }
 
     fn create_constant(constant: String) -> (RawType, Self) {
-        let nullary_type = RawType::CompositeType(CompositeType { name: constant, arguments: vec![] });
+        let nullary_type_enum = FormulaTypeEnum::CompositeType(
+            CompositeType { 
+                name: constant, 
+                arguments: vec![] 
+            }
+        );
+        let nullary_type = RawType::Type(nullary_type_enum);
         let composite = AtomicComposite::new(nullary_type.clone().into(), vec![], None);
         let term = AtomicTerm::Composite(composite);
         return (nullary_type.into(), term);
     }
 
-    fn is_dc_variable(&self) -> bool {
-        match self {
-            // Recognize as Do-not-care variable when it is an underscore.
-            AtomicTerm::Variable(var) => {
-                if var.root == "_" { true }
-                else { false }
-            },
-            _ => { false }
-        }
-    }
-
-    fn rename(&self, scope: String, types: &mut HashSet<RawType>) -> Self {
+    fn rename(&self, scope: String) -> Self {
         match self {
             AtomicTerm::Variable(var) => {
                 AtomicTerm::Variable(var.rename(scope))
             },
             AtomicTerm::Composite(composite) => {
-                AtomicTerm::Composite(composite.rename(scope, types))
+                AtomicTerm::Composite(composite.rename(scope))
             },
             AtomicTerm::Atom(_) => { self.clone() }
         }
     }
 
-    // fn find_argument_by_label(&self, label: &str) -> Option<&Self> {
-    //     if let AtomicTerm::Composite(composite) = self {
-    //         let native_type: &Type = composite.sort.borrow();
-    //         let base_type = native_type.base_type();
-    //         if let Type::CompositeType(ctype) = base_type {
-    //             let result = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, _t))| {
-    //                 match arg_label_opt {
-    //                     Some(arg_label) => {
-    //                         if arg_label == label {
-    //                             let arg = composite.arguments.get(i).unwrap();
-    //                             return Some(arg.ptr.as_ref());
-    //                         } else { return None; }
-    //                     },
-    //                     None => None
-    //                 }
-    //             });
-    //             return result;
-    //         }
-    //     } 
-    //     return None;
-    // }
-
-    // fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self> {
-    //     let mut current_term = self; 
-    //     for label in labels {
-    //         let subterm_opt = current_term.find_argument_by_label(label);
-    //         if let Some(subterm) = subterm_opt {
-    //             current_term = subterm;
-    //         } else {
-    //             return None;
-    //         }
-    //     }
-    //     Some(current_term)
-    // }
-
-    fn is_direct_subterm_of(&self, term: &Self) -> bool {
-        match term {
-            AtomicTerm::Composite(composite) => {
-                for arg in composite.arguments.iter() {
-                    // Check if self is equal to one of its arguments.
-                    if self == arg { return true; }
-                }
-                false
-            },
-            AtomicTerm::Variable(var) => {
-                match self {
-                    AtomicTerm::Variable(sub_var) => { // e.g. `x.y.z` is a subterm of `x.y`.
-                        if var.root == sub_var.root && sub_var.fragments.starts_with(&var.fragments){ true }
-                        else { false }
-                    },
-                    _ => { false }
-                }
-            },
-            AtomicTerm::Atom(_) => { false }
-        }
-    }
-
-
-    fn fragments_diff<'a>(&'a self, term: &'a Self) -> Option<Vec<&'a String>> {
-        match self {
-            AtomicTerm::Variable(v1) => {
-                let len1 = v1.fragments.len();
-                match term {
-                    AtomicTerm::Variable(v2) => {
-                        let len2 = v2.fragments.len();
-                        if v1.fragments.starts_with(&v2.fragments) {
-                            let mut labels = vec![];
-                            for i in len2 .. len1 {
-                                labels.push(v1.fragments.get(i).unwrap());
-                            } 
-                            Some(labels)
-                        }
-                        else if v2.fragments.starts_with(&v1.fragments) {
-                            let mut labels = vec![];
-                            for i in len1 .. len2 {
-                                labels.push(v2.fragments.get(i).unwrap());
-                            }
-                            Some(labels)
-                        }
-                        else { None }
-                    },
-                    _ => { None }
-                }  
-            },
-            _ => { None }
-        }
-    }
-
-    fn into_atom_enum(&self) -> Option<AtomEnum> {
-        match self {
-            AtomicTerm::Atom(atom) => {
-                Some(atom.val.clone())
-            },
-            _ => None,
-        }
-    }
-
     fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, RawType>) -> Self {
-        // Get undefined sort from the type map or generate a new one and insert into type map.
-        let undefined_sort: RawType = match type_map.contains_key("~Undefined") {
-            true => type_map.get("~Undefined").unwrap().clone().into(),
-            false => { RawType::undefined().into() }
-        };
-
         let atomic_term = match ast {
             TermAst::CompositeTermAst(cterm_ast) => {
                 let mut term_arguments = vec![];
@@ -247,17 +224,14 @@ impl TermStructure for AtomicTerm {
             TermAst::VariableTermAst(vterm_ast) => {
                 // The sort of variable term is undefined at this point.
                 let var = AtomicVariable::new(
-                    undefined_sort.clone(),
+                    RawType::Undefined,
                     vterm_ast.root.clone(), 
                     vterm_ast.fragments.clone()
                 );
                 AtomicTerm::Variable(var)
             },
             TermAst::AtomTermAst(atom_enum) => {
-                let atom = AtomicAtom {
-                    sort: undefined_sort.clone(),
-                    val: atom_enum.clone()
-                };
+                let atom = AtomicAtom::new(atom_enum.clone());
                 AtomicTerm::Atom(atom)
             }
         };
@@ -290,21 +264,21 @@ impl TermStructure for AtomicTerm {
 // Convert string into a variable term with unknown sort.
 impl From<String> for AtomicTerm {
     fn from(item: String) -> Self {
-        AtomicTerm::create_variable_term(None, item, vec![])
+        AtomicTerm::gen_raw_variable_term(item, vec![])
     }
 }
 
 // Convert &str into a variable term with unknown sort.
 impl From<&str> for AtomicTerm {
     fn from(item: &str) -> Self {
-        AtomicTerm::create_variable_term(None, item.to_string(), vec![])
+        AtomicTerm::gen_raw_variable_term(item.to_string(), vec![])
     }
 }
 
 impl From<usize> for AtomicTerm {
     fn from(item: usize) -> Self {
         let atom_enum = AtomEnum::Int(num::BigInt::from(item));
-        AtomicTerm::create_atom_term(None, atom_enum)
+        AtomicTerm::gen_atom_term(atom_enum)
     }
 }
 
@@ -376,24 +350,15 @@ impl Display for AtomicAtom {
 }
 
 impl AtomicAtom {
-    pub fn new(sort: Option<RawType>, atom_enum: AtomEnum) -> AtomicAtom {
-        // create a sort if not provided in the params.
-        let atom_sort = match sort {
-            Some(sort) => sort,
-            None => {
-                // Decide the sort based on the enum value.
-                let base_type = match &atom_enum {
-                    AtomEnum::Bool(_)  => { BaseType::Boolean },
-                    AtomEnum::Float(_) => { BaseType::Rational },
-                    AtomEnum::Int(_)   => { BaseType::Integer },
-                    AtomEnum::Str(_)   => { BaseType::String }
-                };
-
-                let base_type = RawType::BaseType(base_type);
-                base_type.into()
-            }
+    pub fn new(atom_enum: AtomEnum) -> AtomicAtom {
+        let base_type = match &atom_enum {
+            AtomEnum::Bool(_)  => { BaseType::Boolean },
+            AtomEnum::Float(_) => { BaseType::Rational },
+            AtomEnum::Int(_)   => { BaseType::Integer },
+            AtomEnum::Str(_)   => { BaseType::String }
         };
-
+        let base_type = FormulaTypeEnum::BaseType(base_type);
+        let atom_sort = RawType::Type(base_type);
         AtomicAtom {
             sort: atom_sort,
             val: atom_enum
@@ -412,7 +377,7 @@ pub struct AtomicVariable {
     // The remaining fragments of the variable term.
     pub fragments: Vec<String>,
     // A reference to the root term but is optional only if the variable has fragments.
-    pub root_term: Option<AtomicPtrTerm>
+    // pub root_term: Option<AtomicPtrTerm>
 }
 
 impl Hash for AtomicVariable {
@@ -457,19 +422,19 @@ impl AtomicVariable {
             sort: sort.clone(),
             root: root.clone(),
             fragments: vec![],
-            root_term: None
+            // root_term: None
         };
         
         if fragments.len() == 0 {
             return root_var;
         } else {
             let atomic_root_term = AtomicTerm::Variable(root_var);
-            let root_term = AtomicPtrTerm { ptr: Arc::new(atomic_root_term) };
+            // let root_term = AtomicPtrTerm { ptr: Arc::new(atomic_root_term) };
             let var = AtomicVariable {
                 sort,
                 root,
                 fragments,
-                root_term: Some(root_term)
+                // root_term: Some(root_term)
             };
             return var;
         }
@@ -477,7 +442,7 @@ impl AtomicVariable {
     
     /// Check if the variable term has fragments or not.
     pub fn is_root(&self) -> bool {
-        self.fragments.len() == 0 && self.root_term == None
+        self.fragments.len() == 0 //&& self.root_term == None
     }
 
     /// Rename the variable with a scope added to the root.
@@ -511,36 +476,15 @@ impl AtomicComposite {
         true
     }
 
-    pub fn rename(&self, scope: String, renamed_types: &mut HashSet<RawType>) -> Self {
+    // pub fn rename(&self, scope: String, renamed_types: &mut HashSet<RawType>) -> Self {
+    pub fn rename(&self, scope: String) -> Self {
         let mut arguments = vec![];
         for arg in self.arguments.iter() {
-            let renamed_arg = arg.rename(scope.clone(), renamed_types);
+            let renamed_arg = arg.rename(scope.clone());
             arguments.push(renamed_arg);
         }
-
-        // Look up in the type set for the first renamed type whose base type is the same as the sort in current
-        // term so this type in the type can be reused to create renamed term otherwise need to create a new type
-        // and then be inserted into the mutable type set.
-        let result = renamed_types.iter().find(|&atomic_type| {
-            let renamed_type: &RawType = atomic_type.borrow();
-            renamed_type.unrename_type() == self.sort.borrow() 
-        });
-
-        let renamed_type = match result {
-            Some(atomic_type) => {
-                atomic_type.clone()
-            },
-            None => {
-                let native_type: &RawType = self.sort.borrow();
-                let renamed_type = native_type.clone().rename_type(scope.clone());
-                let atomic_renamed_type: RawType = renamed_type.into();
-                renamed_types.insert(atomic_renamed_type.clone());
-                atomic_renamed_type
-            }
-        };
-
         AtomicComposite {
-            sort: renamed_type,
+            sort: self.sort.rename_type(scope.clone()),
             arguments,
             alias: self.alias.clone() // TODO: Should I rename the alias too?
         }
@@ -579,185 +523,3 @@ impl Display for AtomicComposite {
         write!(f, "{}{}", alias_str, term_str)
     }
 }
-
-/// AtomicTerm wrapped by AtomicPtrWrapper as an atomic reference because we want to compare
-/// equality based on the reference rather than recursively compare each field in the term, 
-/// but sometimes we still need to look into the inner value of the wrapper to see if two terms
-/// are really equal even they don't share the same reference.
-pub type AtomicPtrTerm = AtomicPtrWrapper<AtomicTerm>;
-
-// pub struct AtomicPtrTerm {
-//     ptr: Arc<AtomicTerm>
-// }
-
-// Check equality by comparing inner pointers.
-// impl PartialEq for AtomicPtrTerm {
-//     fn eq(&self, other: &AtomicPtrTerm) -> bool {
-//         Arc::ptr_eq(&self.ptr, &other.ptr)
-//     }
-// }
-
-// impl Display for AtomicPtrTerm {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-//         write!(f, "{}", self.ptr.as_ref())
-//     }
-// }
-
-// impl Debug for AtomicPtrTerm {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-//         // Rewrite Debug trait in the same way as Display.
-//         write!(f, "{}", self)
-//     }
-// }
-
-// impl From<AtomicTerm> for AtomicPtrTerm {
-//     fn from(item: AtomicTerm) -> AtomicPtrTerm {
-//         AtomicPtrTerm { ptr: Arc::new(item) }
-//     }
-// }
-
-// impl TermStructure for AtomicPtrTerm {
-
-//     type SortOutput = RawType;
-
-//     fn sort(&self) -> &Self::SortOutput {
-//         self.ptr.as_ref().sort()
-//     }
-
-//     fn arguments(&self) -> Vec<&Self> {
-//         let mut args = vec![];
-//         match self.ptr.as_ref() {
-//             AtomicTerm::Composite(composite) => {
-//                 for arg in composite.arguments.iter() {
-//                     args.push(arg);
-//                 }
-//             },
-//             _ => {}
-//         }
-//         args
-//     }
-
-//     fn arguments_mut(&mut self) -> Vec<&mut Self> {
-//         let mut args = vec![];
-//         // It may make a copy when there are more than one reference to the inner.
-//         match Arc::make_mut(&mut self.ptr) {
-//             AtomicTerm::Composite(composite) => {
-//                 for ptr_arg in composite.arguments.iter_mut() {
-//                     args.push(ptr_arg);
-//                 }
-//             },
-//             _ => {}
-//         }
-//         args
-//     }
-    
-//     fn term_type(&self) -> TermType {
-//         self.ptr.as_ref().term_type()
-//     }
-
-//     fn root(&self) -> &Self {
-//         match self.ptr.as_ref() {
-//             AtomicTerm::Variable(var) => {
-//                 match &var.root_term {
-//                     Some(root) => root,
-//                     None => self
-//                 }
-//             },
-//             _ => { self } // Return itself for atom and composite term.
-//         }
-//     }
-
-//     fn create_variable_term(sort: Option<Self::SortOutput>, root: String, fragments: Vec<String>) -> Self {
-//         let atomic_term = AtomicTerm::create_variable_term(sort, root, fragments);
-//         AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
-//     }
-
-//     fn create_atom_term(sort: Option<Self::SortOutput>, atom_enum: AtomEnum) -> Self {
-//         let atomic_term = AtomicTerm::create_atom_term(sort, atom_enum);
-//         AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
-//     }
-
-//     fn create_constant(constant: String) -> (Self::SortOutput, Self) {
-//         let (sort, atomic_term) = AtomicTerm::create_constant(constant);
-//         let ptr_term = AtomicPtrWrapper { ptr: Arc::new(atomic_term) };
-//         (sort, ptr_term)
-//     }
-
-//     fn is_dc_variable(&self) -> bool {
-//         self.ptr.as_ref().is_dc_variable()
-//     }
-
-//     fn rename(&self, scope: String, types: &mut HashSet<Self::SortOutput>) -> Self {
-//         let atomic_term = self.ptr.as_ref().rename(scope, types);
-//         let ptr_term = AtomicPtrWrapper { ptr: Arc::new(atomic_term) };
-//         ptr_term
-//     }
-
-//     fn find_argument_by_label(&self, label: &str) -> Option<&Self> {
-//         if let AtomicTerm::Composite(composite) = self.ptr.as_ref() {
-//             let native_type: &Type = composite.sort.borrow();
-//             let base_type = native_type.base_type();
-//             if let Type::CompositeType(ctype) = base_type {
-//                 let result = ctype.arguments.iter().enumerate().find_map(|(i, (arg_label_opt, t))| {
-//                     match arg_label_opt {
-//                         Some(arg_label) => {
-//                             if arg_label == label {
-//                                 let arg = composite.arguments.get(i).unwrap();
-//                                 return Some(arg);
-//                             } else { return None; }
-//                         },
-//                         None => None
-//                     }
-//                 });
-//                 return result;
-//             }
-//         } 
-//         return None;
-//     }
-
-//     fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self> {
-//         let mut current_term = self; 
-//         for label in labels {
-//             let subterm_opt = current_term.find_argument_by_label(label);
-//             if let Some(subterm) = subterm_opt {
-//                 current_term = subterm;
-//             } else {
-//                 return None;
-//             }
-//         }
-//         Some(current_term)
-//     }
-
-//     fn is_direct_subterm_of(&self, term: &Self) -> bool {
-//         self.ptr.as_ref().is_direct_subterm_of(term.ptr.as_ref())
-//     }
-
-//     fn fragments_diff<'a>(&'a self, term: &'a Self) -> Option<Vec<&'a String>> {
-//         self.ptr.as_ref().fragments_diff(term.ptr.as_ref())
-//     }
-
-//     fn into_atom_enum(&self) -> Option<AtomEnum> {
-//         self.ptr.as_ref().into_atom_enum()
-//     }
-
-//     fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, Self::SortOutput>) -> Self {
-//         let atomic_term = AtomicTerm::from_term_ast(ast, type_map);
-//         AtomicPtrWrapper { ptr: Arc::new(atomic_term) }
-//     }
-
-//     fn remove_alias(&mut self) -> Option<String> {
-//         // May make a copy when there are more than one reference pointing to the inner.
-//         let ptr = Arc::make_mut(&mut self.ptr);
-//         ptr.remove_alias()
-//     }
-
-//     fn load_program(text: String) -> Env<Self> {
-//         let text = text + " EOF";
-//         let result = parse_program(&text[..]);
-//         // Make sure the whole file is parsed rather than part of the program.
-//         assert_eq!(result.0, "EOF");
-//         // println!("{:?}", result.0);
-//         let program_ast = result.1;
-//         program_ast.build_env()
-//     }
-// }

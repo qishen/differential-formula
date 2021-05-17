@@ -1,11 +1,11 @@
 // #![type_length_limit="1120927"]
 use std::borrow::Cow;
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::collections::btree_set::BTreeSet;
-use std::iter::FromIterator;
+// use std::collections::btree_set::BTreeSet;
+// use std::iter::FromIterator;
 use std::sync::{Arc, Mutex};
 use std::fs;
-use std::path::Path;
+// use std::path::Path;
 
 use rand::{Rng, SeedableRng, StdRng};
 use fnv::FnvHashMap;
@@ -25,12 +25,111 @@ use differential_formula::engine::*;
 use differential_formula::module::{Program as FProgram, Env};
 use differential_formula::type_system::*;
 
-
 use differential_datalog::ddval::*;
 use differential_datalog::program::*;
-use differential_datalog::record::*;
+use ::differential_datalog::record::FromRecord;
+use ::differential_datalog::record::IntoRecord;
+use ::differential_datalog::record::Mutator;
 use differential_datalog_test::test_value::*;
+use ddlog_derive::*;
 
+use serde::Deserialize;
+use serde::Serialize;
+
+#[derive( Eq, Ord, Clone, Hash, PartialEq, PartialOrd, Default, 
+          IntoRecord, FromRecord, Mutator, Serialize, Deserialize)]
+pub struct E {
+    pub src: N, 
+    pub dst: N,
+}
+
+#[derive( Eq, Ord, Clone, Hash, PartialEq, PartialOrd, Default, 
+          IntoRecord, FromRecord, Mutator, Serialize, Deserialize)]
+pub struct N {
+    pub id: u32,
+}
+
+#[derive( Eq, Ord, Clone, Hash, PartialEq, PartialOrd, Default, 
+          IntoRecord, FromRecord, Mutator, Serialize, Deserialize)]
+pub struct P {
+    pub src: N,
+    pub dst: N,
+}
+
+#[derive( Eq, Ord, Clone, Hash, PartialEq, PartialOrd, Default, 
+          IntoRecord, FromRecord, Mutator, Serialize, Deserialize)]
+#[ddlog(rename = "Edge")]
+pub struct Edge {
+    pub src: u64,
+    pub dst: u64
+}
+impl abomonation::Abomonation for Edge{}
+impl ::std::fmt::Display for Edge {
+    fn fmt(&self, __formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match self {
+            Edge{src,dst} => {
+                __formatter.write_str("Edge{")?;
+                ::std::fmt::Debug::fmt(src, __formatter)?;
+                __formatter.write_str(",")?;
+                ::std::fmt::Debug::fmt(dst, __formatter)?;
+                __formatter.write_str("}")
+            }
+        }
+    }
+}
+impl ::std::fmt::Debug for Edge {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        ::std::fmt::Display::fmt(&self, f)
+    }
+}
+#[derive(Eq, Ord, Clone, Hash, PartialEq, PartialOrd, IntoRecord, Mutator, Default, Serialize, Deserialize, FromRecord)]
+#[ddlog(rename = "NoCycle")]
+pub struct NoCycle {
+    pub node: u32
+}
+impl abomonation::Abomonation for NoCycle{}
+impl ::std::fmt::Display for NoCycle {
+    fn fmt(&self, __formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match self {
+            NoCycle{node} => {
+                __formatter.write_str("NoCycle{")?;
+                ::std::fmt::Debug::fmt(node, __formatter)?;
+                __formatter.write_str("}")
+            }
+        }
+    }
+}
+impl ::std::fmt::Debug for NoCycle {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        ::std::fmt::Display::fmt(&self, f)
+    }
+}
+
+#[derive(Eq, Ord, Clone, Hash, PartialEq, PartialOrd, IntoRecord, Mutator, Default, Serialize, Deserialize, FromRecord)]
+#[ddlog(rename = "Path")]
+pub struct Path {
+    pub src: u64,
+    pub dst: u64
+}
+impl abomonation::Abomonation for Path{}
+impl ::std::fmt::Display for Path {
+    fn fmt(&self, __formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match self {
+            Path{src,dst} => {
+                __formatter.write_str("Path{")?;
+                ::std::fmt::Debug::fmt(src, __formatter)?;
+                __formatter.write_str(",")?;
+                ::std::fmt::Debug::fmt(dst, __formatter)?;
+                __formatter.write_str("}")
+            }
+        }
+    }
+}
+impl ::std::fmt::Debug for Path {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        ::std::fmt::Display::fmt(&self, f)
+    }
+}
 
 // fn load_program(file_path: &str) -> DDEngine<AtomicTerm> {
 //     let path = Path::new(file_path);
@@ -41,12 +140,12 @@ use differential_datalog_test::test_value::*;
 //     return engine;
 // }
 
-fn load_program(file_path: &str) -> Env<AtomicTerm> {
-    let path = Path::new(file_path);
-    let content = fs::read_to_string(path).unwrap();
-    let env = AtomicTerm::load_program(content);
-    env
-}
+// fn load_program(file_path: &str) -> Env<AtomicTerm> {
+//     let path = Path::new(file_path);
+//     let content = fs::read_to_string(path).unwrap();
+//     let env = AtomicTerm::load_program(content);
+//     env
+// }
 
 const TEST_SIZE: u64 = 1000;
 
@@ -105,6 +204,7 @@ fn test_ddlog_engine() {
             change_cb: Some(Arc::new(move |_, v, w| set_update("T1", &relset1, v, w))),
         }
     };
+
     let relset2: Arc<Mutex<Delta<U64>>> = Arc::new(Mutex::new(BTreeMap::default()));
     let rel2 = {
         let relset2 = relset2.clone();
@@ -179,6 +279,108 @@ fn test_ddlog_engine() {
     running.stop().unwrap();
 }
 
+
+
+#[test]
+fn test_simple_rule() {
+    let nthreads = 1;
+
+    let relset0: Arc<Mutex<Delta<Edge>>> = Arc::new(Mutex::new(BTreeMap::default()));
+    let rel0 = {
+        let relset0 = relset0.clone();
+        Relation {
+            name: Cow::from("Edge"),
+            input: true,
+            distinct: false,
+            caching_mode: CachingMode::Set,
+            key_func: None,
+            id: 0,
+            rules: vec![],
+            arrangements: Vec::new(),
+            change_cb: Some(Arc::new(move |_, v, w| set_update("Edge", &relset0, v, w))),
+        }
+    };
+
+    let rule1 = Rule::CollectionRule {
+        description: std::borrow::Cow::from("Path(.src=a, .dst=b) :- Edge(.src=a, .dst=b)."),
+        rel: 0,
+        xform: Some(XFormCollection::FilterMap{
+            description: std::borrow::Cow::from("head of Path(.src=a, .dst=b) :- Edge(.src=a, .dst=b)."),
+            fmfun: {fn __f(__v: DDValue) -> ::std::option::Option<DDValue>
+            {
+                // println!("debug rule1: {}", __v);
+                let (ref a, ref b) = match *<Edge>::from_ddvalue_ref(&__v) {
+                    Edge{src: ref a, dst: ref b} => ((*a).clone(), (*b).clone()),
+                    _ => return None
+                };
+                let path = Path {src: (*a).clone(), dst: (*b).clone()};
+                Some(path.into_ddvalue())
+                // Some(1.into_ddvalue())
+            }
+            __f},
+            next: Box::new(None)
+        })
+    };
+    
+    // Relation `Path`
+    let relset1: Arc<Mutex<Delta<Path>>> = Arc::new(Mutex::new(BTreeMap::default()));
+    let rel1 = {
+        let relset1 = relset1.clone();
+        Relation {
+            name: Cow::from("Path"),
+            input: true,
+            distinct: false,
+            caching_mode: CachingMode::Set,
+            key_func: None,
+            id: 1,
+            rules: vec![ rule1 ],
+            arrangements: Vec::new(),
+            // change_cb: None,
+            change_cb: Some(Arc::new(move |_, v, w| set_update("Path", &relset1, v, w))),
+        }
+    };
+
+    let prog: Program = Program {
+        nodes: vec![
+            // They have to be in the right order.
+            ProgNode::Rel { rel: rel0 },
+            ProgNode::Rel { rel: rel1 }, 
+            ],
+        delayed_rels: vec![],
+        init_data: vec![],
+    };
+
+    let mut running = prog.run(nthreads).unwrap();
+
+    /* 1. Populate T1 */
+    let vals: Vec<u64> = (0..10).collect();
+    let set: BTreeMap<_, _> = vals.iter().map(|x| {
+        // They will be converted into DDValue later.
+        (Edge {src: *x, dst: *x + 1}, 1)
+    }).collect();
+
+    running.transaction_start().unwrap();
+    for x in set.keys() {
+        let ddvalue = x.clone().into_ddvalue();
+        // let ddvalue = 100.into_ddvalue();
+
+        println!("{}", ddvalue);
+
+        running.insert(0, ddvalue).unwrap();
+        //assert_eq!(running.relation_clone_content(1).unwrap(),
+        //           running.relation_clone_content(2).unwrap());
+    }
+
+    running.transaction_commit().unwrap();
+
+    for (i, x) in relset0.lock().unwrap().iter() {
+        println!("Edge, key: {}, value: {}", i, x);
+    }
+    
+    for (i, x) in relset1.lock().unwrap().iter() {
+        println!("Path, key: {}, value: {}", i, x);
+    }
+}
 
 // #[test]
 // fn test_ddengine_2() {
