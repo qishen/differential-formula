@@ -7,7 +7,7 @@ use std::vec::Vec;
 
 use num::*;
 
-use crate::expression::{Expression, SetComprehension};
+use crate::expression::*;
 use crate::term::*;
 use crate::type_system::*;
 use crate::util::map::*;
@@ -67,12 +67,6 @@ pub trait ExprTrait {
 
     type TermOutput: TermStructure;
 
-    /// Check if expression contains set comprehension.
-    fn has_set_comprehension(&self) -> bool;
-
-    /// Return all set comprehension in the expression.
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>>;
-
     /// Evaluate the expression given the variable binding map.
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput>;
 }
@@ -80,20 +74,6 @@ pub trait ExprTrait {
 impl<T> ExprTrait for Expr<T> where T: TermStructure
 {
     type TermOutput = T;
-
-    fn has_set_comprehension(&self) -> bool {
-        match self.borrow() {
-            Expr::BaseExpr(be) => be.has_set_comprehension(),
-            Expr::ArithExpr(ae) => ae.has_set_comprehension(),
-        }
-    }
-
-    fn set_comprehensions(&self) -> Vec<SetComprehension<Self::TermOutput>> {
-        match self.borrow() {
-            Expr::BaseExpr(be) => be.set_comprehensions(),
-            Expr::ArithExpr(ae) => ae.set_comprehensions(),
-        }
-    }
 
     fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
         match self.borrow() {
@@ -103,7 +83,7 @@ impl<T> ExprTrait for Expr<T> where T: TermStructure
     }
 }
 
-impl<T> Expression for Expr<T> where T: TermStructure
+impl<T> BasicExprOps for Expr<T> where T: TermStructure
 {
     type TermOutput = T;
 
@@ -120,11 +100,27 @@ impl<T> Expression for Expr<T> where T: TermStructure
             Expr::ArithExpr(a) => a.replace_pattern(pattern, replacement),
         }
     }
+}
+
+impl<T> SetCompreOps for Expr<T> where T: TermStructure {
+    fn has_set_comprehension(&self) -> bool {
+        match self {
+            Expr::BaseExpr(be) => be.has_set_comprehension(),
+            Expr::ArithExpr(ae) => ae.has_set_comprehension(),
+        }
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        match self {
+            Expr::BaseExpr(be) => be.set_comprehensions(),
+            Expr::ArithExpr(ae) => ae.set_comprehensions(),
+        }
+    }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
-        match self.borrow_mut() {
-            Expr::BaseExpr(b) => { return b.replace_set_comprehension(generator); },
-            Expr::ArithExpr(a) => { return a.replace_set_comprehension(generator); }
+        match self {
+            Expr::BaseExpr(be) => be.replace_set_comprehension(generator),
+            Expr::ArithExpr(ae) => ae.replace_set_comprehension(generator),
         }
     }
 }

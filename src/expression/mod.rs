@@ -12,7 +12,7 @@ pub use expr::*;
 
 /// This trait applies to Formula expressions like terms, rules, constraints, setcompre, etc.
 /// It provides some functions to return variables in the expressions or replace some variables.
-pub trait Expression {
+pub trait BasicExprOps {
     
     type TermOutput: TermStructure;
 
@@ -22,6 +22,15 @@ pub trait Expression {
     /// Find a term with certain pattern in the expression and replace it with another term.
     /// The pattern can be any generic term that implemets `TermStructure` trait.
     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput);
+}
+
+pub trait SetCompreOps: BasicExprOps {
+
+    // Check if the expression has set comprehension inside.
+    fn has_set_comprehension(&self) -> bool;
+
+    // Return all set comprehensions as references.
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>>;
 
     /// Find set comprehension in the expression and replace it with a don't-care variable to 
     /// represent it. The method will return a hash map mapping don't-care variable term to set 
@@ -29,8 +38,8 @@ pub trait Expression {
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>;
 }
 
-impl<E> Expression for Option<E> where E: Expression
-{
+impl<E> BasicExprOps for Option<E> where E: BasicExprOps {
+
     type TermOutput = E::TermOutput;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
@@ -50,6 +59,26 @@ impl<E> Expression for Option<E> where E: Expression
             None => {},
         };
     }
+}
+
+impl<E> SetCompreOps for Option<E> where E: SetCompreOps {
+    fn has_set_comprehension(&self) -> bool {
+        match self {
+            Some(expr) => {
+                expr.has_set_comprehension()
+            },
+            None => false
+        }
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        match self {
+            Some(expr) => {
+                return expr.set_comprehensions();
+            },
+            None => { return Vec::new(); },
+        };
+    }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
         match self {
@@ -61,8 +90,8 @@ impl<E> Expression for Option<E> where E: Expression
     }
 }
 
-impl<E> Expression for Vec<E> where E: Expression
-{
+impl<E> BasicExprOps for Vec<E> where E: BasicExprOps {
+
     type TermOutput = E::TermOutput;
 
     fn variables(&self) -> HashSet<Self::TermOutput> {
@@ -79,6 +108,22 @@ impl<E> Expression for Vec<E> where E: Expression
             element.replace_pattern(pattern, replacement);
         }
     }
+}
+
+impl<E> SetCompreOps for Vec<E> where E: SetCompreOps {
+    fn has_set_comprehension(&self) -> bool {
+        self.iter().any(|expr| {
+            expr.has_set_comprehension()
+        })
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        self.iter().fold(Vec::new(), |mut acc, expr| {
+            let setcompres = expr.set_comprehensions();
+            acc.extend(setcompres);
+            return acc;
+        })
+    }
 
     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
     {
@@ -89,4 +134,5 @@ impl<E> Expression for Vec<E> where E: Expression
         }
         map
     }
+
 }

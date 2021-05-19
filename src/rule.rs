@@ -18,31 +18,15 @@ use crate::constraint::*;
 use crate::util::*;
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Rule<T> where T: TermStructure {
     head: Vec<T>,
     body: Vec<Constraint<T>>,
 }
 
-impl<T> Expression for Rule<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    // All variables are found recursively including the ones in set comprehension.
-    fn variables(&self) -> HashSet<Self::TermOutput> {
-        // Head is ignored because the variables it has already exist in the body.
-        self.body.variables()
-    }
-
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
-        self.head.replace_pattern(pattern, replacement);
-        self.body.replace_pattern(pattern, replacement);
-    }
-
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
-    -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>>
-    {
-        self.body.replace_set_comprehension(generator)
+impl<T> Debug for Rule<T> where T: TermStructure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -67,6 +51,36 @@ impl<T> Display for Rule<T> where T: TermStructure  {
     }
 }
 
+impl<T> BasicExprOps for Rule<T> where T: TermStructure {
+
+    type TermOutput = T;
+
+    fn variables(&self) -> HashSet<Self::TermOutput> {
+        // All variables are found recursively including the ones in set comprehension.
+        // Head is ignored because the variables it should already exist in the body.
+        self.body.variables()
+    }
+
+    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+        self.head.replace_pattern(pattern, replacement);
+        self.body.replace_pattern(pattern, replacement);
+    }
+}
+
+impl<T> SetCompreOps for Rule<T> where T: TermStructure {
+    fn has_set_comprehension(&self) -> bool {
+        self.body.has_set_comprehension()
+    }
+
+    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+        self.body.set_comprehensions()
+    }
+
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+        self.body.replace_set_comprehension(generator)
+    }
+    
+}
 
 impl<T> Rule<T> where T: TermStructure {
     pub fn new(head: Vec<T>, body: Vec<Constraint<T>>) -> Self {
@@ -152,7 +166,7 @@ impl<T> Rule<T> where T: TermStructure {
                 Constraint::Predicate(predicate) => {
                     if predicate.negated {
                         let random_name = generator.generate_name();
-                        let introduced_var = T::create_variable_term(None, random_name, vec![]);
+                        let introduced_var = T::gen_raw_variable_term(random_name, vec![]);
                         let (b1, b2) = predicate.convert_negation(introduced_var).unwrap();
                         constraints.push(b1);
                         constraints.push(b2);
@@ -204,7 +218,7 @@ impl<T> Rule<T> where T: TermStructure {
 
         for var in all_vars.iter() {
             // var cannot have fragments as a derived variable.
-            if !pred_matched_vars.contains(var) && var == var.root() {
+            if !pred_matched_vars.contains(var) && var == &var.root() {
                 derived_vars.insert(var.clone());
             }
         }

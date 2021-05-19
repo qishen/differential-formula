@@ -1,6 +1,5 @@
 use std::borrow::*;
 use std::hash::Hash;
-use std::sync::Arc;
 use std::vec::Vec;
 use std::fmt::*;
 use std::string::String;
@@ -10,83 +9,134 @@ use serde::{Serialize, Deserialize};
 use crate::term::*;
 use crate::util::wrapper::*;
 
-/// A supertrait that includes Borrow<Type>, From<Type> and a bunch of basic traits that allow
-/// the type to be compariable, cloneable, displayable and be able to transmit between threads.
-pub trait BorrowedType: Borrow<Type> + From<Type> + UniqueForm<String> + 
-differential_dataflow::ExchangeData + Eq + Clone + Debug + Display + Hash + Ord {}
-
-pub trait FormulaType {}
-impl<T> FormulaType for T where T: BorrowedType {}
+pub trait FormulaTypeTrait {}
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Clone, Serialize, Deserialize)]
-pub enum Type {
-    BaseType(BaseType),
-    CompositeType(CompositeType),
-    EnumType(EnumType),
-    RangeType(RangeType),
-    RenamedType(RenamedType),
-    UnionType(UnionType),
-    Undefined(Undefined)
+pub enum RawType {
+    TypeId(Cow<'static, str>),
+    Type(FormulaTypeEnum),
+    Undefined,
 }
 
-impl Display for Type {
+impl HasUniqueForm<String> for RawType{
+    fn derive_unique_form(&self) -> String {
+        match self {
+            RawType::TypeId(type_id) => type_id.clone().into_owned(),
+            RawType::Type(formula_type) => formula_type.derive_unique_form(),
+            _ => "Undefined".to_string()
+        }
+    }
+}
+
+impl Display for RawType {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.derive_unique_form())
     }
 }
 
-/// Each type has an unique form as string.
-impl HasUniqueForm<String> for Type {
-    fn derive_unique_form(&self) -> String {
+impl RawType {
+    pub fn is_subtype_of(&self, other: &RawType) -> bool {
+        match other {
+            RawType::Type(raw_type) => {
+                match raw_type {
+                    FormulaTypeEnum::CompositeType(c) => {
+                        c.arguments.iter().any(|(_, subtype)| {
+                            self == subtype || self.is_subtype_of(subtype)
+                        })
+                    },
+                    // TODO: Consider basic type and union type.
+                    _ => false
+                }
+            },
+            RawType::TypeId(tid) => { false },
+            _ => false
+        }
+    }
+
+    pub fn type_id<'a>(&self) -> Cow<'a, str> {
         match self {
-            Type::BaseType(t) => t.derive_unique_form(),
-            Type::CompositeType(t) => t.derive_unique_form(),
-            Type::EnumType(t) => t.derive_unique_form(),
-            Type::RangeType(t) => t.derive_unique_form(),
-            Type::RenamedType(t) => t.derive_unique_form(),
-            Type::UnionType(t) => t.derive_unique_form(),
-            Type::Undefined(t) => t.derive_unique_form(),
+            RawType::Type(raw_type) => Cow::from(format!("{}", raw_type)),
+            RawType::TypeId(tid) => tid.clone(),
+            RawType::Undefined => Cow::from("Undefined")
+        }
+    }
+
+    /// Wrap the base type to create a new type with an additional prefix.
+    pub fn rename_type(&self, scope: String) -> RawType {
+        match self {
+            RawType::Type(raw_type_enum) => {
+                match raw_type_enum {
+                    FormulaTypeEnum::BaseType(_) => {
+                        self.clone()
+                    },
+                    _ => {
+                        let base = raw_type_enum.clone();
+                        let type_enum = FormulaTypeEnum::RenamedType(
+                            RenamedType { scope, base: Box::new(RawType::Type(base)) }
+                        );
+                        RawType::Type(type_enum)
+                    }
+                }
+            },
+            RawType::TypeId(type_id) => {
+                let renamed_typeid = format!("{}.{}", scope, type_id); 
+                RawType::TypeId(Cow::from(renamed_typeid))
+            },
+            _ => RawType::Undefined
+        }
+    }
+
+    /// Unroll RenamedType to return the base type for only one level.
+    pub fn unrename_type(&self) -> Option<RawType> {
+        match self {
+            RawType::Type(raw_type_enum) => {
+                match raw_type_enum {
+                    FormulaTypeEnum::RenamedType(rtype) => {
+                        Some(rtype.base.as_ref().clone())
+                    },
+                    _ => { None }
+                }
+            },
+            _ => None
         }
     }
 }
 
-impl Type {
-    /// Wrap the base type to create a new type with an additional prefix.
-    pub fn rename_type(&self, scope: String) -> Type {
-        let base = self.clone();
-        Type::RenamedType(
-            RenamedType { 
-                scope, 
-                base: base.into() 
-            }
-        )
-    }
+/// `FormulaTypeEnum` is the type created directly from type definition in the domain without optimization. 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Clone, Serialize, Deserialize)]
+pub enum FormulaTypeEnum {
+    // Built-in primitive type e.g. integer, float, string. 
+    BaseType(BaseType),
+    // A ::= new (src: B, dst: C). A term with variables can be used to represent the type
+    // A(m, n) where m is of type `B` and n is of type `C`.
+    CompositeType(CompositeType),
+    // A set of atoms e.g. B ::= {1.0, 100, "hello", -3.14}
+    EnumType(EnumType),
+    // A range of integers e.g. C ::= {1..100}
+    RangeType(RangeType),
+    // Prefixed types that are reused in other domains by inheritance.
+    RenamedType(RenamedType),
+    // A union of several types e.g. D ::= A + B + {1, 2, "hi"}
+    UnionType(UnionType),
+}
 
-    /// Unroll RenamedType to return the base type for only one level.
-    pub fn unrename_type(&self) -> &Type {
+impl Display for FormulaTypeEnum {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.derive_unique_form())
+    }
+}
+
+/// Each type has an unique form to be derived as string.
+impl HasUniqueForm<String> for FormulaTypeEnum {
+    fn derive_unique_form(&self) -> String {
         match self {
-            Type::RenamedType(rtype) => {
-                rtype.base.borrow()
-            },
-            _ => { self }
+            FormulaTypeEnum::BaseType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::CompositeType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::EnumType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::RangeType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::RenamedType(t) => t.derive_unique_form(),
+            FormulaTypeEnum::UnionType(t) => t.derive_unique_form(),
         }
-    }
-
-    /// Unroll RenamedType recursively to find the base type that is not a RenamedType.
-    pub fn base_type(&self) -> &Type {
-        match self {
-            Type::RenamedType(rtype) => {
-                // Peel off Arc and UniqueFormWrapper.
-                let type_ref: &Type = rtype.base.borrow();
-                type_ref.base_type()
-            },
-            _ => { self }
-        }
-    }
-
-    /// Create an empty undefined type as pure Type.
-    pub fn undefined() -> Type {
-        Type::Undefined(Undefined{})
     }
 }
 
@@ -96,7 +146,7 @@ pub struct EnumType {
     pub items: Vec<AtomicTerm>,
 }
 
-impl FormulaType for EnumType {}
+impl FormulaTypeTrait for EnumType {}
 impl HasUniqueForm<String> for EnumType {
     fn derive_unique_form(&self) -> String {
         self.name.clone()
@@ -106,10 +156,10 @@ impl HasUniqueForm<String> for EnumType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RenamedType {
     pub scope: String,
-    pub base: AtomicType,
+    pub base: Box<RawType>,
 }
 
-impl FormulaType for RenamedType {}
+impl FormulaTypeTrait for RenamedType {}
 impl HasUniqueForm<String> for RenamedType {
     fn derive_unique_form(&self) -> String {
         format!("{:?}.{:?}", self.scope, self.base.derive_unique_form())
@@ -119,7 +169,7 @@ impl HasUniqueForm<String> for RenamedType {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Undefined {}
 
-impl FormulaType for Undefined {}
+impl FormulaTypeTrait for Undefined {}
 impl HasUniqueForm<String> for Undefined {
     fn derive_unique_form(&self) -> String {
         "Undefined".to_string()
@@ -128,11 +178,11 @@ impl HasUniqueForm<String> for Undefined {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RangeType {
-    low: AtomEnum,
-    high: AtomEnum,
+    low: AtomEnum, // low has to be a integer
+    high: AtomEnum, // high has to be a integer
 }
 
-impl FormulaType for RangeType {}
+impl FormulaTypeTrait for RangeType {}
 impl HasUniqueForm<String> for RangeType {
     fn derive_unique_form(&self) -> String {
         format!("{:?} .. {:?}", self.low, self.high)
@@ -149,7 +199,7 @@ pub enum BaseType {
     Rational,
 }
 
-impl FormulaType for BaseType {}
+impl FormulaTypeTrait for BaseType {}
 impl HasUniqueForm<String> for BaseType {
     fn derive_unique_form(&self) -> String {
         let base_type_str = match self {
@@ -164,26 +214,49 @@ impl HasUniqueForm<String> for BaseType {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
     pub name: String,
-    pub arguments: Vec<(Option<String>, AtomicType)>
+    pub arguments: Vec<(Option<String>, RawType)>
 }
 
-impl FormulaType for CompositeType {}
+impl Debug for CompositeType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let mut arg_strs: Vec<String> = vec![];
+        for (tag, raw_type) in self.arguments.iter() {
+            let arg_str = match tag {
+                Some(name) => { format!("{}: {}", name, raw_type.derive_unique_form()) },
+                None => { raw_type.derive_unique_form() }
+            };
+            arg_strs.push(arg_str);
+        }
+        write!(f, "{} ::= ({})", self.name, arg_strs.join(", "))
+    }
+}
+
+impl FormulaTypeTrait for CompositeType {}
 impl HasUniqueForm<String> for CompositeType {
     fn derive_unique_form(&self) -> String {
         self.name.clone()
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
     pub name: String,
-    pub subtypes: Vec<AtomicType>,
+    pub subtypes: Vec<RawType>,
 }
 
-impl FormulaType for UnionType {}
+impl Debug for UnionType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let names: Vec<String> = self.subtypes.iter().map(|raw_type| {
+            raw_type.derive_unique_form()
+        }).collect();
+        write!(f, "{} ::= {}", self.name, names.join(" + "))
+    }
+}
+
+impl FormulaTypeTrait for UnionType {}
 impl HasUniqueForm<String> for UnionType {
     fn derive_unique_form(&self) -> String {
         self.name.clone()
