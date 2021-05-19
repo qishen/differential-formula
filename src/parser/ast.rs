@@ -416,7 +416,7 @@ impl ProgramAst {
                     let term = AtomicTerm::from_term_ast(&term_ast, &atomic_type_map);
                     if let AtomicTerm::Variable(v) = term {
                         // Create a constant from variable term with a nullary type.
-                        let (constant_sort, constant) = AtomicTerm::create_constant(v.root);
+                        let (constant_sort, constant) = AtomicTerm::gen_constant(v.root);
                         let native_sort: &RawType = constant_sort.borrow();
                         type_map.insert(format!("{}", constant_sort), native_sort.clone().into());
                         items.push(constant);
@@ -950,7 +950,7 @@ impl ConstraintAstBehavior for PredicateAst {
         let real_term = match &self.term {
             TermAst::VariableTermAst(var_ast) => {
                 // Convert variable term into a constant (A composite term with zero argument.
-                let (_, nullary_term) = T::create_constant(var_ast.root.clone());
+                let (_, nullary_term) = T::gen_constant(var_ast.root.clone());
                 nullary_term
             },
             _ => { 

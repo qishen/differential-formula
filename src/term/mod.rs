@@ -30,7 +30,7 @@ pub trait TermTraversal: TermStructure {
 
     // / Convert non-ground term into a normalized form and return a hash map that maps original variable into
     // / normalized variable. The normalized variables start with `~p`.
-    // fn normalize(&self) -> (Self, HashMap<Self, Self>);
+    fn normalize(&self) -> (Self, HashMap<Self, Self>);
 
     // / Compare two Formula terms and return a binding if every variable in the first term `a` including 
     // / itself can match to the terms in the second term `b` at exact the same position. Fail if a conflict

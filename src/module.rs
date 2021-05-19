@@ -109,6 +109,27 @@ impl<T> MetaInfo<T> where T: TermStructure {
     pub fn get_type_by_name(&self, name: &String) -> Option<&RawType> {
         self.type_map.get(name)
     }
+
+    pub fn composite_types(&self) -> Vec<(&String, &RawType)> {
+        let composite_types: Vec<_> = self.type_map().iter().filter(|(_, raw_type)| {
+            match raw_type {
+                RawType::Type(type_enum) => {
+                    match type_enum {
+                        FormulaTypeEnum::CompositeType(_) => true,
+                        _ => false
+                    }
+                },
+                _ => false
+            }
+        }).collect();
+        composite_types
+    }
+
+    /// Return all composite types according to their dependency relationship.
+    /// e.g. Node(id: Integer) should appear in the list before Edge(src: Node, dst: Node)
+    pub fn sorted_composite_types(&self) -> Vec<(&String, &RawType)> {
+        todo!()
+    }
 }
 
 pub trait AccessModel {

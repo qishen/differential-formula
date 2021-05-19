@@ -8,10 +8,10 @@ domain Graph {
     TwoEdge ::= new(first: Edge, second: Edge).
 
     // Simple rule
-    Path(a, b) :- Edge(a, b).
+    Path(a, c) :- Edge(a, b), Edge(b, c).
 
     // Recursive rule
-    Path(a, c) :- Path(a, b), Path(b, c).
+    //Path(a, c) :- Path(a, b), Path(b, c).
 
 }
 

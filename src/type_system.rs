@@ -35,6 +35,32 @@ impl Display for RawType {
 }
 
 impl RawType {
+    pub fn is_subtype_of(&self, other: &RawType) -> bool {
+        match other {
+            RawType::Type(raw_type) => {
+                match raw_type {
+                    FormulaTypeEnum::CompositeType(c) => {
+                        c.arguments.iter().any(|(_, subtype)| {
+                            self == subtype || self.is_subtype_of(subtype)
+                        })
+                    },
+                    // TODO: Consider basic type and union type.
+                    _ => false
+                }
+            },
+            RawType::TypeId(tid) => { false },
+            _ => false
+        }
+    }
+
+    pub fn type_id<'a>(&self) -> Cow<'a, str> {
+        match self {
+            RawType::Type(raw_type) => Cow::from(format!("{}", raw_type)),
+            RawType::TypeId(tid) => tid.clone(),
+            RawType::Undefined => Cow::from("Undefined")
+        }
+    }
+
     /// Wrap the base type to create a new type with an additional prefix.
     pub fn rename_type(&self, scope: String) -> RawType {
         match self {
@@ -100,8 +126,7 @@ impl Display for FormulaTypeEnum {
     }
 }
 
-/// Each type has an unique form as string.
-/// TODO: implement HasUniqueForm<RegularType>
+/// Each type has an unique form to be derived as string.
 impl HasUniqueForm<String> for FormulaTypeEnum {
     fn derive_unique_form(&self) -> String {
         match self {

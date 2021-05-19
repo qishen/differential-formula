@@ -1,3 +1,4 @@
+use std::borrow::*;
 use std::cell::*;
 use std::vec::Vec;
 use std::collections::*;
@@ -10,34 +11,19 @@ use num::*;
 use ordered_float::*;
 use serde::{Serialize, Deserialize};
 
-
 use crate::module::Env;
 use crate::term::*;
 use crate::type_system::*;
 use crate::expression::*;
 use crate::util::*;
-use crate::util::map::*;
 use crate::parser::ast::TermAst;
 
 use differential_datalog::record::*;
-
-
-// Enum of three types of terms: atom, composite and variable.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TermType {
-    Atom, 
-    Composite, 
-    Variable
-}
 
 /// A trait that requires a term implementation to have a tree-like data structure and 
 /// provides access to sort and its arguments. This trait must be implemented for any 
 /// term implementation like `AtomicTerm` or `IndexedTerm`.
 pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug {
-
-    /// Return a reference of the type of the term.
-    // fn sort(&self) -> &Self::SortOutput;
-
     /// Return a reference of a vector of terms as arguments and the arguments have the same type as Self.
     fn arguments(&self) -> Vec<&Self>;
 
@@ -65,7 +51,10 @@ pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug {
     fn gen_atom_term(atom_enum: AtomEnum) -> Self;
 
     /// Create a nullary composite type with no arguments inside and return the singleton term or constant.
-    fn create_constant(constant: String) -> (RawType, Self);
+    fn gen_constant(constant: String) -> (RawType, Self);
+
+    /// Remove alias from composite term and return the alias
+    fn remove_alias(&mut self) -> Option<String>;
 
     /// Rename the term with scope and only applied to composite and variable terms. A new type with scope
     /// added will be created and then assigned to each composite term as the sort. A mutable hashset of types
@@ -75,30 +64,24 @@ pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug {
     // fn rename(&self, scope: String, types: &mut HashSet<RawType>) -> Self;
     fn rename(&self, scope: String) -> Self;
 
-    /// Given a label as string and check if one of the arguments in composite term is related to the label
-    /// according to the type definition. e.g. Edge ::= new (src: Node, dst: Node) and we have an instance
-    /// e1 = Edge(_,_). The subterm represented by `e1.src` can be derived. 
+    // Given a label as string and check if one of the arguments in composite term is related to the label
+    // according to the type definition. e.g. Edge ::= new (src: Node, dst: Node) and we have an instance
+    // e1 = Edge(_,_). The subterm represented by `e1.src` can be derived. 
     // fn find_argument_by_label(&self, label: &str) -> Option<&Self>;
 
-    /// Find subterm in the current term given the labels or variable fragments.
+    // Find subterm in the current term given the labels or variable fragments.
     // fn find_subterm_by_labels(&self, labels: &Vec<&String>) -> Option<&Self>;
 
-    /// Check if a term is the subterm of another term. e.g. Variable term `x.y.z` is a subterm of `x.y` or `x`.
-    /// Node(1) is the subterm of Edge(Node(1), n2).
+    // Check if a term is the subterm of another term. e.g. Variable term `x.y.z` is a subterm of `x.y` or `x`.
+    // Node(1) is the subterm of Edge(Node(1), n2).
     // fn is_direct_subterm_of(&self, term: &Self) -> bool;
 
-    /// Only apply to two variable terms and get the difference of their fragments as a vector of string.
+    // Only apply to two variable terms and get the difference of their fragments as a vector of string.
     // fn fragments_diff(&self, term: &Self) -> Option<Vec<&String>>;
     // fn fragments_diff<'a>(&'a self, term: &'a Self) -> Option<Vec<&'a String>>;
 
-    // /// Try to convert term into AtomEnum.
-    // fn into_atom_enum(&self) -> Option<AtomEnum>;
-
     /// Convert `TermAst` into a term.
     fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, RawType>) -> Self;
-
-    /// Remove alias from composite term and return the alias
-    fn remove_alias(&mut self) -> Option<String>;
 
     /// Parse text and load the program into environment.
     fn load_program<'a>(text: String) -> Env<Self>;
@@ -172,37 +155,32 @@ impl<T> TermTraversal for T where T: TermStructure {
         }
     }
 
-    // fn normalize(&self) -> (Self, HashMap<Self, Self>) {
-    //     let mut generator = NameGenerator::new("~p");
-    //     // Map normalized variables to original variables.
-    //     let mut vmap: HashMap<Self, Self> = HashMap::new();
-    //     let mut normalized_term = self.clone();
-
-    //     normalized_term.traverse_mut(
-    //         &|term| { term.term_type() == TermType::Variable },
-    //         &mut |var| {
-    //             // Create an immutable copy of var from mutable reference.
-    //             let var_clone = var.clone();
-    //             if !var.is_dc_variable() {
-    //                 let p = match vmap.contains_key(var) {
-    //                     true => {
-    //                         vmap.get(var).unwrap().clone()
-    //                     },
-    //                     false => {
-    //                         let dc_name = generator.generate_name();
-    //                         // Create a new type for each new variable, it's ok here.
-    //                         let dc_var = Self::create_variable_term(None, dc_name, vec![]);
-    //                         dc_var
-    //                     }
-    //                 };
-    //                 vmap.insert(var_clone, p.clone());
-    //                 *var = p;
-    //             }
-    //         }
-    //     );
-
-    //     return (normalized_term, vmap);
-    // }
+    fn normalize(&self) -> (Self, HashMap<Self, Self>) {
+        let mut generator = NameGenerator::new("~p");
+        // Map normalized variables to original variables.
+        let mut vmap: HashMap<Self, Self> = HashMap::new();
+        let mut normalized_term = self.clone();
+        normalized_term.traverse_mut(
+            &|term| { term.is_var() && !term.is_donot_care_variable() },
+            &mut |var| {
+                // Create an immutable copy of var from mutable reference.
+                let var_clone = var.clone();
+                let p = match vmap.contains_key(var) {
+                    true => {
+                        vmap.get(var).unwrap().clone()
+                    },
+                    false => {
+                        let dc_name = generator.generate_name();
+                        let dc_var = Self::gen_raw_variable_term(dc_name, vec![]);
+                        dc_var
+                    }
+                };
+                vmap.insert(var_clone, p.clone());
+                *var = p;
+            }
+        );
+        return (normalized_term, vmap);
+    }
 
     fn match_in_place<'a>(&'a self, binding: &mut HashMap<&'a Self, &'a Self>, term: &'a Self) -> bool {
         if self.is_var() {

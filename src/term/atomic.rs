@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 use differential_datalog::record::*;
 use ddlog_derive::*;
 
+use crate::expression::*;
 use crate::module::Env;
 use super::generic::*;
 use crate::type_system::*;
@@ -27,6 +28,55 @@ pub enum AtomicTerm {
     Atom(AtomicAtom),
     Variable(AtomicVariable),
     Composite(AtomicComposite)
+}
+
+// Convert string into a variable term with unknown sort.
+impl From<String> for AtomicTerm {
+    fn from(item: String) -> Self {
+        AtomicTerm::gen_raw_variable_term(item, vec![])
+    }
+}
+
+// Convert &str into a variable term with unknown sort.
+impl From<&str> for AtomicTerm {
+    fn from(item: &str) -> Self {
+        AtomicTerm::gen_raw_variable_term(item.to_string(), vec![])
+    }
+}
+
+impl From<usize> for AtomicTerm {
+    fn from(item: usize) -> Self {
+        let atom_enum = AtomEnum::Int(num::BigInt::from(item));
+        AtomicTerm::gen_atom_term(atom_enum)
+    }
+}
+
+impl HasUniqueForm<String> for AtomicTerm {
+    fn derive_unique_form(&self) -> String {
+        match self {
+            AtomicTerm::Atom(a) => a.derive_unique_form(),
+            AtomicTerm::Variable(v) => v.derive_unique_form(),
+            AtomicTerm::Composite(c) => c.derive_unique_form(),
+        }
+    }
+}
+
+impl Display for AtomicTerm {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let term_str = match self {
+            AtomicTerm::Composite(c) => format!("{}", c),
+            AtomicTerm::Variable(v) => format!("{}", v),
+            AtomicTerm::Atom(a) => format!("{}", a),
+        };
+        write!(f, "{}", term_str)
+    }
+}
+
+impl Debug for AtomicTerm {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        // Rewrite Debug trait in the same way as Display.
+        write!(f, "{}", self)
+    }
 }
 
 impl Default for AtomicTerm {
@@ -111,6 +161,7 @@ impl FromRecord for AtomicTerm {
 }
 
 impl TermStructure for AtomicTerm {
+
     fn arguments(&self) -> Vec<&Self> {
         let mut args = vec![];
         match self {
@@ -181,7 +232,7 @@ impl TermStructure for AtomicTerm {
         AtomicTerm::Atom(atom)
     }
 
-    fn create_constant(constant: String) -> (RawType, Self) {
+    fn gen_constant(constant: String) -> (RawType, Self) {
         let nullary_type_enum = FormulaTypeEnum::CompositeType(
             CompositeType { 
                 name: constant, 
@@ -192,6 +243,18 @@ impl TermStructure for AtomicTerm {
         let composite = AtomicComposite::new(nullary_type.clone().into(), vec![], None);
         let term = AtomicTerm::Composite(composite);
         return (nullary_type.into(), term);
+    }
+
+    /// Remove alias from composite term and return the alias
+    fn remove_alias(&mut self) -> Option<String> {
+        match self {
+            AtomicTerm::Composite(composite) => {
+                let alias = composite.alias.clone();
+                composite.alias = None;
+                alias
+            },
+            _ => { None }
+        }
     }
 
     fn rename(&self, scope: String) -> Self {
@@ -239,18 +302,8 @@ impl TermStructure for AtomicTerm {
         atomic_term
     }
 
-    fn remove_alias(&mut self) -> Option<String> {
-        match self {
-            AtomicTerm::Composite(composite) => {
-                let alias = composite.alias.clone();
-                composite.alias = None;
-                alias
-            },
-            _ => { None }
-        }
-    }
-
-    fn load_program<'a>(text: String) -> Env<Self> {
+    /// Parse text and load the program into environment.
+    fn load_program<'a>(text: String) -> Env<AtomicTerm> {
         let text = text + " EOF";
         let result = parse_program(&text[..]);
         // Make sure the whole file is parsed rather than part of the program.
@@ -261,52 +314,37 @@ impl TermStructure for AtomicTerm {
     }
 }
 
-// Convert string into a variable term with unknown sort.
-impl From<String> for AtomicTerm {
-    fn from(item: String) -> Self {
-        AtomicTerm::gen_raw_variable_term(item, vec![])
-    }
-}
-
-// Convert &str into a variable term with unknown sort.
-impl From<&str> for AtomicTerm {
-    fn from(item: &str) -> Self {
-        AtomicTerm::gen_raw_variable_term(item.to_string(), vec![])
-    }
-}
-
-impl From<usize> for AtomicTerm {
-    fn from(item: usize) -> Self {
-        let atom_enum = AtomEnum::Int(num::BigInt::from(item));
-        AtomicTerm::gen_atom_term(atom_enum)
-    }
-}
-
-impl HasUniqueForm<String> for AtomicTerm {
-    fn derive_unique_form(&self) -> String {
+impl AtomicTerm {
+    /// Return the type id of a term which is either an owned string or a string reference.
+    pub fn type_id<'a>(&self) -> Cow<'a, str> {
         match self {
-            AtomicTerm::Atom(a) => a.derive_unique_form(),
-            AtomicTerm::Variable(v) => v.derive_unique_form(),
-            AtomicTerm::Composite(c) => c.derive_unique_form(),
+            AtomicTerm::Composite(composite) => composite.sort.type_id(),
+            AtomicTerm::Variable(var) => var.sort.type_id(),
+            AtomicTerm::Atom(atom) => atom.sort.type_id()
         }
     }
-}
 
-impl Display for AtomicTerm {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let term_str = match self {
-            AtomicTerm::Composite(c) => format!("{}", c),
-            AtomicTerm::Variable(v) => format!("{}", v),
-            AtomicTerm::Atom(a) => format!("{}", a),
-        };
-        write!(f, "{}", term_str)
-    }
-}
+    /// Compare the variables in two terms and return a tuple of intersection, left and right.
+    pub fn variable_diff(&self, other: &AtomicTerm) -> (Vec<AtomicTerm>, Vec<AtomicTerm>, Vec<AtomicTerm>) {
+        let vars1 = self.variables();
+        let vars2 = other.variables();
 
-impl Debug for AtomicTerm {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        // Rewrite Debug trait in the same way as Display.
-        write!(f, "{}", self)
+        let mut shared_vars: Vec<AtomicTerm> = vars1.clone().into_iter().filter(|x| { 
+            vars2.contains(x) 
+        }).collect();
+        shared_vars.sort();
+
+        let mut left_vars: Vec<AtomicTerm> = vars1.clone().into_iter().filter(|x| 
+            !vars2.contains(x)
+        ).collect();
+        left_vars.sort();
+
+        let mut right_vars: Vec<AtomicTerm> = vars2.clone().into_iter().filter(|x| 
+            !vars1.contains(x)
+        ).collect();
+        right_vars.sort();
+
+        (shared_vars, left_vars, right_vars)
     }
 }
 
@@ -398,7 +436,6 @@ impl PartialEq for AtomicVariable {
 
 impl HasUniqueForm<String> for AtomicVariable {
     fn derive_unique_form(&self) -> String {
-        // The same as display name
         format!("{}", self)
     }
 }
@@ -427,22 +464,12 @@ impl AtomicVariable {
         
         if fragments.len() == 0 {
             return root_var;
-        } else {
-            let atomic_root_term = AtomicTerm::Variable(root_var);
-            // let root_term = AtomicPtrTerm { ptr: Arc::new(atomic_root_term) };
-            let var = AtomicVariable {
-                sort,
-                root,
-                fragments,
-                // root_term: Some(root_term)
-            };
-            return var;
-        }
+        } else { AtomicVariable { sort, root, fragments } }
     }
     
     /// Check if the variable term has fragments or not.
     pub fn is_root(&self) -> bool {
-        self.fragments.len() == 0 //&& self.root_term == None
+        self.fragments.len() == 0
     }
 
     /// Rename the variable with a scope added to the root.
@@ -454,11 +481,8 @@ impl AtomicVariable {
 
 #[derive(Hash, Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicComposite {
-    // The type of the composite term and has an unique form as string as Arc<UniqueFormWrapper<String, Type>>.
     pub sort: RawType,
-    // The atomically wrapped arguments.
     pub arguments: Vec<AtomicTerm>,
-    // May or may not have an string alias.
     pub alias: Option<String>,
 }
 
@@ -484,7 +508,7 @@ impl AtomicComposite {
             arguments.push(renamed_arg);
         }
         AtomicComposite {
-            sort: self.sort.rename_type(scope.clone()),
+            sort: self.sort.rename_type(scope),
             arguments,
             alias: self.alias.clone() // TODO: Should I rename the alias too?
         }
