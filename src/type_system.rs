@@ -262,3 +262,29 @@ impl HasUniqueForm<String> for UnionType {
         self.name.clone()
     }
 }
+
+
+mod tests {
+    use super::*;
+    use crate::parser::combinator::parse_program;
+    use crate::module::*;
+    use std::path::Path;
+    use std::fs;
+
+    fn load_graph_domain() -> Domain<AtomicTerm> {
+        let path = Path::new("./tests/testcase/p0.4ml");
+        let content = fs::read_to_string(path).unwrap() + "EOF";
+        let (_, program_ast) = parse_program(&content);
+        let env: Env<AtomicTerm> = program_ast.build_env();
+        let graph = env.get_domain_by_name("Graph").unwrap();
+        graph.clone()
+    }
+
+    #[test]
+    fn test_sorted_composite_types() {
+        let graph = load_graph_domain();
+        let sorted_types = graph.meta_info().sorted_composite_types();
+        assert_eq!(sorted_types.get(0).unwrap().type_id(), "Node");
+        println!("{:#?}", sorted_types);
+    }
+}

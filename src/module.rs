@@ -5,6 +5,8 @@ use std::fmt::*;
 use bimap::BiMap;
 use num::BigInt;
 use enum_dispatch::enum_dispatch;
+use petgraph::graph::*;
+use petgraph::algo::*;
 
 use crate::expression::*;
 use crate::term::*;
@@ -100,13 +102,13 @@ impl<T> MetaInfo<T> where T: TermStructure {
         vec![stratified_rules]
     }
 
-    /// Return a reference of type map.
+    /// Return a reference of type map in which the types are not sorted.
     pub fn type_map(&self) -> &HashMap<String, RawType> {
         &self.type_map
     }
 
     /// Look up a type in the hash map by its type name.
-    pub fn get_type_by_name(&self, name: &String) -> Option<&RawType> {
+    pub fn get_type_by_name(&self, name: &str) -> Option<&RawType> {
         self.type_map.get(name)
     }
 
@@ -127,8 +129,41 @@ impl<T> MetaInfo<T> where T: TermStructure {
 
     /// Return all composite types according to their dependency relationship.
     /// e.g. Node(id: Integer) should appear in the list before Edge(src: Node, dst: Node)
-    pub fn sorted_composite_types(&self) -> Vec<(&String, &RawType)> {
-        todo!()
+    pub fn sorted_composite_types(&self) -> Vec<&RawType> {
+        let mut sorted_types = vec![];
+        let mut graph = Graph::new();
+        let mut nodes = vec![];
+        let mut unsorted_types: Vec<&RawType> = self.type_map.iter().map(|(_, raw_type)| raw_type).collect();
+        unsorted_types.sort();
+        for raw_type in unsorted_types {
+            if let RawType::Type(raw_type_enum) = raw_type {
+                match raw_type_enum {
+                    FormulaTypeEnum::CompositeType(_) => {
+                        let node = graph.add_node(raw_type);
+                        nodes.push(node);
+                    },
+                    _ => {}
+                }
+            }
+        } 
+
+        for n1 in nodes.iter() {
+            for n2 in nodes.iter() {
+                let ct1 = graph.node_weight(n1.clone()).unwrap().clone();
+                let ct2 = graph.node_weight(n2.clone()).unwrap().clone();
+                if ct1.is_subtype_of(ct2) {
+                    graph.add_edge(n1.clone(), n2.clone(), 1);
+                }
+            }
+        }
+
+        let indexes = toposort(&graph, None).unwrap();
+        for index in indexes {
+            let &raw_type = graph.node_weight(index).unwrap();
+            sorted_types.push(raw_type);
+        }
+
+        sorted_types
     }
 }
 

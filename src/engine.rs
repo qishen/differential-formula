@@ -107,11 +107,13 @@ struct FormulaTermIndex {
 }
 
 impl FormulaTermIndex {
-    fn new(relation_map: HashMap<String, Relation>) -> Self {
+    fn new(relations: Vec<(String, Relation)>) -> Self {
+        let mut relation_map: HashMap<String, Relation> = HashMap::new();
         let mut relation_id_map: BiMap<usize, String> = BiMap::new();
-        for (name, relation) in relation_map.iter() {
+        for (name, relation) in relations.into_iter() {
             let rid = relation.id.clone();
-            relation_id_map.insert(rid, name.clone());
+            relation_map.insert(name.clone(), relation);
+            relation_id_map.insert(rid, name);
         }
 
         FormulaTermIndex {
@@ -335,12 +337,14 @@ impl FormulaExecEngine<AtomicTerm> {
             let meta = domain.meta_info();
             let mut relation_counter = 0;
             // `Relation`, Relation id and a unique string to represent relation.
-            let mut relation_map = HashMap::new();
+            let mut sorted_relations = Vec::new();
+
             // All relations in stratum 0 only for inputs and we may want to build some
             // arrangements for each relation.
             // type `Path` is represented by two relations that one only for input and 
             // the other for the following reasoning and derivation from input or previous stratums.
-            for (name, _) in meta.composite_types().into_iter() {
+            for raw_type in meta.sorted_composite_types().into_iter() {
+                let name = raw_type.type_id(); 
                 let input_relation_id = relation_counter;
                 let relation_id = input_relation_id + 1; 
                 relation_counter += 2;
@@ -372,11 +376,11 @@ impl FormulaExecEngine<AtomicTerm> {
                 println!("input relation name: {}_input id: {}", name, input_relation_id);
                 println!("relation name: {} id: {}", name, relation_id);
 
-                relation_map.insert(format!("{}_input", name), input_rel);
-                relation_map.insert(name.clone(), rel);
+                sorted_relations.push((format!("{}_input", name), input_rel));
+                sorted_relations.push((format!("{}", name), rel));
             }
 
-            let mut index = FormulaTermIndex::new(relation_map);
+            let mut index = FormulaTermIndex::new(sorted_relations);
 
             // TODO: Assume all rules are sorted and in the same Stratum 1 for now.
             for rule in meta.rules() {
@@ -438,12 +442,6 @@ mod tests {
         let content = fs::read_to_string(path).unwrap() + "EOF";
         let (_, program_ast) = parse_program(&content);
           
-        // let terms = program_ast.model_ast_map.get("m").unwrap().clone().models;
-        // for term_ast in terms {
-        //     let record: Record = term_ast.into_record();
-        //     println!("Record: {}", record);
-        // }
-          
         let env: Env<AtomicTerm> = program_ast.build_env();
         let graph = env.get_domain_by_name("Graph").unwrap();
         let m = env.get_model_by_name("m").unwrap();
@@ -455,42 +453,5 @@ mod tests {
         let df = engine.dataflow_by_name("Graph");
         df.run();
         df.insert_terms(terms);
-
-        // let rule1 = graph.meta_info().rules().get(1).unwrap().clone();
-        // let cons = rule1.predicate_constraints();
-        // let terms: Vec<AtomicTerm> = cons.iter().map(|con| {
-        //     match con {
-        //         Constraint::Predicate(pred) => {
-        //             pred.term.clone()
-        //         },
-        //         _ => Default::default()
-        //     }
-        // }).collect();
-        // println!("Two terms in rule: {:?}", terms);
-
-        // let t1 = terms.get(0).unwrap().clone();
-        // let t2 = terms.get(1).unwrap().clone();
-
-        // let (dummy_rel, rel) = FormulaExecEngine::join_two_preds(t1, t2);
-
-        // let program: Program = Program {
-        //     nodes: vec![
-        //         // They have to be in the right order.
-        //         // ProgNode::Rel { rel: rel0 },
-        //         // ProgNode::Rel { rel: rel1 }, 
-        //         ProgNode::Rel { rel: dummy_rel },
-        //         ProgNode::Rel { rel: rel }
-        //         ],
-        //     delayed_rels: vec![],
-        //     init_data: vec![],
-        // };
-
-        // let mut running = program.run(1).unwrap();
-        // running.transaction_start().unwrap();
-        // for term in m.terms() {
-        //     println!("Going to insert the term: {}", term);
-        //     running.insert(0, term.clone().into_ddvalue()).unwrap();
-        // }
-        // running.transaction_commit().unwrap();
     }
 }
