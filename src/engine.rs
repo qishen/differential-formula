@@ -6,6 +6,7 @@ use std::vec::Vec;
 use std::collections::{BTreeMap, HashSet, HashMap};
 
 use bimap::*;
+use indexmap::IndexMap;
 use timely::{dataflow::*, logging::ProgressEventTimestamp};
 use differential_dataflow::*;
 use differential_dataflow::input::InputSession;
@@ -100,15 +101,22 @@ impl FormulaArrKey {
 }
 
 struct FormulaTermIndex {
-    relation_map: HashMap<String, Relation>,
+    // Use `IndexMap` because the relation map needs to be iterated in 
+    // the same order as the `Relation` is inserted in the map.
+    relation_map: IndexMap<String, Relation>,
+    // We need to look up by both relation id and relation name so both
+    // of them are indexed.
     relation_id_map: BiMap<usize, String>,
+    // Each Arrangement is represented by a `FormulaArrKey` that contains
+    // a normalized term and a list of terms as the key.
     arr_map: HashMap<FormulaArrKey, Arrangement>,
+    // Both arrid in ddlog and `FormulaArrKey` need to be indexed. 
     arr_id_map: BiMap<(usize, usize), FormulaArrKey>
 }
 
 impl FormulaTermIndex {
     fn new(relations: Vec<(String, Relation)>) -> Self {
-        let mut relation_map: HashMap<String, Relation> = HashMap::new();
+        let mut relation_map: IndexMap<String, Relation> = IndexMap::new();
         let mut relation_id_map: BiMap<usize, String> = BiMap::new();
         for (name, relation) in relations.into_iter() {
             let rid = relation.id.clone();
@@ -170,6 +178,7 @@ impl FormulaTermIndex {
         self.arr_map.insert(arrkey, arr);
     }
 
+    /// Add a `DDRule` into the corresponding `Relation`.
     fn add_rule(&mut self, rid: usize, rule: DDRule) -> bool {
         if let Some(relation_name) = self.relation_id_map.get_by_left(&rid) {
             let relation = self.relation_map.get_mut(relation_name).unwrap();
@@ -178,13 +187,13 @@ impl FormulaTermIndex {
         } else { false } 
     }
 
-    fn create_join_rule(&mut self, t1: &AtomicTerm, t2: &AtomicTerm) -> DDRule {
-        // arr1 = (0, 0) joins arr2 = (0, 1) where the first number is the relation Id and the second
-        // number is the index of arrangement inside current relation.
-        let (key, left, right) = t1.variable_diff(t2);
-        let arr_key1 = FormulaArrKey::new(t1.clone(), &key, &left).unwrap();
-        let arr_key2 = FormulaArrKey::new(t2.clone(), &key, &right).unwrap();
-        // println!("Find {:?} in {:?}", (&arr_key1, &arr_key2), self.arr_id_map);
+    /// Find two arrangements by looking up `FormulaArrKey`, join two arrangements and derive new 
+    /// terms in the head of the rule.
+    fn create_join_rule(&mut self, t1: &AtomicTerm, t2: &AtomicTerm, head: Vec<&AtomicTerm>) -> DDRule {
+        let (key, val1, val2) = t1.variable_diff(t2);
+        let head_terms: Vec<AtomicTerm> = head.into_iter().map(|x| x.clone()).collect();
+        let arr_key1 = FormulaArrKey::new(t1.clone(), &key, &val1).unwrap();
+        let arr_key2 = FormulaArrKey::new(t2.clone(), &key, &val2).unwrap();
         let arr_id1 = self.arrid_by_key(&arr_key1).unwrap();
         let arr_id2 = self.arrid_by_key(&arr_key2).unwrap();
 
@@ -192,19 +201,41 @@ impl FormulaTermIndex {
             description: Cow::from(format!("Join {} and {}", t1, t2)),
             arr: arr_id1,
             xform: XFormArrangement::Join {
-                description: Cow::from("whatever"),
+                description: Cow::from(format!("Join {} and {}", t1, t2)),
                 ffun: None,
                 arrangement: arr_id2,
-                jfun: |key: &DDValue, v1: &DDValue, v2: &DDValue| -> Option<DDValue> {
-                    // We cannot move extern values into the closure here.
-                    let key_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(key);
-                    let left_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v1);
-                    let right_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v2);
-                    let join = (key_terms.clone(), left_terms.clone(), right_terms.clone()).into_ddvalue();
-                    println!("join result: {:?}", join);
-                    Some(join)
-                },
-                next: Box::new(None)
+                jfun: Arc::new(move |k: &DDValue, v1: &DDValue, v2: &DDValue| -> Option<DDValue> {
+                    let mut tmap = HashMap::new();
+                    let key_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(k);
+                    let val1_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v1);
+                    let val2_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v2);
+
+                    key.iter().zip(key_terms).for_each(|(k, v)| { tmap.insert(k, v); });
+                    val1.iter().zip(val1_terms).for_each(|(k, v)| { tmap.insert(k, v); });
+                    val2.iter().zip(val2_terms).for_each(|(k, v)| { tmap.insert(k, v); });
+
+                    let new_terms: Vec<AtomicTerm> = head_terms.iter().map(|term| {
+                        term.propagate(&tmap)
+                    }).collect();
+
+                    let result = new_terms.into_ddvalue(); 
+                    println!("A list of new derived head terms: {:?}", result);
+                    Some(result)
+                }),
+                next: Box::new(Some(XFormCollection::FlatMap {
+                    description: Cow::from("hi"),
+                    fmfun: |v: DDValue| {
+                        let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
+                        Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
+                    },
+                    next: Box::new(Some(XFormCollection::Inspect {
+                        description: Cow::from("hi"),
+                        ifun: |val, ts, weight| {
+                            println!("val: {:?}, timestamp: {:?}, weight: {:?}", val, ts, weight)
+                        },
+                        next: Box::new(None)
+                    }))
+                }))
             }
         };
 
@@ -212,12 +243,14 @@ impl FormulaTermIndex {
     }
 
     /// `key_vars` and `val_vars` must be disjoint subset of the variables in `matching_term` 
-    /// e.g. Edge(Node(a), b), Edge(c, b) where key is variable `b` and the val is `a` or `c`. 
-    fn into_arrangment(
-        matching_term: &AtomicTerm, 
-        key: &Vec<AtomicTerm>, 
-        val: &Vec<AtomicTerm>
-    ) -> Arrangement {
+    /// e.g. Edge(Node(a), b), Edge(c, b) 
+    /// where key is variable `b` and the val is `a` or `c`. 
+    /// TODO: Evalution with additional constraints that may generate temporary new terms in 
+    /// the the execution of the body of a rule. Node(a) = { Node(1), Node(2) } then 
+    /// Node(x) = { Node(2), Node(3) }. Let's check if the new terms are existent in the term
+    /// database rathen than join operations followed by filter operation.
+    /// Edge(Node(a), b), a' = Node(x), x = a + 1, Edge(c, b) 
+    fn into_arrangment(matching_term: &AtomicTerm, key: &Vec<AtomicTerm>, val: &Vec<AtomicTerm>) -> Arrangement {
         let key_vars = key.clone();
         let val_vars = val.clone();
         let matching_term = matching_term.clone();
@@ -392,6 +425,8 @@ impl FormulaExecEngine<AtomicTerm> {
                         _ => None
                     }
                 }).collect();
+
+                let head = rule.get_head();
                 
                 // Just pick the firt two preds for experiment for now.
                 let t1 = pred_terms.get(0).unwrap().clone();
@@ -411,7 +446,7 @@ impl FormulaExecEngine<AtomicTerm> {
                 
                 println!("{:?}", index.arr_id_map); 
 
-                let join_rule = index.create_join_rule(&t1, &t2);
+                let join_rule = index.create_join_rule(&t1, &t2, head);
                 let rid = index.rid_by_name(t1.type_id().as_ref()).unwrap();
                 index.add_rule(rid, join_rule);
             }

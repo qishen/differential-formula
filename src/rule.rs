@@ -118,8 +118,8 @@ impl<T> Rule<T> where T: TermStructure {
         self.head.len() == 0
     }
 
-    pub fn get_head(&self) -> Vec<T> {
-        self.head.clone()
+    pub fn get_head(&self) -> Vec<&T> {
+        self.head.iter().map(|x| x).collect()
     }
 
     pub fn get_body(&self) -> Vec<Constraint<T>> {

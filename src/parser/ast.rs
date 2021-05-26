@@ -757,27 +757,6 @@ impl ProgramAst {
 
         model_map.insert(model_name.clone(), model);
     }
-
-    fn propagate_alias_map<M, T>(&self, var: T, raw_alias_map: &M, alias_map: &mut M) 
-    where 
-        M: GenericMap<T, T>, 
-        T: TermStructure
-    {
-        let raw_term = raw_alias_map.gget(&var).unwrap();
-        // if current term has variables inside then propagate binding to them first.
-        let raw_term_vars = raw_term.clone().variables();
-        for raw_term_var in raw_term_vars {
-            if raw_alias_map.contains_gkey(&raw_term_var) {
-                self.propagate_alias_map(raw_term_var, raw_alias_map, alias_map);
-            }
-        }
-        
-        // Make a little clone here but that's ok for a tradeoff between elegancy and unnecessary clone.
-        let new_term = raw_term.propagate_bindings(alias_map);
-        let k = var.clone();
-        let v = new_term.clone();
-        alias_map.ginsert(k, v);
-    }
 }
 
 trait ExprAstBehavior {

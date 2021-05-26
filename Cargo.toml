@@ -40,6 +40,7 @@ ddlog_derive = { path = "../differential-datalog/rust/template/ddlog_derive" }
 
 rand = "0.4"
 enum_dispatch = "0.3.1"
+indexmap = "1.6"
 nom = "5"
 num = { version = "0.3", features = ["serde"] }
 ordered-float = { version = "2.0.0", features = ["serde"] }

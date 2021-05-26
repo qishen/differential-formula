@@ -46,35 +46,6 @@ pub trait TermTraversal: TermStructure {
     // fn get_bindings(&self, term: &Self) -> Option<HashMap<&Self, &Self>>;
     fn match_to<'a>(&'a self, term: &'a Self) -> Option<HashMap<&'a Self, &'a Self>>;
 
-    // / Use `BTreeMap` when there is additional requirement that the map needs to implement `Ord` trait.
-    // fn get_ordered_bindings(&self, term: &Self) -> Option<BTreeMap<Self, Self>>;
-
-    // / The same `BTreeMap` wrapped in `OrdHashableWrappr` that stashs the hash of the map and use the
-    // / cached hash to decide the ordering of two maps. Only decide the ordering of two maps by recursively
-    // / digging into two maps when the two hashes are equal in case of hash collision.
-    // fn get_cached_bindings(&self, term: &Self) -> Option<QuickHashOrdMap<Self, Self>>;
-    
     // / Clone itself and mutate the cloned term by replacing variables with terms in the map.
-    fn propagate_bindings<M>(&self, map: &M) -> Self where M: GenericMap<Self, Self>;
-        
-    // / Update the binidng if the term (in borrowed form) is the subterm of one of the variable in the binding,
-    // / e.g. `x.y.z` wants to update the binding with variable `x.y` as key in the binding. A subterm in the term
-    // / that `x.y` points to will be derived and `x.y.z` -> `subterm` will be added into the current binding.
-    // fn update_binding<M>(&self, binding: &mut M) -> bool where M: GenericMap<Self, Self>;
-
-    // / Check if the term has variable(s) inside it.
-    // fn is_groundterm(&self) -> bool;
-
-    // / Compare the variables in two terms and find the intersection part.
-    // fn intersect(&self, other: &Self) -> (HashSet<Self>, HashSet<Self>, HashSet<Self>);
-
-    // / Compare two iterators of terms and check if they share some terms or a term in one list is the subterm
-    // / of a term from the other list.
-    // fn has_deep_intersection<'a, I>(a: I, b: I) -> bool where I: Iterator<Item=&'a Self>;
-
-    // / Find the subterm given a variable term with fragments.
-    // fn find_subterm(&self, var: &Self) -> Option<&Self>;
-
-    // Check if two binding map has conflits in variable mappings.
-    // fn has_conflict<M>(outer: &M, inner: &M) -> bool where M: GenericMap<Self, Self>;
+    fn propagate(&self, map: &HashMap<&Self, &Self>) -> Self;
 }

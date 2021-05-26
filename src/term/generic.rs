@@ -212,18 +212,20 @@ impl<T> TermTraversal for T where T: TermStructure {
         if has_binding { Some(bindings) } else { None }
     }
 
-    fn propagate_bindings<M>(&self, map: &M) -> Self where M: GenericMap<Self, Self> {
+    fn propagate(&self, map: &HashMap<&Self, &Self>) -> Self {
         // Make a clone and mutate the term when patterns are matched.
-        let mut self_copy = self.clone();
-        self_copy.traverse_mut(
+        let mut new_term = self.clone();
+        new_term.traverse_mut(
             &|term| {
-                if map.contains_gkey(term) || map.contains_gkey(&term.root()) { return true; } 
+                if map.contains_key(term) 
+                // || map.contains_key(&term.root()) 
+                { return true; } 
                 else { return false; }
             },
             &mut |mut term| {
                 // Make an immutable clone here.
-                if map.contains_gkey(term) {
-                    let replacement = map.gget(term).unwrap();
+                if map.contains_key(term) {
+                    let replacement = *map.get(term).unwrap();
                     *term = replacement.clone();
                 } else {
                     todo!()
@@ -238,7 +240,7 @@ impl<T> TermTraversal for T where T: TermStructure {
                 }
             }
         );
-        return self_copy;
+        return new_term;
     }
 
     // fn update_binding<M>(&self, binding: &mut M) -> bool where M: GenericMap<Self, Self> {
