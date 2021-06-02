@@ -17,17 +17,7 @@ use differential_dataflow::hashable::*;
 // Import from local ddlog repo and APIs are subject to constant changes
 use differential_datalog::ddval::*;
 use differential_datalog::record::*;
-use differential_datalog::program::{
-    XFormArrangement,
-    XFormCollection,
-    Arrangement,
-    CachingMode,
-    ProgNode,
-    Relation, 
-    Program, 
-    RunningProgram, 
-    Rule as DDRule
-};
+use differential_datalog::program::{Arrangement, CachingMode, ProgNode, Program, RecursiveRelation, Relation, Rule as DDRule, RunningProgram, XFormArrangement, XFormCollection};
 // use ddlog_lib::*;
 
 use crate::constraint::*;
@@ -69,28 +59,57 @@ struct FormulaArrKey {
 }
 
 impl FormulaArrKey {
-    fn new(term: AtomicTerm, key: &Vec<AtomicTerm>, val: &Vec<AtomicTerm>) -> Option<Self> {
+    fn new(term: AtomicTerm, key: &Vec<AtomicTerm>, val: &Vec<AtomicTerm>) -> Result<Self, String> {
         let vars = term.variables();
-        if !key.iter().all(|x| { vars.contains(x) }) { return None; }
         let (normalized_term, vmap) = term.normalize();
+        // If `key` is not provided, use all variables in the term as the key and `val` is empty.
+        if key.len() == 0 {
+            let mut normalized_key: Vec<AtomicTerm> = vars.iter().map(|x| { 
+                vmap.get(x).unwrap().clone()
+            }).collect();
+            normalized_key.sort();
+            let arr_key = FormulaArrKey {
+                normalized_term,
+                normalized_key,
+                normalized_val: vec![]
+            };
+            return Ok(arr_key);
+        } else {
+            // Make sure both `key` and `val` are subsets of the variable terms in term. 
+            if !key.iter().all(|x| { vars.contains(x) }) { 
+                return Err(format!("`key` {:?} does not exist in the variables of term {}.", key, term)); 
+            } else if !val.iter().all(|x| { vars.contains(x) }) {
+                return Err(format!("`val` {:?} does not exist in the variables of term {}.", val, term)); 
+            }
 
-        let mut normalized_key: Vec<AtomicTerm> = key.iter().map(|x| 
-            vmap.get(x).unwrap().clone()
-        ).collect();
-        normalized_key.sort();
+            let mut normalized_key: Vec<AtomicTerm> = key.iter().map(|x| 
+                vmap.get(x).unwrap().clone()
+            ).collect();
+            normalized_key.sort();
 
-        let mut normalized_val: Vec<AtomicTerm> = val.iter().map(|x|
-            vmap.get(x).unwrap().clone()
-        ).collect();
-        normalized_val.sort();
+            let mut normalized_val: Vec<AtomicTerm> = val.iter().map(|x|
+                vmap.get(x).unwrap().clone()
+            ).collect();
+            normalized_val.sort();
 
-        let arr_key = FormulaArrKey { 
-            normalized_term, 
-            normalized_key,
-            normalized_val,
-        };
+            let arr_key = FormulaArrKey { 
+                normalized_term, 
+                normalized_key,
+                normalized_val,
+            };
 
-        Some(arr_key)
+            return Ok(arr_key);
+        }
+    }
+
+    /// The `FormulaArrKey` arr1 can be reused if another `FormulaArrKey` arr2 has the same normalized term,
+    /// same normalized key and arr2's normalized val is a subset of the normalized val of arr1. 
+    fn is_subset(&self, other: &Self) -> bool {
+        let val_set: HashSet<&AtomicTerm> = self.normalized_val.iter().collect();
+        let other_val_set: HashSet<&AtomicTerm> = other.normalized_val.iter().collect();
+        self.normalized_term == other.normalized_term && 
+        self.normalized_key == other.normalized_key &&
+        val_set.is_subset(&other_val_set) 
     }
 
     /// Check if a term can be matched to `FormulaArrKey` after normalization.
@@ -118,10 +137,11 @@ impl FormulaTermIndex {
     fn new(relations: Vec<(String, Relation)>) -> Self {
         let mut relation_map: IndexMap<String, Relation> = IndexMap::new();
         let mut relation_id_map: BiMap<usize, String> = BiMap::new();
+
         for (name, relation) in relations.into_iter() {
             let rid = relation.id.clone();
             relation_map.insert(name.clone(), relation);
-            relation_id_map.insert(rid, name);
+            relation_id_map.insert(rid, name.clone());
         }
 
         FormulaTermIndex {
@@ -130,6 +150,28 @@ impl FormulaTermIndex {
             arr_map: HashMap::new(),
             arr_id_map: BiMap::new()
         }
+    }
+
+    fn input_relations(&self) -> Vec<String> {
+        let mut relnames = vec![];
+        for (name, _) in self.relation_map.iter() {
+            let input_relname = format!("{}_input", name);
+            if self.relation_map.contains_key(&input_relname) {
+                relnames.push(input_relname);
+            }
+        }
+        relnames
+    }
+
+    fn noninput_relations(&self) -> Vec<String> {
+        let mut relnames = vec![];
+        for (name, _) in self.relation_map.iter() {
+            let input_relname = format!("{}_input", name);
+            if self.relation_map.contains_key(&input_relname) {
+                relnames.push(name.clone());
+            }
+        }
+        relnames
     }
 
     fn relation_by_id(&self, id: usize) -> Option<&Relation> {
@@ -164,9 +206,12 @@ impl FormulaTermIndex {
     fn add_arrangement(&mut self, pred: &AtomicTerm, key: &Vec<AtomicTerm>, val: &Vec<AtomicTerm>) {
         // Two relations for same type `Type` and `Type_input` and the arrangement has to be added
         // to the input relation.
-        let input_relation_name = format!("{}_input", pred.type_id());
-        let relation_id = self.relation_id_map.get_by_right(&input_relation_name).unwrap().clone();
-        let relation = self.relation_map.get_mut(&input_relation_name).unwrap();
+        // let input_relation_name = format!("{}_input", pred.type_id());
+        // Since `Relation_input` and `Relation` are synced we do not have to build arrangement
+        // upon input relation.
+        let relation_name = pred.type_id().into_owned();
+        let relation_id = self.rid_by_name(&relation_name).unwrap();
+        let relation = self.relation_map.get_mut(&relation_name).unwrap();
         let arrkey = FormulaArrKey::new(pred.clone(), key, val).unwrap();
         let arr = Self::into_arrangment(pred, key, val);
 
@@ -187,24 +232,91 @@ impl FormulaTermIndex {
         } else { false } 
     }
 
+    /// Map from `Relation_input` to `Relation`
+    fn create_input_map_rule(&self, relname: String) -> DDRule {
+        let rid = self.rid_by_name(&format!("{}_input", relname)).unwrap();
+        let rule_str = format!("{}(..) :- {}_input(..) ", relname, relname);
+        let self_map_rule = DDRule::CollectionRule {
+            description: Cow::from(rule_str.clone()),
+            rel: rid,
+            xform: Some(XFormCollection::Map {
+                description: Cow::from(rule_str.clone()),
+                mfun: Box::new(move |val: DDValue| -> DDValue { val }),
+                next: Box::new(Some(XFormCollection::Inspect {
+                    description: Cow::from("Inspect newly derived terms"),
+                    ifun: Box::new(move |val, ts, weight| {
+                        println!("From {} rule, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                            rule_str, val, ts, weight)
+                    }),
+                    next: Box::new(None)
+                }))
+            })
+        };
+        self_map_rule
+
+    }
+
+    /// Find self arrangement and derive new term in the head of the rule.
+    fn create_map_rule(&self, matching_term: &AtomicTerm, head: Vec<&AtomicTerm>) -> DDRule {
+        let map_rule_str = format!("{:?} :- {}", head, matching_term);
+        let head_terms: Vec<AtomicTerm> = head.iter().map(|x| x.clone().clone()).collect();
+        let type_name = matching_term.type_id();
+        let rid = self.rid_by_name(&type_name).unwrap();
+        let matching_term = matching_term.clone();
+        let map_rule = DDRule::CollectionRule {
+            description: Cow::from(format!("{:?} :- {:?} ", &head_terms, matching_term)),
+            rel: rid,
+            xform: Some(XFormCollection::FilterMap {
+                description: Cow::from(map_rule_str.clone()),
+                fmfun: Box::new(move |val: DDValue| -> Option<DDValue> { 
+                    let term = <AtomicTerm>::from_ddvalue(val);
+                    if let Some(m) = matching_term.match_to(&term) {
+                        let derived_terms: Vec<AtomicTerm> = head_terms.iter().map(|x| 
+                            x.propagate(&m)
+                        ).collect();
+                        Some(derived_terms.into_ddvalue())
+                    } else { None }
+                }),
+                next: Box::new(Some(XFormCollection::FlatMap {
+                    description: Cow::from(format!("Derived head terms {:?} from flat map", head)),
+                    fmfun: Box::new(|v: DDValue| {
+                        let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
+                        Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
+                    }),
+                    next: Box::new(Some(XFormCollection::Inspect {
+                        description: Cow::from("Inspect newly derived terms"),
+                        ifun: Box::new(move |val, ts, weight| {
+                            println!("From map rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                            map_rule_str.clone(), val, ts, weight)
+                        }),
+                        next: Box::new(None)
+                    }))
+                }))
+            })
+        };
+        map_rule
+    }
+
     /// Find two arrangements by looking up `FormulaArrKey`, join two arrangements and derive new 
     /// terms in the head of the rule.
+    /// TODO: Change to Worst Case Optimal Joins.
     fn create_join_rule(&mut self, t1: &AtomicTerm, t2: &AtomicTerm, head: Vec<&AtomicTerm>) -> DDRule {
         let (key, val1, val2) = t1.variable_diff(t2);
-        let head_terms: Vec<AtomicTerm> = head.into_iter().map(|x| x.clone()).collect();
+        let join_rule_str = format!("{:?} :- {}, {}", head, t1, t2);
+        let head_terms: Vec<AtomicTerm> = head.iter().map(|x| x.clone().clone()).collect();
         let arr_key1 = FormulaArrKey::new(t1.clone(), &key, &val1).unwrap();
         let arr_key2 = FormulaArrKey::new(t2.clone(), &key, &val2).unwrap();
         let arr_id1 = self.arrid_by_key(&arr_key1).unwrap();
         let arr_id2 = self.arrid_by_key(&arr_key2).unwrap();
 
         let join_rule = DDRule::ArrangementRule {
-            description: Cow::from(format!("Join {} and {}", t1, t2)),
+            description: Cow::from(join_rule_str.clone()),
             arr: arr_id1,
             xform: XFormArrangement::Join {
-                description: Cow::from(format!("Join {} and {}", t1, t2)),
+                description: Cow::from(join_rule_str.clone()),
                 ffun: None,
                 arrangement: arr_id2,
-                jfun: Arc::new(move |k: &DDValue, v1: &DDValue, v2: &DDValue| -> Option<DDValue> {
+                jfun: Box::new(move |k: &DDValue, v1: &DDValue, v2: &DDValue| -> Option<DDValue> {
                     let mut tmap = HashMap::new();
                     let key_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(k);
                     let val1_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v1);
@@ -219,20 +331,21 @@ impl FormulaTermIndex {
                     }).collect();
 
                     let result = new_terms.into_ddvalue(); 
-                    println!("A list of new derived head terms: {:?}", result);
+                    // println!("A list of new derived head terms: {:?}", result);
                     Some(result)
                 }),
                 next: Box::new(Some(XFormCollection::FlatMap {
-                    description: Cow::from("hi"),
-                    fmfun: |v: DDValue| {
+                    description: Cow::from(format!("Flat map derived head terms {:?}", head)),
+                    fmfun: Box::new(|v: DDValue| {
                         let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
                         Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
-                    },
+                    }),
                     next: Box::new(Some(XFormCollection::Inspect {
-                        description: Cow::from("hi"),
-                        ifun: |val, ts, weight| {
-                            println!("val: {:?}, timestamp: {:?}, weight: {:?}", val, ts, weight)
-                        },
+                        description: Cow::from("Inspect newly derived terms"),
+                        ifun: Box::new(move |val, ts, weight| {
+                            println!("From Join rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                                join_rule_str, val, ts, weight)
+                        }),
                         next: Box::new(None)
                     }))
                 }))
@@ -260,7 +373,7 @@ impl FormulaTermIndex {
                 key_vars, 
                 val_vars)
             ),
-            afun: Arc::new(move |v: DDValue| -> Option<(DDValue, DDValue)> {
+            afun: Box::new(move |v: DDValue| -> Option<(DDValue, DDValue)> {
                 let term = <AtomicTerm>::from_ddvalue(v);
                 if let Some(term_match) = matching_term.match_to(&term) {
                     let shared_match: Vec<AtomicTerm> = key_vars.iter().map(|x| { 
@@ -273,10 +386,6 @@ impl FormulaTermIndex {
 
                     let key = shared_match.into_ddvalue(); 
                     let val = left_match.into_ddvalue();
-
-                    println!("Left match {} to predicate {} and get {:?}", term, 
-                        matching_term, (term_match, &key, &val));
-
                     return Some((key, val))
                 }
                 return None;
@@ -288,8 +397,64 @@ impl FormulaTermIndex {
     }
 }
 
-struct DomainDataflow {
+#[derive(Debug)]
+enum FormulaProgNode {
+    Rel(String),
+    SCC(Vec<String>)
+}
+
+struct FormulaProgram {
+    // Indexed relations and arrangements 
     index: FormulaTermIndex,
+    structure: Vec<FormulaProgNode>
+}
+
+impl FormulaProgram {
+    pub fn new(index: FormulaTermIndex, nodes: Vec<FormulaProgNode>) -> Self {
+        FormulaProgram {
+            index,
+            structure: nodes
+        }
+    } 
+
+    /// Generate a DDLog program from FORMULA index and the program structure.
+    pub fn generate(&self) -> Program {
+        // The relations must be added in the right order otherwise may fail to load
+        // arrangement from dependent relation.
+        let mut nodes = vec![];
+        println!("Print nodes: {:?}", self.structure);
+        for node in self.structure.iter() {
+            match node {
+                FormulaProgNode::Rel(rel_name) => {
+                    let node = ProgNode::Rel { 
+                        rel: self.index.relation_by_name(rel_name).unwrap().clone() 
+                    };
+                    nodes.push(node);
+                },
+                FormulaProgNode::SCC(rel_names) => {
+                    let recursive_rels: Vec<RecursiveRelation> = rel_names.iter().map(|relname| {
+                        let rel = self.index.relation_by_name(relname).unwrap().clone();
+                        RecursiveRelation { rel, distinct: true }
+                    }).collect();
+                    let scc_node = ProgNode::SCC { rels: recursive_rels };
+                    nodes.push(scc_node);
+                }
+            };
+        }
+
+        let program: Program = Program {
+            nodes,
+            delayed_rels: vec![],
+            init_data: vec![],
+        };
+
+        program
+    }
+}
+
+struct DomainDataflow {
+    // TODO: Each stratum should have different index.
+    prog: FormulaProgram,
     running_program: Option<RunningProgram>,
 }
 
@@ -299,16 +464,7 @@ impl DomainDataflow {
     }
     
     fn run(&mut self) {
-        // The relations must be added in the right order otherwise may fail to load
-        // arrangement from dependent relation.
-        let nodes: Vec<ProgNode> = self.index.relation_map.iter().map(|(_, relation)| {
-            ProgNode::Rel { rel: relation.clone() }
-        }).collect();
-        let program: Program = Program {
-            nodes,
-            delayed_rels: vec![],
-            init_data: vec![],
-        };
+        let program = self.prog.generate();
         self.running_program = Some(program.run(1).unwrap())
     }
 
@@ -326,32 +482,14 @@ impl DomainDataflow {
         let running_program = self.running_program.as_mut().unwrap();
         running_program.transaction_start().unwrap();
         for term in terms {
-            // Must add the new terms into the input relation.
+            // Must add the new terms into the correct input relation based on term type.
             let type_name = format!("{}_input", term.type_id());
-            let rid = self.index.relation_id_map.get_by_right(&type_name).unwrap();
-            println!("Going to insert the term: {}", term);
-            running_program.insert(*rid, term.into_ddvalue()).unwrap();
+            let rid = self.prog.index.rid_by_name(&type_name).unwrap();
+            println!("Inserting the term: {}", term);
+            running_program.insert(rid, term.into_ddvalue()).unwrap();
         }
         running_program.transaction_commit().unwrap();
     }
-
-    // fn add_rule(&mut self) {
-    //     let filter_rule = DDRule::CollectionRule {
-    //         description: Cow::from("hi"),
-    //         rel: 0,
-    //         xform: Some(XFormCollection::Filter {
-    //             description: Cow::from("hi"),
-    //             ffun: {
-    //                 fn filter_func(v: &DDValue) -> bool {
-    //                     let term = <AtomicTerm>::from_ddvalue_ref(v);
-    //                     term.type_id().as_ref() == "Edge" 
-    //                 }
-    //                 filter_func
-    //             },
-    //             next: Box::new(None)
-    //         })
-    //     };
-    // }
 }
 
 struct FormulaExecEngine<T: TermStructure> {
@@ -371,6 +509,20 @@ impl FormulaExecEngine<AtomicTerm> {
             let mut relation_counter = 0;
             // `Relation`, Relation id and a unique string to represent relation.
             let mut sorted_relations = Vec::new();
+
+            // Find all relations that need to be put into SCC.
+            let mut scc_relname_set = HashSet::new();
+            for rule in meta.rules() {
+                let head = rule.get_head();
+                for term in head {
+                    scc_relname_set.insert(term.type_id().into_owned());
+                }
+            }
+
+            // Relations that need to be put into a SCC.
+            let mut scc_rels = vec![];
+            // node could be a relation or a list of relations.
+            let mut formula_nodes = vec![];
 
             // All relations in stratum 0 only for inputs and we may want to build some
             // arrangements for each relation.
@@ -406,17 +558,34 @@ impl FormulaExecEngine<AtomicTerm> {
                     change_cb: None,
                 };
 
-                println!("input relation name: {}_input id: {}", name, input_relation_id);
-                println!("relation name: {} id: {}", name, relation_id);
+                println!("Id {} for input relation name: {}_input", input_relation_id, name);
+                println!("Id {} for relation name: {}", relation_id, name);
 
                 sorted_relations.push((format!("{}_input", name), input_rel));
+                formula_nodes.push(FormulaProgNode::Rel(format!("{}_input", name)));
                 sorted_relations.push((format!("{}", name), rel));
+                // Put some relations into SCC for mutually recursive rules.
+                if scc_relname_set.contains(name.as_ref()) {
+                    scc_rels.push(name.into_owned());
+                } else {
+                    formula_nodes.push(FormulaProgNode::Rel(name.into_owned()));
+                }
             }
 
+            formula_nodes.push(FormulaProgNode::SCC(scc_rels));
             let mut index = FormulaTermIndex::new(sorted_relations);
 
+            // Map every `Relation_input` to `Relation` because input relation cannot be used in recursive rules.
+            for relname in index.noninput_relations() {
+                let self_map_rule = index.create_input_map_rule(relname.clone());
+                let rid = index.rid_by_name(&relname).unwrap();
+                index.add_rule(rid, self_map_rule);
+            }
+
             // TODO: Assume all rules are sorted and in the same Stratum 1 for now.
+            // Assume all rules are mutually recursive to test loop.
             for rule in meta.rules() {
+                println!("Create dataflow for rule {:?}", rule);
                 let pred_terms: Vec<AtomicTerm> = rule.predicate_constraints().iter().filter_map(|constraint| {
                     match *constraint {
                         Constraint::Predicate(pred) => {
@@ -428,33 +597,44 @@ impl FormulaExecEngine<AtomicTerm> {
 
                 let head = rule.get_head();
                 
-                // Just pick the firt two preds for experiment for now.
-                let t1 = pred_terms.get(0).unwrap().clone();
-                let t2 = pred_terms.get(1).unwrap().clone();
-                let (normalized_t1, t1_map) = t1.normalize();
-                let (normalized_t2, t2_map) = t2.normalize();
+                if pred_terms.len() == 1 {
+                    // Match to only one term predicate and derive new terms without join operation. 
+                    let t1 = pred_terms.get(0).unwrap().clone();
+                    let map_rule = index.create_map_rule(&t1, head.clone());
+                    // Add rule to the relation of the head terms.
+                    let h = head.get(0).unwrap().clone();
+                    let rid = index.rid_by_name(&h.type_id()).unwrap();
+                    index.add_rule(rid, map_rule);
+                } else {
+                    // Just pick the firt two preds for experiment for now.
+                    let t1 = pred_terms.get(0).unwrap().clone();
+                    let t2 = pred_terms.get(1).unwrap().clone();
+                    let (normalized_t1, t1_map) = t1.normalize();
+                    let (normalized_t2, t2_map) = t2.normalize();
 
-                println!("Normalization {}, {:?}", normalized_t1, t1_map);
-                println!("Normalization {}, {:?}", normalized_t2, t2_map);
+                    println!("Normalization {}, {:?}", normalized_t1, t1_map);
+                    println!("Normalization {}, {:?}", normalized_t2, t2_map);
 
-                let (shared_vars, left_vars, right_vars) = t1.variable_diff(&t2);
-                println!("shared vars: {:?}, left vars: {:?}, right vars: {:?}", 
-                    shared_vars, left_vars, right_vars);
+                    let (shared_vars, left_vars, right_vars) = t1.variable_diff(&t2);
+                    println!("shared vars: {:?}, left vars: {:?}, right vars: {:?}", 
+                        shared_vars, left_vars, right_vars);
 
-                index.add_arrangement(&t1, &shared_vars, &left_vars);
-                index.add_arrangement(&t2, &shared_vars, &right_vars);
-                
-                println!("{:?}", index.arr_id_map); 
+                    index.add_arrangement(&t1, &shared_vars, &left_vars);
+                    index.add_arrangement(&t2, &shared_vars, &right_vars);
+                    
+                    println!("{:?}", index.arr_id_map); 
 
-                let join_rule = index.create_join_rule(&t1, &t2, head);
-                let rid = index.rid_by_name(t1.type_id().as_ref()).unwrap();
-                index.add_rule(rid, join_rule);
+                    let join_rule = index.create_join_rule(&t1, &t2, head.clone());
+                    let h = head.get(0).unwrap().clone();
+                    let rid = index.rid_by_name(&h.type_id()).unwrap();
+                    index.add_rule(rid, join_rule);
+                }
             }
             
             // TODO: How about stratums after Stratum 1.
-
+            let formula_program = FormulaProgram::new(index, formula_nodes);
             let dataflow = DomainDataflow {
-                index,
+                prog: formula_program,
                 running_program: None
             };
 

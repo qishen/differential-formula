@@ -15,6 +15,7 @@ pub trait FormulaTypeTrait {}
 pub enum RawType {
     TypeId(Cow<'static, str>),
     Type(FormulaTypeEnum),
+    // TODO: Change to `Any` type which is a union of all types in FORMULA.
     Undefined,
 }
 
