@@ -1,0 +1,13 @@
+[package]
+name = "graph_lib"
+version = "0.1.0"
+authors = ["Qishen Zhang <qishen23@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.4"
+differential_datalog = {path = "../graph_ddlog/differential_datalog"}
+graph = {path = "../graph_ddlog/"}
+types = {path = "../graph_ddlog/types"}

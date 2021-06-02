@@ -1,0 +1,43 @@
+input relation NN(id: u32)
+input relation EE(src: u32, dst: u32)
+
+input relation Node(id: u32)
+input relation Edge(src: Node, dst: Node)
+output relation TwoEdge(src: Edge, dst: Edge)
+
+output relation Path(src: Node, dst: Node)
+output relation Line(one: Node, two: Node, three: Node, four: Node)
+output relation NoCycle(node: Node)
+
+// Bash command: ddlog -i graph.dl -L ~/differential-datalog/lib/
+
+Path(Node{a}, Node{b}) :- Edge(Node{a}, Node{b}). 
+Path(a, c) :- Path(a, b), Path(b, c).
+
+// More than one term in the head.
+// Path(a, b), Path(b, a) :- Edge(a, b).
+
+// Mutually recursive rules
+// program::ProgNode::SCC{rels: vec![
+//     program::RecursiveRelation{rel: Path, distinct: true}, 
+//     program::RecursiveRelation{rel: Line, distinct: true}
+// ]},
+// Path(a, b) :- Edge(a, b).
+// Line(a, b, a, b) :- Path(a, b).
+// Path(b, b) :- Line(a, b, c, d).
+
+// Rules that look dependent but actually not because of the semantics of the predicates
+// Path(Node{1}, x) and Path(Node{2}, y) represent different subsets of terms.
+// DDLog treats two rules separately
+// Line(x, x, x, x) :- Path(2, x).
+// Path(3, x) :- Path(2, x).
+// Path(2, y) :- Edge(y, 2).
+
+// Join multiple predicates in the rule body.
+// 1. Join Edge(a, b), Edge(b, c) into (c, a, b) and each one is DDValue
+// Arrange Edge(a, b), Edge(b, c) by c as (c, (c, a, b)) 
+// 2. Join Edge(a, b), Edge(b, c), Edge(c, d) into (d, c, a, b)
+// Arrange it by d as (d, (d, c, a, b))
+// Path(a, e) :- Edge(a, b), Edge(b, c), Edge(c, d), Edge(d, e), b == c + 2.
+// Path(a, c) :- Path(a, b), Path(b, c).
+// NoCycle(u) :- Edge(_, u), not Path(u, u).
