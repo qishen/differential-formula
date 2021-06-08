@@ -89,6 +89,17 @@ pub enum TermAst {
     AtomTermAst(AtomEnum),
 }
 
+impl TermAst {
+    fn alias(&self) -> Option<String> {
+        match self {
+            TermAst::CompositeTermAst(c) => {
+                c.alias.clone()
+            },
+            _ => None
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CompositeTermAst {
     pub sort: RawTypeDefAst,
@@ -694,10 +705,8 @@ impl ProgramAst {
                 }
             );
 
-            // Remove alias from term and return alias.
-            let alias = term.remove_alias();
+            let alias = term_ast.alias();
             term_set.insert(term.clone());
-
             match alias {
                 Some(alias) => {
                     alias_map.insert(alias, term);

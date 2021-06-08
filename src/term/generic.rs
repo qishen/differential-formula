@@ -53,9 +53,6 @@ pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug {
     /// Create a nullary composite type with no arguments inside and return the singleton term or constant.
     fn gen_constant(constant: String) -> (RawType, Self);
 
-    /// Remove alias from composite term and return the alias
-    fn remove_alias(&mut self) -> Option<String>;
-
     /// Rename the term with scope and only applied to composite and variable terms. A new type with scope
     /// added will be created and then assigned to each composite term as the sort. A mutable hashset of types
     /// is added as param to avoid creating same types repeatedly.

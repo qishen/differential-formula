@@ -11,12 +11,30 @@ use crate::util::wrapper::*;
 
 pub trait FormulaTypeTrait {}
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Clone, Serialize, Deserialize)]
+#[derive(Eq, Ord, Debug, Clone, Serialize, Deserialize)]
 pub enum RawType {
     TypeId(Cow<'static, str>),
     Type(FormulaTypeEnum),
     // TODO: Change to `Any` type which is a union of all types in FORMULA.
     Undefined,
+}
+
+impl PartialEq for RawType {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_id() == other.type_id()
+    }
+}
+
+impl PartialOrd for RawType {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.type_id().partial_cmp(&other.type_id())
+    }
+}
+
+impl Hash for RawType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.type_id().hash(state);
+    }
 }
 
 impl HasUniqueForm<String> for RawType{
@@ -36,6 +54,11 @@ impl Display for RawType {
 }
 
 impl RawType {
+    /// Convert to `RawType::TypeId()`.
+    pub fn alias_type(&self) -> Self {
+        RawType::TypeId(self.type_id())
+    }
+
     pub fn is_subtype_of(&self, other: &RawType) -> bool {
         match other {
             RawType::Type(raw_type) => {
@@ -49,16 +72,17 @@ impl RawType {
                     _ => false
                 }
             },
-            RawType::TypeId(tid) => { false },
+            RawType::TypeId(_tid) => { false },
             _ => false
         }
     }
 
+    /// Return the alias of the type as `Cow<str>`.
     pub fn type_id<'a>(&self) -> Cow<'a, str> {
         match self {
-            RawType::Type(raw_type) => Cow::from(format!("{}", raw_type)),
+            RawType::Type(type_enum) => Cow::from(format!("{}", type_enum)),
             RawType::TypeId(tid) => tid.clone(),
-            RawType::Undefined => Cow::from("Undefined")
+            RawType::Undefined => Cow::from("~Undefined")
         }
     }
 
@@ -269,6 +293,7 @@ mod tests {
     use super::*;
     use crate::parser::combinator::parse_program;
     use crate::module::*;
+    use std::collections::HashSet;
     use std::path::Path;
     use std::fs;
 
@@ -279,6 +304,26 @@ mod tests {
         let env: Env<AtomicTerm> = program_ast.build_env();
         let graph = env.get_domain_by_name("Graph").unwrap();
         graph.clone()
+    }
+
+    #[test]
+    fn test_type_equality() {
+        let t1 = RawType::TypeId(Cow::from("hello"));
+        let t2 = RawType::TypeId(Cow::from("hello".to_string()));
+        let t3 = RawType::Type(FormulaTypeEnum::CompositeType(
+            CompositeType {
+                name: "hello".to_string(),
+                arguments: vec![]
+            }
+        ));
+        assert_eq!(t1, t2);
+        assert_eq!(t1, t3);
+
+        // Hash value is computed from type alias too.
+        let mut set = HashSet::new();
+        set.insert(t1);
+        assert!(set.contains(&t2));
+        assert!(set.contains(&t3));
     }
 
     #[test]

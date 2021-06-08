@@ -51,6 +51,32 @@ impl From<usize> for AtomicTerm {
     }
 }
 
+impl From<TermAst> for AtomicTerm {
+    fn from(item: TermAst) -> Self {
+        match item {
+            TermAst::CompositeTermAst(cast) => {
+                let type_name = cast.sort.name().unwrap();
+                let arguments: Vec<AtomicTerm> = cast.arguments.into_iter().map(|arg| {
+                    // TODO: Change to nightly feature `into_inner()` to avoid copy
+                    let argument: AtomicTerm = arg.as_ref().clone().into();
+                    argument
+                }).collect();
+                let composite = AtomicComposite {
+                    sort: RawType::TypeId(Cow::from(type_name)),
+                    arguments,
+                };
+                AtomicTerm::Composite(composite)
+            },
+            TermAst::VariableTermAst(vast) => {
+                AtomicTerm::gen_raw_variable_term(vast.root, vast.fragments)
+            },
+            TermAst::AtomTermAst(atom) => {
+                AtomicTerm::gen_atom_term(atom)
+            }
+        }
+    }
+}
+
 impl HasUniqueForm<String> for AtomicTerm {
     fn derive_unique_form(&self) -> String {
         match self {
@@ -151,7 +177,6 @@ impl FromRecord for AtomicTerm {
                 let composite = AtomicComposite {
                     sort: RawType::TypeId(name.clone()),
                     arguments: subterms,
-                    alias: None
                 };
                 Ok(AtomicTerm::Composite(composite))
             },
@@ -243,18 +268,6 @@ impl TermStructure for AtomicTerm {
         let composite = AtomicComposite::new(nullary_type.clone().into(), vec![], None);
         let term = AtomicTerm::Composite(composite);
         return (nullary_type.into(), term);
-    }
-
-    /// Remove alias from composite term and return the alias
-    fn remove_alias(&mut self) -> Option<String> {
-        match self {
-            AtomicTerm::Composite(composite) => {
-                let alias = composite.alias.clone();
-                composite.alias = None;
-                alias
-            },
-            _ => { None }
-        }
     }
 
     fn rename(&self, scope: String) -> Self {
@@ -483,7 +496,6 @@ impl AtomicVariable {
 pub struct AtomicComposite {
     pub sort: RawType,
     pub arguments: Vec<AtomicTerm>,
-    pub alias: Option<String>,
 }
 
 impl AtomicComposite { 
@@ -491,7 +503,6 @@ impl AtomicComposite {
         let composite = AtomicComposite {
             sort,
             arguments,
-            alias,
         };
         return composite;
     }
@@ -510,7 +521,6 @@ impl AtomicComposite {
         AtomicComposite {
             sort: self.sort.rename_type(scope),
             arguments,
-            alias: self.alias.clone() // TODO: Should I rename the alias too?
         }
     }
 }
@@ -531,19 +541,13 @@ impl HasUniqueForm<String> for AtomicComposite {
 
 impl Display for AtomicComposite {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let alias_str = match &self.alias {
-            None => "".to_string(),
-            Some(name) => format!("{} is ", name)
-        };
-
         let mut args = vec![];
         for arg in self.arguments.iter() {
             args.push(format!("{}", arg));
         }
-
         let args_str = args.join(", ");
         let type_ref: &RawType = self.sort.borrow();
         let term_str = format!("{}({})", type_ref, args_str);
-        write!(f, "{}{}", alias_str, term_str)
+        write!(f, "{}", term_str)
     }
 }
