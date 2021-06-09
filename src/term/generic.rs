@@ -96,9 +96,9 @@ impl IntoRecord for AtomEnum {
     fn into_record(self) -> Record {
         match self {
             AtomEnum::Bool(bool) => bool.into_record(),
-            AtomEnum::Str(str) => Record::String(str),
-            AtomEnum::Int(bigint) => Record::Int(bigint),
-            AtomEnum::Float(float) => Record::Float(float),
+            AtomEnum::Str(str) => str.into_record(), 
+            AtomEnum::Int(bigint) => bigint.into_record(), 
+            AtomEnum::Float(float) => float.into_record(),
         }
     }
 }

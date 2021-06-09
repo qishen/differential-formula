@@ -127,16 +127,28 @@ impl IntoRecord for AtomicTerm {
                 atom.val.into_record()
             },
             AtomicTerm::Variable(var) => {
-                Record::Variable(Cow::from(format!("{}", var)))
+                // Record::Variable(Cow::from(format!("{}", var)))
+                // TODO: Avoid the copy but fragments are skipped.
+                Record::Variable(Cow::from(var.root))
             },
             AtomicTerm::Composite(composite) => {
-                let type_name = composite.sort.derive_unique_form();
+                // Don't make extra copy for type name unless necessary.
+                let type_name = match composite.sort {
+                    RawType::Type(t) => {
+                        match t {
+                            FormulaTypeEnum::CompositeType(ctype) => Cow::from(ctype.name),
+                            _ => { Cow::from(format!("{}", t)) }
+                        }
+                    },
+                    RawType::TypeId(cow) => cow,
+                    RawType::Undefined => Cow::from("Any"),
+                };  
                 let mut arguments = vec![];
                 for arg in composite.arguments {
                     let r = arg.into_record();
                     arguments.push(r);
                 }
-                Record::PosStruct(Cow::from(type_name), arguments)
+                Record::PosStruct(type_name, arguments)
             }
         }
     }
