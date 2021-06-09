@@ -38,7 +38,6 @@ impl DDLogGraph {
         self.hddlog.transaction_start()?;
         self.hddlog.apply_updates(&mut updates.into_iter())?;
         let delta = self.hddlog.transaction_commit_dump_changes()?;
-        
         return Ok(delta); 
     }
 
@@ -78,17 +77,10 @@ impl DDLogGraph {
     }
 }
 
-fn main() {
-    println!("Print out arguments: {:?}", std::env::args());
 
-    let nodes_num: usize = std::env::args().nth(1).unwrap_or("100".to_string()).parse().unwrap_or(100);
-    let edges_num: usize = std::env::args().nth(2).unwrap_or("20".to_string()).parse().unwrap_or(20);
-    let debug = std::env::args().nth(3).unwrap_or("nodebug".to_string()) == "debug";
-
-    let seed: &[_] = &[1, 2, 3, 4];
+fn generate_graph(nodes_num: usize, edges_num: usize, seed: &[usize]) -> Vec<(u32, u32)> {
     let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
     let mut edge_set = HashSet::new();
-
     let mut i = 0;
     while i < edges_num {
         let num1 = rng1.gen_range(0, nodes_num);
@@ -100,34 +92,50 @@ fn main() {
             i += 1;
         }
     }
-
     let edges: Vec<(u32, u32)> = edge_set.into_iter().collect();
+    edges
+}
+
+
+fn main() {
+    println!("Print out arguments: {:?}", std::env::args());
+
+    let nodes_num: usize = std::env::args().nth(1).unwrap_or("100".to_string()).parse().unwrap_or(100);
+    let edges_num: usize = std::env::args().nth(2).unwrap_or("20".to_string()).parse().unwrap_or(20);
+    let debug = std::env::args().nth(3).unwrap_or("nodebug".to_string()) == "debug";
+
+    let seed: &[_] = &[1, 2, 3, 4];
+    let edges = generate_graph(nodes_num, edges_num, seed);
+
     if debug {
         for edge in edges.iter() { println!("Initial input: {:?}", edge); }
     }
 
-    let timer = std::time::Instant::now();
+    let mut timer = std::time::Instant::now();
     let mut bse = DDLogGraph::new().unwrap();
 
-    let mut updates = vec![];
     let edge_updates = bse.create_edges(edges);
-    updates.extend(edge_updates);
 
     // println!("Loading Time: {} seconds", timer.elapsed().as_secs());
     // timer = std::time::Instant::now();
 
-    let mut delta = bse.flush_updates(updates).unwrap();
-
-    // Print out the delta after the changes to relations.
-    // DDLogGraph::dump_delta(&delta);
-
+    let mut delta = bse.flush_updates(edge_updates).unwrap();
     if debug {
-        let path_changes = delta.get_rel(Relations::Path as RelId);
-        for (val, weight) in path_changes.clone() {
-            println!("{} with weight {}", val, weight);
-        }
+        DDLogGraph::dump_delta(&delta);
     }
 
     println!("Graph has {} nodes and {} edges. Running Time: {} milliseconds", 
         nodes_num, edges_num, timer.elapsed().as_millis());
+
+    let new_edges_num = edges_num / 10;
+    let new_edges = generate_graph(nodes_num, new_edges_num / 10, &[4,3,2,1]);
+    let new_edge_updates = bse.create_edges(new_edges);
+
+    timer = std::time::Instant::now();
+    delta = bse.flush_updates(new_edge_updates).unwrap();
+    if debug {
+        DDLogGraph::dump_delta(&delta);
+    }
+
+    println!("Add {} new edges. Running Time: {} milliseconds", new_edges_num, timer.elapsed().as_millis());
 }
