@@ -21,7 +21,7 @@ typedef NID = StrId {nid: string} | NumId {nnid: u32} | Constant1 | Constant2
 // Declare the relation by specifying it record type.
 // input relation Node [Node] or input relation DummyNode [Node]
 // DummyNode[node] :- Node[node], is_dummy(node).
-input relation Node(id: u32)
+input relation Node(id: usize)
 input relation Edge(src: Node, dst: Node)
 
 // It will cause naming conflict and they will be treated as constants. 
@@ -91,25 +91,62 @@ HasCycle(HasCycleConstant) :- u in Node(), not NoCycle(u).
 // represent both head terms
 // Path(a, b), Path(b, a) :- Edge(a, b).
 
-output relation Outdegree(node: Node, count: usize)
 // Let's do some Aggregation in FORMULA.
+output relation Outdegree(node: Node, count: usize)
+// Calculate the outdegree for each node in the graph.
 // NodeCount(num) :- num = count({ a | Node(a)}).
 Outdegree(Node{src}, sum) :- Edge(Node{src}, Node{dst}), var sum = dst.group_by(src).group_count().  
 
-output relation IdSum(sum: u32)
-// TODO: Nested Aggregation sounds challenging?
-// When the number of nodes are larger than x, we sum up the id of every node in each edge that
-// originating from cycle free nodes.
-// IdSum(idsum) :- idsum = sum({ x, y | NoCycle(Node(x)), 
-//					Edge(Node(x), Node(y)), 
-//					max({ a | Node(a) }) > 4 })
 
+// TODO: Nested Aggregation sounds challenging?
+// For each outgoing edge (x, y) from a cycle-free node, we count the number of outgoing edges
+// starting from y and the count must be larger than a number so (x, y) can be added into the set
+// of { x, y | condition } and the set will be further aggregated. 
+// Ok, now we have a set of (x, y) pairs and we want to compute the sum of them but note that the 
+// real set return from set comprehension is just a set of integers so we need to remove all duplicates
+// before summing up.
+// NodeIdSum(idsum) :- idsum = sum({ x, y | NoCycle(Node(x)), 
+//					Edge(Node(x), Node(y)), 
+//					count({ z | Edge(Node(y), Node(z)) }) > 4 })
+// Let's break it down into two rules.
+output relation NodeIdSum(sum: usize)
+output relation HeadIntSet(num: usize)
+HeadIntSet(xx), HeadIntSet(yy) :- NoCycle(Node{x}), Edge(Node{x}, Node{y}), Edge(Node{y}, Node{z}), 
+	var g = z.group_by((x, y)),
+	// All variables like x, y, z are all consumed in the scope and cannot be accessed
+	// unless we explicitly use `group_key()` to store and access the key.
+	(var xx, var yy) = g.group_key(), 
+	// For each key (x, y), the number of z in the group has to be larger than 2.
+	g.group_count() > 2.
+// Group by nothing so it returns a group that has all integers in the set.
+NodeIdSum(sum) :- HeadIntSet(num), var sum = num.group_by(()).group_sum().
+
+// Let's make a little change to connect set comprehension with each cycle-free node from outer scope.
+// The difference from previous nested aggregation is that we are doing set comprehension for each
+// separate x and also we can move `NoCycle(Node(x))` to the outer scope without changing the semantic
+// NodeIdSum(x, idsum) :- Node(x), idsum = sum({ x, y | NoCycle(Node(x)), 
+//					Edge(Node(x), Node(y)), 
+//					count({ z | Edge(Node(y), Node(z)) }) > 4 })
+// Let's break it down into two rules.
+output relation NodeIdSumByX(node: Node, sum: usize)
+output relation HeadXY(x: usize, y: usize)
+HeadXY(x, y) :- Node(x), NoCycle(Node{x}), Edge(Node{x}, Node{y}), Edge(Node{y}, Node{z}), 
+	var g = z.group_by((x, y)),
+	// All variables like x, y, z are all consumed in the scope and cannot be accessed
+	// unless we explicitly use `group_key()` to store and access the key.
+	(var xx, var yy) = g.group_key(), 
+	// For each key (x, y), the number of z in the group has to be larger than 2.
+	g.group_count() > 2.
+NodeIdSumByX(Node{xx}, sum) :- HeadXY(x, y), var g = y.group_by(x), var xx = g.group_key(), 
+			var sum_of_ys = g.group_sum(), var sum = sum_of_ys + xx.
 
 // Mutually recursive rules
 // program::ProgNode::SCC{rels: vec![
 //     program::RecursiveRelation{rel: Path, distinct: true}, 
 //     program::RecursiveRelation{rel: Line, distinct: true}
 // ]},
+// Both `Path` and `Line` are put into an inner scope of loop that keeps deriving
+// new facts until fix point reached.
 // Path(a, b) :- Edge(a, b).
 // Line(a, b, a, b) :- Path(a, b).
 // Path(b, b) :- Line(a, b, c, d).
@@ -122,6 +159,7 @@ output relation IdSum(sum: u32)
 // Path(2, y) :- Edge(y, 2).
 
 // Join multiple predicates in the rule body and can we do some worst case optimal joins?
+// TODO: Check how ddlog schedules the joins. 
 // 1. Join Edge(a, b), Edge(b, c) into (c, a, b) and each one is DDValue
 // Arrange Edge(a, b), Edge(b, c) by c as (c, (c, a, b)) 
 // 2. Join Edge(a, b), Edge(b, c), Edge(c, d) into (d, c, a, b)
