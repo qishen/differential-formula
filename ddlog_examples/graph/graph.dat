@@ -1,0 +1,28 @@
+echo first around:;
+start;
+insert Node(0),
+insert Node(1),
+insert Node(2),
+insert Node(3),
+insert Node(4),
+insert Edge(Node{0}, Node{1}),
+insert Edge(Node{1}, Node{2}),
+insert Edge(Node{2}, Node{3}),
+insert Edge(Node{3}, Node{4}),
+
+commit dump_changes;
+
+echo 
+second around:
+;
+start;
+insert Edge(Node{1}, Node{0}),
+commit dump_changes;
+
+echo 
+third around:
+;
+start;
+delete Edge(Node{1}, Node{0}),
+commit dump_changes;
+

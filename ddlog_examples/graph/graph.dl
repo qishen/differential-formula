@@ -1,21 +1,109 @@
-input relation NN(id: u32)
-input relation EE(src: u32, dst: u32)
+// Generate ddlog runtime with std lib specified.
+// Bash command: ddlog -i graph.dl -L ~/differential-datalog/lib/
 
+// There is a bug in ddlog that type name cannot be single letter.
+// input relation NN(id: u32)
+// input relation EE(src: u32, dst: u32)
+
+// typedef StrId = string
+// typedef NumId = u32 
+// typedef NID = StrId | NumId turns out to be two constants.
+// Another bug here? Two constructors cannot have the same field name?
+typedef NID = StrId {nid: string} | NumId {nnid: u32} | Constant1 | Constant2
+
+// You cannot derived new facts for input relation
+// The workaround to emulate Formula is to create two relations for each type with a mapping rule.
+// input relation NodeInput(id: u32)
+// output relation Node(id: u32)
+
+// input relation Node(id: u32) is actually syntax sugar. 
+// typedef Node = Node {id: u32}
+// Declare the relation by specifying it record type.
+// input relation Node [Node] or input relation DummyNode [Node]
+// DummyNode[node] :- Node[node], is_dummy(node).
 input relation Node(id: u32)
 input relation Edge(src: Node, dst: Node)
-output relation TwoEdge(src: Edge, dst: Edge)
 
+// It will cause naming conflict and they will be treated as constants. 
+// typedef Item = Node | Edge
+// Must wrap them in constructors if you want enum of two defined types.
+// typedef Item = ItemNode{node: Node} | ItemEdge{edge: Edge}
+
+output relation TwoEdge(src: Edge, dst: Edge)
 output relation Path(src: Node, dst: Node)
 output relation Line(one: Node, two: Node, three: Node, four: Node)
 output relation NoCycle(node: Node)
 
-// Bash command: ddlog -i graph.dl -L ~/differential-datalog/lib/
+// output relation HasCycle(inner: bool)
+typedef HasCycleConstant = HasCycleConstant {}
+output relation HasCycle(inner: HasCycleConstant)
 
+// Recurisve type defintion is supported too!
+// Linked list of nodes with recursive type and NodeListNxt could be either `NodeList`
+// or NULL to be terminated.
+typedef NodeListNxt = Nxt {list: Ref<NodeList>} | NULL 
+output relation NodeList(item: Node, next: NodeListNxt)
+
+// Create a node list where a node points to itself as a self-linked list.
+// we cannot use `nxt in Nxt()` because Nxt is not a relation but just a constructor.
+// Node[node] or node in Node() are the same expression to access all items in the relation `Node` 
+// in which the type of each item is also `Node` but different from relation `Node`.
+NodeList(node, nxt) :- Node[node], var single_node = NodeList{node, NULL}, var nxt = Nxt{ref_new(single_node)}. 
+
+// The rule order does not matter here.
+// Path(a, c) :- Path(a, b), Path(b, c).
+// Nested predicate is supported too
+Path(Node{a}, Node{c}) :- Path(Node{a}, Node{b}), Path(Node{b}, Node{c}).
+
+// Add some additional constraints to the matches from predicate constraints  
+// Path(Node{e}, Node{c}) :- Path(Node{a}, Node{b}), Path(Node{b}, Node{c}), var e = a + 100, c > 1.
+// Constraint over attributes inside terms.
+// Path(a, c) :- Path(a, b), Path(b, c), b.id != c.id.
 Path(Node{a}, Node{b}) :- Edge(Node{a}, Node{b}). 
-Path(a, c) :- Path(a, b), Path(b, c).
 
-// More than one term in the head.
+// Let's make a production rule.
+// Production rule without additional constraints fails to compile?
+// TwoEdge(Edge{Node{a}, b}, Edge{c, d}) :- Edge(Node{a}, b), Edge(c, d).
+// TwoEdge(Edge{a, b}, Edge{c, d}) :- Edge(a, b), Edge(c, d), b == c.
+
+// Rule with negation to prove the absence of cycle.
+// For every Path(u, v) if Path(u, u) does not exist then NoCycle(u) is derived.
+// NoCycle(u) :- Path(u, v), not Path(u, u).
+// What we want is to check if there is no Path(u, u) in the database.
+// What ddlog does is to do a set difference between two sets.
+// set1 of Node[u] is a set of all existing nodes and set2 is a set of nodes that appear in Path(u, u).
+// Two ways to write it:
+// NoCycle(u) :- Node[u], not Path(u, u).
+// Bind variable `u` to a row of `Node` relation while u = Node(..) does not accept variable inside.
+NoCycle(u) :- u in Node(), not Path(u, u).
+
+// Emulate Formula rule in which the head is a boolean variable
+// Actually we cannot have `HasCycle(true)` and `HasCycle(false)` at the same time but ddlog may allow it.
+// `HasCycle(true)` can be used as boolean variable in the body of a rule.
+// The existence of `HasCycle(true)` means true and the absence of it means false.
+// `HasCycle(false)` is skipped and maybe we can use a Constant type for the field inside `HasCycle()`
+// as `HasCycle(inner: SingleConstant)` where `SingleConstant` has only one value to choose from.
+// HasCycle(true) :- u in Node(), not NoCycle(u).
+// Yes we can do it! `HasCycle()` is a relation that has at most one item `HasCycle(HasCycleConstant)` inside it 
+HasCycle(HasCycleConstant) :- u in Node(), not NoCycle(u).
+
+// More than one term in the head. DDLog will create something like Multi(a, b, c) to 
+// represent both head terms
 // Path(a, b), Path(b, a) :- Edge(a, b).
+
+output relation Outdegree(node: Node, count: usize)
+// Let's do some Aggregation in FORMULA.
+// NodeCount(num) :- num = count({ a | Node(a)}).
+Outdegree(Node{src}, sum) :- Edge(Node{src}, Node{dst}), var sum = dst.group_by(src).group_count().  
+
+output relation IdSum(sum: u32)
+// TODO: Nested Aggregation sounds challenging?
+// When the number of nodes are larger than x, we sum up the id of every node in each edge that
+// originating from cycle free nodes.
+// IdSum(idsum) :- idsum = sum({ x, y | NoCycle(Node(x)), 
+//					Edge(Node(x), Node(y)), 
+//					max({ a | Node(a) }) > 4 })
+
 
 // Mutually recursive rules
 // program::ProgNode::SCC{rels: vec![
@@ -33,7 +121,7 @@ Path(a, c) :- Path(a, b), Path(b, c).
 // Path(3, x) :- Path(2, x).
 // Path(2, y) :- Edge(y, 2).
 
-// Join multiple predicates in the rule body.
+// Join multiple predicates in the rule body and can we do some worst case optimal joins?
 // 1. Join Edge(a, b), Edge(b, c) into (c, a, b) and each one is DDValue
 // Arrange Edge(a, b), Edge(b, c) by c as (c, (c, a, b)) 
 // 2. Join Edge(a, b), Edge(b, c), Edge(c, d) into (d, c, a, b)
