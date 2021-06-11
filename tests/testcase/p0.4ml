@@ -8,11 +8,35 @@ domain Graph {
     TwoEdge ::= new(first: Edge, second: Edge).
 
     // Simple rule
-    Path(a, c) :- Edge(a, b), Edge(b, c).
+    // No joins and just map one collection to another.
+    // Bundle them together into a loop in dataflow.
+    // Path(a, b) :- Edge(a, b).
+    // Edge(a, c) :- Edge(a, b), Edge(b, c).
 
-    // Recursive rule
-    //Path(a, c) :- Path(a, b), Path(b, c).
+    Path(a, b) :- Edge(a, b).
+    Path(a, c) :- Path(a, b), Path(b, c).
 
+    // Path(a, b) :- Edge(a, b).
+    // Path(a, c) :- Edge(a, b), Edge(b, c).
+
+    // Two `Path` terms represent two different subset of terms so they are 
+    // Actually not dependent and can be put at different stratums.
+    // TODO: Maybe we should create two relations for two `Path` predicates.
+    // Line(x, x, x, x) :- Path(Node(1), x).
+    // Path(Node(2), y) :- Edge(y, y).
+    
+    // Implicit recursion. Both rules do not seem to be recursive but they are
+    // mutually dependent on each other and recursive when bundled together.
+    // Both `Path` and `Line` are put into SCC within a inner scope.
+    // `Path` generates new `Line` and `Line` generates new `Path`. 
+    // Path(a, b) :- Edge(a, b).
+    // Line(Node(c), Node(c), Node(c), Node(c)) :- Path(a, b), a = Node(x), b = Node(y), 
+    //                                             c = x + y, c < 10.
+    //                                             //, x: Integer, y: Integer.
+    // Path(u, u) :- Line(u, u, u, u).
+
+    // Self recursive rule
+    // Path(a, c) :- Path(a, b), Path(b, c).
 }
 
 model m of Graph {
@@ -26,7 +50,8 @@ model m of Graph {
     Edge(n1, n2).
     Edge(n2, n3).
     Edge(n3, n4).
+    // Edge(n4, Node(5)).
 
     // dummy is a symbolic value in partial model.
-    ex is Edge(n0, dummy).
+    // ex is Edge(n0, dummy).
 }

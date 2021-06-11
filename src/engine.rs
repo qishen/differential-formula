@@ -232,7 +232,8 @@ impl FormulaTermIndex {
         } else { false } 
     }
 
-    /// Map from `Relation_input` to `Relation`
+    /// Map from `Relation_input` to `Relation` because in Formula every relation is both
+    /// both input and out relation in ddlog definition.
     fn create_input_map_rule(&self, relname: String) -> DDRule {
         let rid = self.rid_by_name(&format!("{}_input", relname)).unwrap();
         let rule_str = format!("{}(..) :- {}_input(..) ", relname, relname);
@@ -260,6 +261,9 @@ impl FormulaTermIndex {
     fn create_map_rule(&self, matching_term: &AtomicTerm, head: Vec<&AtomicTerm>) -> DDRule {
         let map_rule_str = format!("{:?} :- {}", head, matching_term);
         let head_terms: Vec<AtomicTerm> = head.iter().map(|x| x.clone().clone()).collect();
+        // If we want the head to have only one term.
+        let head_term = head_terms.get(0).unwrap().clone();
+
         let type_name = matching_term.type_id();
         let rid = self.rid_by_name(&type_name).unwrap();
         let matching_term = matching_term.clone();
@@ -269,29 +273,40 @@ impl FormulaTermIndex {
             xform: Some(XFormCollection::FilterMap {
                 description: Cow::from(map_rule_str.clone()),
                 fmfun: Box::new(move |val: DDValue| -> Option<DDValue> { 
-                    let term = <AtomicTerm>::from_ddvalue(val);
-                    if let Some(m) = matching_term.match_to(&term) {
-                        let derived_terms: Vec<AtomicTerm> = head_terms.iter().map(|x| 
-                            x.propagate(&m)
-                        ).collect();
-                        Some(derived_terms.into_ddvalue())
+                    let term = <AtomicTerm>::from_ddvalue_ref(&val);
+                    if let Some(m) = matching_term.match_to(term) {
+                        // let derived_terms: Vec<AtomicTerm> = head_terms.iter().map(|x| 
+                        //     x.propagate(&m)
+                        // ).collect();
+                        // Some(derived_terms.into_ddvalue())
+                        let term = head_term.propagate(&m);
+                        Some(term.into_ddvalue())
                     } else { None }
                 }),
-                next: Box::new(Some(XFormCollection::FlatMap {
-                    description: Cow::from(format!("Derived head terms {:?} from flat map", head)),
-                    fmfun: Box::new(|v: DDValue| {
-                        let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
-                        Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
-                    }),
-                    next: Box::new(Some(XFormCollection::Inspect {
-                        description: Cow::from("Inspect newly derived terms"),
-                        ifun: Box::new(move |val, ts, weight| {
-                            println!("From map rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
-                            map_rule_str.clone(), val, ts, weight)
-                        }),
-                        next: Box::new(None)
-                    }))
-                }))
+                // next: Box::new(Some(XFormCollection::Inspect {
+                //     description: Cow::from("Inspect newly derived terms"),
+                //     ifun: Box::new(move |val, ts, weight| {
+                //         println!("From map rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                //         map_rule_str.clone(), val, ts, weight)
+                //     }),
+                //     next: Box::new(None)
+                // }))
+                next: Box::new(None)
+                // next: Box::new(Some(XFormCollection::FlatMap {
+                //     description: Cow::from(format!("Derived head terms {:?} from flat map", head)),
+                //     fmfun: Box::new(|v: DDValue| {
+                //         let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
+                //         Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
+                //     }),
+                //     next: Box::new(Some(XFormCollection::Inspect {
+                //         description: Cow::from("Inspect newly derived terms"),
+                //         ifun: Box::new(move |val, ts, weight| {
+                //             println!("From map rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                //             map_rule_str.clone(), val, ts, weight)
+                //         }),
+                //         next: Box::new(None)
+                //     }))
+                // }))
             })
         };
         map_rule
@@ -304,6 +319,9 @@ impl FormulaTermIndex {
         let (key, val1, val2) = t1.variable_diff(t2);
         let join_rule_str = format!("{:?} :- {}, {}", head, t1, t2);
         let head_terms: Vec<AtomicTerm> = head.iter().map(|x| x.clone().clone()).collect();
+        // If we want the head to have only one term.
+        let head_term = head_terms.get(0).unwrap().clone();
+
         let arr_key1 = FormulaArrKey::new(t1.clone(), &key, &val1).unwrap();
         let arr_key2 = FormulaArrKey::new(t2.clone(), &key, &val2).unwrap();
         let arr_id1 = self.arrid_by_key(&arr_key1).unwrap();
@@ -318,6 +336,7 @@ impl FormulaTermIndex {
                 arrangement: arr_id2,
                 jfun: Box::new(move |k: &DDValue, v1: &DDValue, v2: &DDValue| -> Option<DDValue> {
                     let mut tmap = HashMap::new();
+                    // Hmm, is it too expensive?
                     let key_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(k);
                     let val1_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v1);
                     let val2_terms = <Vec<AtomicTerm>>::from_ddvalue_ref(v2);
@@ -326,29 +345,38 @@ impl FormulaTermIndex {
                     val1.iter().zip(val1_terms).for_each(|(k, v)| { tmap.insert(k, v); });
                     val2.iter().zip(val2_terms).for_each(|(k, v)| { tmap.insert(k, v); });
 
-                    let new_terms: Vec<AtomicTerm> = head_terms.iter().map(|term| {
-                        term.propagate(&tmap)
-                    }).collect();
+                    let result = head_term.propagate(&tmap).into_ddvalue();
+                    // let new_terms: Vec<AtomicTerm> = head_terms.iter().map(|term| {
+                    //     term.propagate(&tmap)
+                    // }).collect();
 
-                    let result = new_terms.into_ddvalue(); 
-                    // println!("A list of new derived head terms: {:?}", result);
+                    // let result = new_terms.into_ddvalue(); 
                     Some(result)
                 }),
-                next: Box::new(Some(XFormCollection::FlatMap {
-                    description: Cow::from(format!("Flat map derived head terms {:?}", head)),
-                    fmfun: Box::new(|v: DDValue| {
-                        let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
-                        Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
-                    }),
-                    next: Box::new(Some(XFormCollection::Inspect {
-                        description: Cow::from("Inspect newly derived terms"),
-                        ifun: Box::new(move |val, ts, weight| {
-                            println!("From Join rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
-                                join_rule_str, val, ts, weight)
-                        }),
-                        next: Box::new(None)
-                    }))
-                }))
+                // next: Box::new(Some(XFormCollection::Inspect {
+                //     description: Cow::from("Inspect newly derived terms"),
+                //     ifun: Box::new(move |val, ts, weight| {
+                //         println!("From Join rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                //             join_rule_str, val, ts, weight)
+                //     }),
+                //     next: Box::new(None)
+                // }))
+                next: Box::new(None)
+                // next: Box::new(Some(XFormCollection::FlatMap {
+                //     description: Cow::from(format!("Flat map derived head terms {:?}", head)),
+                //     fmfun: Box::new(|v: DDValue| {
+                //         let head_terms = <Vec<AtomicTerm>>::from_ddvalue(v);
+                //         Some(Box::new(head_terms.into_iter().map(|x| x.into_ddvalue() )))
+                //     }),
+                //     next: Box::new(Some(XFormCollection::Inspect {
+                //         description: Cow::from("Inspect newly derived terms"),
+                //         ifun: Box::new(move |val, ts, weight| {
+                //             println!("From Join rule {}, val: {:?}, timestamp: {:?}, weight: {:?}", 
+                //                 join_rule_str, val, ts, weight)
+                //         }),
+                //         next: Box::new(None)
+                //     }))
+                // }))
             }
         };
 
@@ -390,7 +418,7 @@ impl FormulaTermIndex {
                 }
                 return None;
             }),
-            queryable: false,
+            queryable: true,
         };
 
         arr
@@ -426,9 +454,8 @@ impl FormulaProgram {
         for node in self.structure.iter() {
             match node {
                 FormulaProgNode::Rel(rel_name) => {
-                    let node = ProgNode::Rel { 
-                        rel: self.index.relation_by_name(rel_name).unwrap().clone() 
-                    };
+                    let rel = self.index.relation_by_name(rel_name).unwrap().clone(); 
+                    let node = ProgNode::Rel { rel };
                     nodes.push(node);
                 },
                 FormulaProgNode::SCC(rel_names) => {
@@ -549,7 +576,8 @@ impl FormulaExecEngine<AtomicTerm> {
                 let rel = Relation {
                     name: Cow::from(format!("Relation {} in Stratum 1", name)),
                     input: false,
-                    distinct: true,
+                    // Well, I thought it has to be distinct but ddlog doesn't set it to true.
+                    distinct: false,
                     caching_mode: CachingMode::Set,
                     key_func: None,
                     id: relation_id,
@@ -650,6 +678,7 @@ mod tests {
     use crate::parser::combinator::parse_program;
     use std::path::Path;
     use std::fs;
+    use rand::*;
 
     #[test]
     fn test_parse_models() {
@@ -668,5 +697,87 @@ mod tests {
         let df = engine.dataflow_by_name("Graph");
         df.run();
         df.insert_terms(terms);
+
+        // let rule0 = graph.meta_info().rules().get(0).unwrap();
+        let node1_ast = term(&format!("Node(1)~")[..]).unwrap().1;
+        let node1: AtomicTerm = node1_ast.into();
+        let edge_ab_ast = term(&format!("Path(a, b)~")[..]).unwrap().1;
+        let edge_ab: AtomicTerm = edge_ab_ast.into();
+        let arr_key = FormulaArrKey::new(
+            edge_ab, 
+            &vec![AtomicTerm::gen_raw_variable_term(String::from("a"), vec![])], 
+            &vec![AtomicTerm::gen_raw_variable_term(String::from("b"), vec![])], 
+        ).unwrap();
+
+        println!("arr_key: {:?}", arr_key);
+        println!("Arrangement index: {:?}", df.prog.index.arr_id_map);
+
+        let arrid = df.prog.index.arrid_by_key(&arr_key).unwrap();
+        if let Some(ref mut program) = df.running_program {
+            // let result = program.query_arrangement(arrid, node1.into_ddvalue());
+            // let result = program.dump_arrangement(arrid);
+            // println!("Print Arrangement {:?}", result);
+            let result1 = program.dump_arrangement((3, 0));
+            let result2 = program.dump_arrangement((3, 1));
+            println!("Print Arrangement of (3, 0) is {:?}", result1);
+            println!("Print Arrangement of (3, 1) is {:?}", result2);
+        }
+    }
+
+    #[test]
+    fn test_transitive_closure() {
+        println!("Print out arguments: {:?}", std::env::args());
+        // let nodes_num: usize = std::env::args().nth(1).unwrap_or("200".to_string()).parse().unwrap_or(100);
+        // let edges_num: usize = std::env::args().nth(2).unwrap_or("300".to_string()).parse().unwrap_or(20);
+        // let debug = std::env::args().nth(3).unwrap_or("debug".to_string()) == "debug";
+        let nodes_num = 200;
+        let edges_num = 300;
+        let debug = true;
+
+        let seed: &[_] = &[1, 2, 3, 4];
+        let mut rng1: StdRng = SeedableRng::from_seed(seed);    // rng for edge additions
+        let mut edge_set = HashSet::new();
+
+        let mut i = 0;
+        while i < edges_num {
+            let num1 = rng1.gen_range(0, nodes_num);
+            let num2 = rng1.gen_range(0, nodes_num);
+            let edge = (num1 as u32, num2 as u32);
+            // In case duplicates are generated
+            if !edge_set.contains(&edge) {
+                edge_set.insert(edge);
+                i += 1;
+            }
+        }
+
+        let edges: Vec<(u32, u32)> = edge_set.into_iter().collect();
+
+        let mut terms = vec![];
+        for (src, dst) in edges.iter() {
+            let term_ast = term(&format!("Edge(Node({}), Node({}))~", src, dst)[..]).unwrap().1;
+            let record = term_ast.into_record();
+            let term = AtomicTerm::from_record(&record).unwrap();
+            terms.push(term);
+        }
+
+        if debug {
+            for term in terms.iter() { println!("Initial input: {:?}", term); }
+        }
+
+        let path = Path::new("./tests/testcase/p0.4ml");
+        let content = fs::read_to_string(path).unwrap() + "EOF";
+        let (_, program_ast) = parse_program(&content);
+          
+        let env: Env<AtomicTerm> = program_ast.build_env();
+        // let graph = env.get_domain_by_name("Graph").unwrap();
+
+        let mut engine = FormulaExecEngine::new(env);
+        let df = engine.dataflow_by_name("Graph");
+        df.run();
+        
+        let timer = std::time::Instant::now();
+        df.insert_terms(terms);
+        println!("Graph has {} nodes and {} edges. Running Time: {} milliseconds", 
+            nodes_num, edges_num, timer.elapsed().as_millis());
     }
 }
