@@ -10,7 +10,7 @@
 // typedef NID = StrId | NumId turns out to be two constants.
 // Another bug here? Two constructors cannot have the same field name?
 typedef NID = StrId {nid: string} | NumId {nnid: u32} | Constant1 | Constant2
-
+typedef Null = Null {}
 // You cannot derived new facts for input relation
 // The workaround to emulate Formula is to create two relations for each type with a mapping rule.
 // input relation NodeInput(id: u32)
@@ -23,6 +23,7 @@ typedef NID = StrId {nid: string} | NumId {nnid: u32} | Constant1 | Constant2
 // DummyNode[node] :- Node[node], is_dummy(node).
 input relation Node(id: usize)
 input relation Edge(src: Node, dst: Node)
+output relation SelfCycleEdge[Edge]
 
 // It will cause naming conflict and they will be treated as constants. 
 // typedef Item = Node | Edge
@@ -53,7 +54,8 @@ NodeList(node, nxt) :- Node[node], var single_node = NodeList{node, NULL}, var n
 // The rule order does not matter here.
 // Path(a, c) :- Path(a, b), Path(b, c).
 // Nested predicate is supported too
-Path(Node{a}, Node{c}) :- Path(Node{a}, Node{b}), Path(Node{b}, Node{c}).
+// Access arguments by either position or name but not mixed of both.
+Path(Node{a}, Node{c}) :- Path(.src = Node{a}, .dst = Node{b}), Path(Node{b}, Node{c}).
 
 // Add some additional constraints to the matches from predicate constraints  
 // Path(Node{e}, Node{c}) :- Path(Node{a}, Node{b}), Path(Node{b}, Node{c}), var e = a + 100, c > 1.
@@ -66,79 +68,106 @@ Path(Node{a}, Node{b}) :- Edge(Node{a}, Node{b}).
 // TwoEdge(Edge{Node{a}, b}, Edge{c, d}) :- Edge(Node{a}, b), Edge(c, d).
 // TwoEdge(Edge{a, b}, Edge{c, d}) :- Edge(a, b), Edge(c, d), b == c.
 
-// Rule with negation to prove the absence of cycle.
-// For every Path(u, v) if Path(u, u) does not exist then NoCycle(u) is derived.
-// NoCycle(u) :- Path(u, v), not Path(u, u).
-// What we want is to check if there is no Path(u, u) in the database.
-// What ddlog does is to do a set difference between two sets.
-// set1 of Node[u] is a set of all existing nodes and set2 is a set of nodes that appear in Path(u, u).
-// Two ways to write it:
-// NoCycle(u) :- Node[u], not Path(u, u).
-// Bind variable `u` to a row of `Node` relation while u = Node(..) does not accept variable inside.
-NoCycle(u) :- u in Node(), not Path(u, u).
+// 1. Rule with negation to prove the absence of cycle in the database.
+// Translate negation to set comprehension as count({p | p is Path(u, u)}) = 0 in Formula syntax.
+// Group by () which means nothing means put everything into one group.
+// Translate Formula rule in which the head is a boolean variable
+// `HasCycle()` is a relation that has at most one item `HasCycle(HasCycleConstant)`
+ HasCycle(HasCycleConstant) :- Path(u1, u2), u1 == u2, var g = u1.group_by(()), 
+ 								var count = g.group_count(), count == 0.
 
-// Emulate Formula rule in which the head is a boolean variable
-// Actually we cannot have `HasCycle(true)` and `HasCycle(false)` at the same time but ddlog may allow it.
-// `HasCycle(true)` can be used as boolean variable in the body of a rule.
-// The existence of `HasCycle(true)` means true and the absence of it means false.
-// `HasCycle(false)` is skipped and maybe we can use a Constant type for the field inside `HasCycle()`
-// as `HasCycle(inner: SingleConstant)` where `SingleConstant` has only one value to choose from.
-// HasCycle(true) :- u in Node(), not NoCycle(u).
-// Yes we can do it! `HasCycle()` is a relation that has at most one item `HasCycle(HasCycleConstant)` inside it 
-HasCycle(HasCycleConstant) :- u in Node(), not NoCycle(u).
+// 2. Rule with negation to do a set difference between two sets.
+// set1 of Node[u] is a set of all existing nodes and set2 is a set of nodes that matched in Path(u, u).
+// There are two ways to write the binding of variable `u` to records in `Node` relation:
+// Node[u] or u in Node()
+// u = Node(..) is not a constraint but a constructor to create new record thus does not accept variables
+// that are not oriented from elsewhere in the current scope.
+NoCycle(u) :- u in Node(), not Path(u, u).
 
 // More than one term in the head. DDLog will create something like Multi(a, b, c) to 
 // represent both head terms
 // Path(a, b), Path(b, a) :- Edge(a, b).
 
-// Let's do some Aggregation in FORMULA.
+// Let's do some simple aggregation in FORMULA.
 output relation Outdegree(node: Node, count: usize)
 // Calculate the outdegree for each node in the graph.
-// NodeCount(num) :- num = count({ a | Node(a)}).
+// In Formula, the outdegree can be written as 
+// Outdegree(src, sum) :- src is Node(_), sum = count({ e | e is Edge(src, dst) }).
 Outdegree(Node{src}, sum) :- Edge(Node{src}, Node{dst}), var sum = dst.group_by(src).group_count().  
 
 
-// TODO: Nested Aggregation sounds challenging?
 // For each outgoing edge (x, y) from a cycle-free node, we count the number of outgoing edges
 // starting from y and the count must be larger than a number so (x, y) can be added into the set
 // of { x, y | condition } and the set will be further aggregated. 
 // Ok, now we have a set of (x, y) pairs and we want to compute the sum of them but note that the 
 // real set return from set comprehension is just a set of integers so we need to remove all duplicates
 // before summing up.
-// NodeIdSum(idsum) :- idsum = sum({ x, y | NoCycle(Node(x)), 
-//					Edge(Node(x), Node(y)), 
-//					count({ z | Edge(Node(y), Node(z)) }) > 4 })
-// Let's break it down into two rules.
+// NodeIdSum(idsum) :- idsum = sum({ x, y | 
+//		NoCycle(Node(x)), 
+//		Edge(Node(x), Node(y)), 
+//		count({ z, Node(z), Edge(Node(1), Node(z)), Edge(Node(z), Node(2)) | 
+//			Edge(Node(y), Node(z)) 
+//		}) > 4 
+//})
+
+// Pre-processing before aggregation: Create a collection of records that store outer scope variables
+// and a union type of all types in the head of set comprehension.
+// For terms in the head, we create a new union type to represent them and a new relation to hold
+// a collection of records of the tagged union type.
+typedef HeadTermUnion = HeadInt {num: usize} | HeadNode {node: Node} | HeadEdge {edge: Edge}
+// A container to hold variables from outer scope and all records derived in the head of the set comprehension
+typedef AggrPreprocessContainer = AggrPreprocessContainer {x: usize, y: usize, union: HeadTermUnion} 
+output relation AggrPreprocessContainer [AggrPreprocessContainer]
+// If we don't use union type and do aggregation for each type term in the head separately then things
+// could go wrong because Edge(Node(1), Node(z)) and Edge(Node(z), Node(2)) may produce the same edge
+// Edge(1, 2) and be counted twice.
+AggrPreprocessContainer(x, y, HeadInt{z}), 
+AggrPreprocessContainer(x, y, HeadNode{Node{z}}), 
+AggrPreprocessContainer(x, y, HeadEdge{Edge{Node{1}, Node{z}}}), 
+AggrPreprocessContainer(x, y, HeadEdge{Edge{Node{z}, Node{2}}}) :- 
+	NoCycle(Node{x}), Edge(Node{x}, Node{y}), Edge(Node{y}, Node{z}).
+
+// The union type for outer set comprehension sum({x, y| conditions}) and it is actually not union
+// type because the head terms only have integer type so we can do sum.
+typedef HeadTermUnion2 = HeadInt2 {num: usize}
+// No variables from outer scope and just {x, y} from the head.
+typedef AggrPreprocessContainer2 = AggrPreprocessContainer2 {union: HeadTermUnion2}
+output relation AggrPreprocessContainer2 [AggrPreprocessContainer2]
+AggrPreprocessContainer2(HeadInt2{xx}), AggrPreprocessContainer2(HeadInt2{yy}) :- AggrPreprocessContainer(x, y, h),
+		// Group by variables from the outer scope.
+		var g = h.group_by((x, y)), 
+		// Keep the variables from outer scope otherwise they are consumed into inner scope.
+		(var xx, var yy) = g.group_key(),
+		// Reduce each group by count
+		var count = g.group_count(), count > 1.
+
 output relation NodeIdSum(sum: usize)
-output relation HeadIntSet(num: usize)
-HeadIntSet(xx), HeadIntSet(yy) :- NoCycle(Node{x}), Edge(Node{x}, Node{y}), Edge(Node{y}, Node{z}), 
-	var g = z.group_by((x, y)),
-	// All variables like x, y, z are all consumed in the scope and cannot be accessed
-	// unless we explicitly use `group_key()` to store and access the key.
-	(var xx, var yy) = g.group_key(), 
-	// For each key (x, y), the number of z in the group has to be larger than 2.
-	g.group_count() > 2.
 // Group by nothing so it returns a group that has all integers in the set.
-NodeIdSum(sum) :- HeadIntSet(num), var sum = num.group_by(()).group_sum().
+NodeIdSum(sum) :- AggrPreprocessContainer2(HeadInt2{num}), var sum = num.group_by(()).group_sum().
 
 // Let's make a little change to connect set comprehension with each cycle-free node from outer scope.
 // The difference from previous nested aggregation is that we are doing set comprehension for each
 // separate x and also we can move `NoCycle(Node(x))` to the outer scope without changing the semantic
-// NodeIdSum(x, idsum) :- Node(x), idsum = sum({ x, y | NoCycle(Node(x)), 
-//					Edge(Node(x), Node(y)), 
-//					count({ z | Edge(Node(y), Node(z)) }) > 4 })
-// Let's break it down into two rules.
+// NodeIdSum(x, idsum) :- Node(x), idsum = sum({ x, y | 
+//		NoCycle(Node(x)), 
+//		Edge(Node(x), Node(y)), 
+//		count({ z, Node(z), Edge(Node(1), Node(z)), Edge(Node(z), Node(2)) | 
+//			Edge(Node(y), Node(z)) 
+//		}) > 4 
+//})
+typedef HeadTermUnion3 = HeadInt3 {num: usize}
+// Store outer scope variable x and the head terms in set comprehension. 
+typedef AggrPreprocessContainer3 = AggrPreprocessContainer3 {x: usize, union: HeadTermUnion3}
+output relation AggrPreprocessContainer3 [AggrPreprocessContainer3]
+AggrPreprocessContainer3(x, HeadInt3{x}), AggrPreprocessContainer3(x, HeadInt3{y}) :- 
+	AggrPreprocessContainer(x, y, h). 
+
 output relation NodeIdSumByX(node: Node, sum: usize)
-output relation HeadXY(x: usize, y: usize)
-HeadXY(x, y) :- Node(x), NoCycle(Node{x}), Edge(Node{x}, Node{y}), Edge(Node{y}, Node{z}), 
-	var g = z.group_by((x, y)),
-	// All variables like x, y, z are all consumed in the scope and cannot be accessed
-	// unless we explicitly use `group_key()` to store and access the key.
-	(var xx, var yy) = g.group_key(), 
-	// For each key (x, y), the number of z in the group has to be larger than 2.
-	g.group_count() > 2.
-NodeIdSumByX(Node{xx}, sum) :- HeadXY(x, y), var g = y.group_by(x), var xx = g.group_key(), 
-			var sum_of_ys = g.group_sum(), var sum = sum_of_ys + xx.
+NodeIdSumByX(Node{xx}, sum) :- AggrPreprocessContainer3(x, HeadInt3{h}),
+	var g = h.group_by(x),
+	var xx = g.group_key(),
+	var sum = g.group_sum().
+
 
 // Mutually recursive rules
 // program::ProgNode::SCC{rels: vec![
@@ -152,11 +181,27 @@ NodeIdSumByX(Node{xx}, sum) :- HeadXY(x, y), var g = y.group_by(x), var xx = g.g
 // Path(b, b) :- Line(a, b, c, d).
 
 // Rules that look dependent but actually not because of the semantics of the predicates
-// Path(Node{1}, x) and Path(Node{2}, y) represent different subsets of terms.
-// DDLog treats two rules separately
+// Without type inference we would think R1 is dependent on R2 because R1 requires all `Path`
+// to be derived in R2 before execution of rule R1.
+// Actually Path(Node{1}, x) and Path(Node{2}, y) represent different subsets of terms in `Path`
+// so R1 and R2 are independent because new facts of Path(1, x) from R2 does not affect matching of 
+// Path(2, x) in R1.
+
+// R1:
 // Line(x, x, x, x) :- Path(2, x).
-// Path(3, x) :- Path(2, x).
-// Path(2, y) :- Edge(y, 2).
+// can be written as
+// Line(x, x, x, x) :- Path2x(x).
+
+// R2:
+// Path(1, x) :- Edge(x, x).
+// can be written as
+// Path1x(x) :- Edge(x, x). 
+
+// Behind the scene we generate new types and relations.
+// output relation Path2x(dst: Node)
+// can be de-sugared to Path2x [Path2x] and typedef Path2x = { dst: Node }
+// Or we can create a new relation for `Node` as Path2x [Node] 
+
 
 // Join multiple predicates in the rule body and can we do some worst case optimal joins?
 // TODO: Check how ddlog schedules the joins. 
