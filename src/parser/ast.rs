@@ -466,7 +466,7 @@ impl ProgramAst {
         type_map.insert("String".to_string(), RawType::Type(string_type));
         type_map.insert("Integer".to_string(), RawType::Type(integer_type));
         type_map.insert("Boolean".to_string(), RawType::Type(bool_type));
-        type_map.insert("~Undefined".to_string(), RawType::Undefined);
+        type_map.insert("~Undefined".to_string(), RawType::undefined());
     }
 
     // pub fn create_transform<T>(

@@ -7,7 +7,6 @@ use num::BigInt;
 use enum_dispatch::enum_dispatch;
 use petgraph::graph::*;
 use petgraph::algo::*;
-use pyo3::prelude::*;
 
 use crate::expression::*;
 use crate::term::*;
@@ -24,12 +23,9 @@ pub enum Program {
 
 /// Meta information in a Formula Module like types and rules with a generic type for Formula
 /// type to enable easy access of wrapped Formula type when building terms.
-#[pyclass]
 #[derive(Clone, Debug)]
 pub struct MetaInfo {
-    // #[pyo3(get)]
     type_map: HashMap<String, RawType>,
-    // #[pyo3(get)]
     rules: Vec<Rule>,
 }
 
@@ -191,7 +187,6 @@ pub trait AccessModel {
 /// for the type of term that it can be for example `Arc<Term>` in multi-threads scenario or `Rc<Term>` 
 /// in single thread scenario or just `Term` if you don't care about too many duplicates as long as it 
 /// implements the required traits that make it look like a term.
-#[pyclass]
 #[derive(Clone)]
 pub struct UUIdTermStore {
     // Map each term to an unique integer id bi-directionally and the reference has to live
@@ -368,7 +363,6 @@ pub trait FormulaModule {
     fn add_rule(&mut self, rule: Rule);
 }
 
-#[pyclass]
 #[derive(Debug, Clone)]
 pub struct Transform {
     // The name of transform.
@@ -558,12 +552,9 @@ impl Transformation {
     }
 }
 
-#[pyclass]
 #[derive(Debug, Clone)]
 pub struct Domain {
-    #[pyo3(get)]
     pub name: String,
-    #[pyo3(get)]
     pub metainfo: MetaInfo,
 }
 
@@ -603,7 +594,6 @@ impl Domain {
     }
 }
 
-#[pyclass]
 #[derive(Clone, Debug)]
 pub struct Model {
     // The name of the model.
@@ -655,14 +645,10 @@ impl Model {
     }
 }
 
-#[pyclass]
 #[derive(Debug, Clone)]
 pub struct Env {
-    #[pyo3(get)]
     pub domain_map: HashMap<String, Domain>,
-    #[pyo3(get)]
     pub model_map: HashMap<String, Model>,
-    #[pyo3(get)]
     pub transform_map: HashMap<String, Transform>,
 }
 

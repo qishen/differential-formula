@@ -17,7 +17,6 @@ use crate::expression::*;
 use crate::constraint::*;
 use crate::util::*;
 
-
 #[derive(Clone)]
 pub struct Rule {
     head: Vec<AtomicTerm>,

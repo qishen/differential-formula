@@ -6,9 +6,6 @@ use std::string::String;
 
 use serde::{Serialize, Deserialize};
 
-use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
-
 use crate::term::*;
 use crate::util::wrapper::*;
 
@@ -16,17 +13,11 @@ pub trait FormulaTypeTrait {}
 
 #[derive(Eq, Ord, Debug, Clone, Serialize, Deserialize)]
 pub enum RawType {
+    // A string Id or reference to represent the raw type.
     TypeId(Cow<'static, str>),
+    // The real comprehensive type definition
     Type(FormulaTypeEnum),
-    // TODO: Change to `Any` type which is a union of all types in FORMULA.
-    Undefined,
 }
-
-// impl<'source> pyo3::FromPyObject<'source> for RawType {
-//     fn extract(ob: &'source PyAny) -> PyResult<Self> {
-//         todo!()
-//     }
-// }
 
 impl PartialEq for RawType {
     fn eq(&self, other: &Self) -> bool {
@@ -91,7 +82,6 @@ impl RawType {
         match self {
             RawType::Type(type_enum) => Cow::from(format!("{}", type_enum)),
             RawType::TypeId(tid) => tid.clone(),
-            RawType::Undefined => Cow::from("~Undefined")
         }
     }
 
@@ -116,7 +106,6 @@ impl RawType {
                 let renamed_typeid = format!("{}.{}", scope, type_id); 
                 RawType::TypeId(Cow::from(renamed_typeid))
             },
-            _ => RawType::Undefined
         }
     }
 
@@ -133,6 +122,10 @@ impl RawType {
             },
             _ => None
         }
+    }
+
+    pub fn undefined() -> Self {
+        RawType::TypeId(Cow::from("~Undefined"))
     }
 }
 
@@ -174,7 +167,6 @@ impl HasUniqueForm<String> for FormulaTypeEnum {
     }
 }
 
-#[pyclass]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EnumType {
     pub name: String,
@@ -188,7 +180,6 @@ impl HasUniqueForm<String> for EnumType {
     }
 }
 
-#[pyclass]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RenamedType {
     pub scope: String,
@@ -250,12 +241,9 @@ impl HasUniqueForm<String> for BaseType {
     }
 }
 
-#[pyclass]
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
-    #[pyo3(get, set)]
     pub name: String,
-    // #[pyo3(get, set)]
     pub arguments: Vec<(Option<String>, RawType)>
 }
 
@@ -280,12 +268,9 @@ impl HasUniqueForm<String> for CompositeType {
     }
 }
 
-#[pyclass]
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
-    #[pyo3(get, set)]
     pub name: String,
-    // #[pyo3(get, set)]
     pub subtypes: Vec<RawType>,
 }
 

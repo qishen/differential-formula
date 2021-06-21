@@ -65,10 +65,10 @@ lazy_static = "1.4.0"
 # clap = { git = "https://github.com/clap-rs/clap" }
 clap = "3.0.0-beta.1"
 
-[lib]
-name = "differential_formula"
-crate-type = ["cdylib"]
+# [lib]
+# name = "differential_formula"
+# crate-type = ["cdylib"]
 
-[dependencies.pyo3]
-version = "0.13.2"
-features = ["extension-module"]
+# [dependencies.pyo3]
+# version = "0.13.2"
+# features = ["extension-module"]

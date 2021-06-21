@@ -8,9 +8,6 @@ use serde::{Serialize, Deserialize};
 use differential_datalog::record::*;
 use ddlog_derive::*;
 
-use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
-
 use crate::expression::*;
 use crate::module::Env;
 use super::generic::*;
@@ -111,7 +108,7 @@ impl Debug for AtomicTerm {
 impl Default for AtomicTerm {
     fn default() -> Self {
         AtomicTerm::Atom(AtomicAtom { 
-            sort: RawType::Undefined,
+            sort: RawType::undefined(),
             val: AtomEnum::Int(0.into()),
         })
     }
@@ -144,7 +141,6 @@ impl IntoRecord for AtomicTerm {
                         }
                     },
                     RawType::TypeId(cow) => cow,
-                    RawType::Undefined => Cow::from("Any"),
                 };  
                 let mut arguments = vec![];
                 for arg in composite.arguments {
@@ -263,7 +259,7 @@ impl TermStructure for AtomicTerm {
     }
 
     fn gen_raw_variable_term(root: String, fragments: Vec<String>) -> Self {
-        let var = AtomicVariable::new(RawType::Undefined, root, fragments);
+        let var = AtomicVariable::new(RawType::undefined(), root, fragments);
         AtomicTerm::Variable(var)
     }
 
@@ -315,7 +311,7 @@ impl TermStructure for AtomicTerm {
             TermAst::VariableTermAst(vterm_ast) => {
                 // The sort of variable term is undefined at this point.
                 let var = AtomicVariable::new(
-                    RawType::Undefined,
+                    RawType::undefined(),
                     vterm_ast.root.clone(), 
                     vterm_ast.fragments.clone()
                 );
@@ -507,7 +503,6 @@ impl AtomicVariable {
     }
 }
 
-#[pyclass]
 #[derive(Hash, Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicComposite {
     pub sort: RawType,
