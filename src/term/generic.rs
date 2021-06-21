@@ -81,7 +81,7 @@ pub trait TermStructure: Sized + Clone + Hash + Ord + Display + Debug {
     fn from_term_ast(ast: &TermAst, type_map: &HashMap<String, RawType>) -> Self;
 
     /// Parse text and load the program into environment.
-    fn load_program<'a>(text: String) -> Env<Self>;
+    fn load_program<'a>(text: String) -> Env;
 }
 
 #[derive(Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -105,11 +105,8 @@ impl IntoRecord for AtomEnum {
 
 // Any generic term is a Formula expression and we want to return all results as the same generic
 // term itself rather than its generic parameter T.
-impl<T> BasicExprOps for T where T: TermStructure {   
-
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for AtomicTerm {   
+    fn variables(&self) -> HashSet<AtomicTerm> {
         // Allow multiple mutable reference for closure.
         let vars = RefCell::new(HashSet::new());
         self.traverse(
@@ -119,7 +116,7 @@ impl<T> BasicExprOps for T where T: TermStructure {
         vars.into_inner()
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         self.traverse_mut(
             &|term| { return term == pattern; }, 
             &mut |term| { 

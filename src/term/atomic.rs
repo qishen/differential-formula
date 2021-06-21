@@ -8,6 +8,9 @@ use serde::{Serialize, Deserialize};
 use differential_datalog::record::*;
 use ddlog_derive::*;
 
+use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
+
 use crate::expression::*;
 use crate::module::Env;
 use super::generic::*;
@@ -328,7 +331,7 @@ impl TermStructure for AtomicTerm {
     }
 
     /// Parse text and load the program into environment.
-    fn load_program<'a>(text: String) -> Env<AtomicTerm> {
+    fn load_program<'a>(text: String) -> Env {
         let text = text + " EOF";
         let result = parse_program(&text[..]);
         // Make sure the whole file is parsed rather than part of the program.
@@ -504,6 +507,7 @@ impl AtomicVariable {
     }
 }
 
+#[pyclass]
 #[derive(Hash, Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct AtomicComposite {
     pub sort: RawType,

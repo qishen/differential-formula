@@ -284,7 +284,7 @@ pub struct ProgramAst {
 }
 
 impl ProgramAst {
-    pub fn build_env<T>(&self) -> Env<T> where T: TermStructure {
+    pub fn build_env(&self) -> Env {
         let mut domain_map = HashMap::new();
         let mut model_map = HashMap::new();
         let mut transform_map = HashMap::new();
@@ -604,10 +604,7 @@ impl ProgramAst {
     //     transform
     // }
 
-    pub fn create_domain<T>(&self, 
-        domain_name: String, 
-        domain_map: &mut HashMap<String, Domain<T>>
-    ) -> Domain<T> where T: TermStructure {
+    pub fn create_domain(&self, domain_name: String, domain_map: &mut HashMap<String, Domain>) -> Domain {
         if domain_map.contains_key(&domain_name) { 
             return domain_map.get(&domain_name).unwrap().clone(); 
         }
@@ -655,7 +652,7 @@ impl ProgramAst {
             self.create_raw_type(type_name.clone(), &mut type_ast_map, &mut type_map, &mut generator);
         }
 
-        let empty_rules: Vec<Rule<T>> = vec![];
+        let empty_rules: Vec<Rule> = vec![];
         let mut metainfo = MetaInfo::new(type_map, empty_rules);
 
         for rule_ast in domain_ast.rules.iter() {
@@ -675,12 +672,12 @@ impl ProgramAst {
     /// Don't return the model because deep copy of large amounts of data
     /// is too expensive and all models are stored in `model_map`. By default
     /// use atomic term and atomic type to replace the generic params.
-    pub fn create_model<T>(
+    pub fn create_model(
         &self, 
         model_name: String,
-        model_map: &mut HashMap<String, Model<T>>, 
-        domain_map: &HashMap<String, Domain<T>>
-    ) where T: TermStructure {
+        model_map: &mut HashMap<String, Model>, 
+        domain_map: &HashMap<String, Domain>
+    ) {
         if model_map.contains_key(&model_name) { return; }
         
         let model_ast = self.model_ast_map.get(&model_name).unwrap();
@@ -694,14 +691,14 @@ impl ProgramAst {
             // Something tricky here: A renamed alias is treated as a variable.
             // e.g. Iso(Left.v1, Right.v2) after parsing the arguments are variables with fragments.
             // Terms in the model should not contain variable with fragments not even in partial model.
-            let mut term = T::from_term_ast(term_ast, domain.meta_info().type_map());
+            let mut term = AtomicTerm::from_term_ast(term_ast, domain.meta_info().type_map());
             term.traverse_mut(
                 &|t| { 
                     t != &t.root() 
                 }, 
                 &mut |t| {
                     let name = format!("{}", t); 
-                    *t = T::gen_raw_variable_term(name, vec![]);
+                    *t = AtomicTerm::gen_raw_variable_term(name, vec![]);
                 }
             );
 
@@ -769,7 +766,7 @@ impl ProgramAst {
 }
 
 trait ExprAstBehavior {
-    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: TermStructure;
+    fn to_expr(&self, metainfo: &MetaInfo) -> Expr;
 }
 
 #[derive(Clone, Debug)]
@@ -779,7 +776,7 @@ pub enum ExprAst {
 }
 
 impl ExprAstBehavior for ExprAst {
-    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: TermStructure {
+    fn to_expr(&self, metainfo: &MetaInfo) -> Expr {
         match self {
             ExprAst::BaseExprAst(b) => b.to_expr(metainfo),
             ExprAst::ArithExprAst(a) => a.to_expr(metainfo)
@@ -788,7 +785,7 @@ impl ExprAstBehavior for ExprAst {
 }
 
 trait BaseExprAstBehavior {
-    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: TermStructure;
+    fn to_base_expr(&self, metainfo: &MetaInfo) -> BaseExpr;
 }
 
 #[derive(Clone, Debug)]
@@ -798,7 +795,7 @@ pub enum BaseExprAst {
 }
 
 impl BaseExprAstBehavior for BaseExprAst {
-    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: TermStructure {
+    fn to_base_expr(&self, metainfo: &MetaInfo) -> BaseExpr {
         match self {
             BaseExprAst::SetComprehensionAst(s) => s.to_base_expr(metainfo),
             BaseExprAst::TermAst(t) => t.to_base_expr(metainfo)
@@ -807,7 +804,7 @@ impl BaseExprAstBehavior for BaseExprAst {
 }
 
 impl ExprAstBehavior for BaseExprAst {
-    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: TermStructure {
+    fn to_expr(&self, metainfo: &MetaInfo) -> Expr {
         let base_expr = self.to_base_expr(metainfo);
         Expr::BaseExpr(base_expr)
     }
@@ -822,11 +819,11 @@ pub struct SetComprehensionAst {
 }
 
 impl BaseExprAstBehavior for SetComprehensionAst {
-    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: TermStructure {
+    fn to_base_expr(&self, metainfo: &MetaInfo) -> BaseExpr {
         let mut vars = vec![];
         let mut condition = vec![];
         for term_ast in self.vars.iter() {
-            let term = T::from_term_ast(term_ast, metainfo.type_map());
+            let term = AtomicTerm::from_term_ast(term_ast, metainfo.type_map());
             vars.push(term);
         }
 
@@ -852,8 +849,8 @@ impl BaseExprAstBehavior for SetComprehensionAst {
 }
 
 impl BaseExprAstBehavior for TermAst {
-    fn to_base_expr<T>(&self, metainfo: &MetaInfo<T>) -> BaseExpr<T> where T: TermStructure {
-        let term = T::from_term_ast(self, metainfo.type_map());
+    fn to_base_expr(&self, metainfo: &MetaInfo) -> BaseExpr {
+        let term = AtomicTerm::from_term_ast(self, metainfo.type_map());
         BaseExpr::Term(term)
     }
 }
@@ -866,7 +863,7 @@ pub struct ArithExprAst {
 }
 
 impl ExprAstBehavior for ArithExprAst {
-    fn to_expr<T>(&self, metainfo: &MetaInfo<T>) -> Expr<T> where T: TermStructure {
+    fn to_expr(&self, metainfo: &MetaInfo) -> Expr {
         let left = self.left.to_expr(metainfo);
         let right = self.right.to_expr(metainfo);
         let arith = ArithExpr {
@@ -879,7 +876,7 @@ impl ExprAstBehavior for ArithExprAst {
 }
 
 trait ConstraintAstBehavior {
-    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: TermStructure;
+    fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint;
 }
 
 #[derive(Clone, Debug)]
@@ -890,7 +887,7 @@ pub enum ConstraintAst {
 }
 
 impl ConstraintAstBehavior for ConstraintAst {
-    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: TermStructure {
+    fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint {
         match self {
             ConstraintAst::PredicateAst(p) => p.to_constraint(metainfo),
             ConstraintAst::BinaryAst(b) => b.to_constraint(metainfo),
@@ -906,10 +903,10 @@ pub struct TypeConstraintAst {
 }
 
 impl ConstraintAstBehavior for TypeConstraintAst {
-    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: TermStructure {
+    fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint {
         let typename = self.sort.name().unwrap();
         let sort = metainfo.type_map().get(&typename).unwrap().clone();
-        let term = T::from_term_ast(&self.var, metainfo.type_map());
+        let term = AtomicTerm::from_term_ast(&self.var, metainfo.type_map());
         let tc = TypeConstraint { var: term, sort };
         Constraint::TypeConstraint(tc)
     }
@@ -924,13 +921,13 @@ pub struct PredicateAst {
 }
 
 impl ConstraintAstBehavior for PredicateAst {
-    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: TermStructure {
+    fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint {
         // Use `AtomicStrType` and atomic terms by default for the terms in constraints.
         let undefined = metainfo.type_map().get("~Undefined").unwrap().clone();
         let alias = match self.alias.clone() {
             None => None,
             Some(a) => {
-                let term = T::gen_raw_variable_term(a, vec![]);
+                let term = AtomicTerm::gen_raw_variable_term(a, vec![]);
                 Some(term)
             }
         };
@@ -938,11 +935,11 @@ impl ConstraintAstBehavior for PredicateAst {
         let real_term = match &self.term {
             TermAst::VariableTermAst(var_ast) => {
                 // Convert variable term into a constant (A composite term with zero argument.
-                let (_, nullary_term) = T::gen_constant(var_ast.root.clone());
+                let (_, nullary_term) = AtomicTerm::gen_constant(var_ast.root.clone());
                 nullary_term
             },
             _ => { 
-                let term = T::from_term_ast(&self.term, metainfo.type_map());
+                let term = AtomicTerm::from_term_ast(&self.term, metainfo.type_map());
                 term
             }
         };
@@ -965,7 +962,7 @@ pub struct BinaryAst {
 }
 
 impl ConstraintAstBehavior for BinaryAst {
-    fn to_constraint<T>(&self, metainfo: &MetaInfo<T>) -> Constraint<T> where T: TermStructure {
+    fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint {
         let bin = Binary {
             op: self.op.clone(),
             left: self.left.to_expr(metainfo),
@@ -982,10 +979,10 @@ pub struct RuleAst {
 }
 
 impl RuleAst {
-    pub fn to_rule<T>(&self, metainfo: &MetaInfo<T>) -> Rule<T> where T: TermStructure {
+    pub fn to_rule(&self, metainfo: &MetaInfo) -> Rule {
         let mut head = vec![];
         for term_ast in self.head.iter() {
-            let term = T::from_term_ast(term_ast, metainfo.type_map());
+            let term = AtomicTerm::from_term_ast(term_ast, metainfo.type_map());
             head.push(term);
         }
 
@@ -1018,7 +1015,7 @@ mod tests {
             println!("Record: {}", record);
         }
           
-        let env: Env<AtomicTerm> = program_ast.build_env();
+        let env: Env = program_ast.build_env();
         // println!("{:#?}", env.get_domain_by_name("Graph").unwrap());
         println!("{:#?}", env.get_model_by_name("m").unwrap());
     }

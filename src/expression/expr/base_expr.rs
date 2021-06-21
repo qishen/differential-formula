@@ -15,20 +15,20 @@ use crate::util::map::*;
 
 // #[enum_dispatch]
 pub trait BaseExprTrait {}
-impl<T> BaseExprTrait for SetComprehension<T> where T: TermStructure {}
-impl<T> BaseExprTrait for T where T: TermStructure {}
+impl BaseExprTrait for SetComprehension {}
+// impl BaseExprTrait for T {}
 
 // #[enum_dispatch(BaseExprTrait)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BaseExpr<T> where T: TermStructure {
-    SetComprehension(SetComprehension<T>),
-    Term(T),
+pub enum BaseExpr {
+    SetComprehension(SetComprehension),
+    Term(AtomicTerm),
 }
 
-impl<T> TryFrom<BaseExpr<T>> for SetComprehension<T> where T: TermStructure {
+impl TryFrom<BaseExpr> for SetComprehension {
     type Error = &'static str;
 
-    fn try_from(value: BaseExpr<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: BaseExpr) -> Result<Self, Self::Error> {
         match value {
             BaseExpr::SetComprehension(setcompre) => {
                 Ok(setcompre)
@@ -51,11 +51,8 @@ impl<T> TryFrom<BaseExpr<T>> for SetComprehension<T> where T: TermStructure {
 //     }
 // }
 
-impl<T> ExprTrait for BaseExpr<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<Self::TermOutput, Self::TermOutput> {
+impl ExprTrait for BaseExpr {
+    fn evaluate<M>(&self, binding: &M) -> Option<BigInt> where M: GenericMap<AtomicTerm, AtomicTerm> {
         // let atom_enum = match self {
         //     BaseExpr::Term(term) => {
         //         if term == term.root() {
@@ -84,7 +81,7 @@ impl<T> ExprTrait for BaseExpr<T> where T: TermStructure {
     }
 }
 
-impl<T> Display for BaseExpr<T> where T: TermStructure {
+impl Display for BaseExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BaseExpr::SetComprehension(s) => write!(f, "{}", s),
@@ -93,11 +90,8 @@ impl<T> Display for BaseExpr<T> where T: TermStructure {
     }
 }
 
-impl<T> BasicExprOps for BaseExpr<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for BaseExpr {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         match self {
             BaseExpr::Term(t) => {
                 t.variables()
@@ -106,7 +100,7 @@ impl<T> BasicExprOps for BaseExpr<T> where T: TermStructure {
         }
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         match self {
             BaseExpr::SetComprehension(s) => s.replace_pattern(pattern, replacement),
             BaseExpr::Term(t) => t.replace_pattern(pattern, replacement),
@@ -114,7 +108,7 @@ impl<T> BasicExprOps for BaseExpr<T> where T: TermStructure {
     }
 }
 
-impl<T> SetCompreOps for BaseExpr<T> where T: TermStructure {
+impl SetCompreOps for BaseExpr {
     fn has_set_comprehension(&self) -> bool {
         let has_setcompre = match self {
             BaseExpr::SetComprehension(s) => true,
@@ -123,7 +117,7 @@ impl<T> SetCompreOps for BaseExpr<T> where T: TermStructure {
         has_setcompre
     }
 
-    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<&SetComprehension> {
         let mut setcompres = vec![];
         match self {
             BaseExpr::SetComprehension(s) => {
@@ -134,7 +128,8 @@ impl<T> SetCompreOps for BaseExpr<T> where T: TermStructure {
         setcompres
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<AtomicTerm, SetComprehension> {
         let mut map = HashMap::new();
         match self {
             BaseExpr::SetComprehension(setcompre) => {
@@ -143,8 +138,8 @@ impl<T> SetCompreOps for BaseExpr<T> where T: TermStructure {
                 // Make a deep copy to avoid ugly try_into().
                 let replaced_setcompre = setcompre.clone(); 
                 let dc_name = generator.generate_name();
-                let dc_var = T::gen_raw_variable_term(dc_name, vec![]);
-                let mut base_expr: BaseExpr<T> = BaseExpr::Term(dc_var.clone());
+                let dc_var = AtomicTerm::gen_raw_variable_term(dc_name, vec![]);
+                let mut base_expr: BaseExpr = BaseExpr::Term(dc_var.clone());
                 std::mem::swap(self, &mut base_expr);
                 map.insert(dc_var, replaced_setcompre); 
             },

@@ -15,17 +15,14 @@ use crate::util::*;
 use crate::util::map::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Predicate<T> where T: TermStructure {
+pub struct Predicate {
     pub negated: bool,
-    pub term: T,
-    pub alias: Option<T>, // Must be a variable term and could have fragments
+    pub term: AtomicTerm,
+    pub alias: Option<AtomicTerm>, // Must be a variable term and could have fragments
 }
 
-impl<T> BasicExprOps for Predicate<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for Predicate {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         let mut var_set = HashSet::new();
         var_set.extend(self.term.variables());
         // Don't forget to add alias to variable set.
@@ -35,13 +32,13 @@ impl<T> BasicExprOps for Predicate<T> where T: TermStructure {
         var_set
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         self.term.replace_pattern(pattern, replacement);
         self.alias.replace_pattern(pattern, replacement);
     }
 }
 
-impl<T> Display for Predicate<T> where T: TermStructure {
+impl Display for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut term_str = format!("{}", self.term);
         let alias_str = match &self.alias {
@@ -58,19 +55,18 @@ impl<T> Display for Predicate<T> where T: TermStructure {
     }
 }
 
-impl<T> Predicate<T> where T: TermStructure {
+impl Predicate {
     /// Negative predicate constraint is count({setcompre}) = 0 in disguise and a negated predicate
     /// will be converted into two binary constraints with a random variable to hold the set comprehension.
-    pub fn convert_negation(&self, var: T) -> Option<(Constraint<T>, Constraint<T>)> {
+    pub fn convert_negation(&self, var: AtomicTerm) -> Option<(Constraint, Constraint)> {
         // Positive predicate is not allowed to be converted into Binary constraint.
         if !self.negated {
             return None;
         }
-
         // Give it an alias starting with "~" that cannot be accepted by parser to avoid 
         // collision with other user-defined variables.
-        let alias = T::gen_raw_variable_term("~dc".to_string(), vec![]);
-        let vars: Vec<T> = vec![alias.clone()];
+        let alias = AtomicTerm::gen_raw_variable_term("~dc".to_string(), vec![]);
+        let vars: Vec<AtomicTerm> = vec![alias.clone()];
         let pos_predicate = Predicate {
             negated: false,
             term: self.term.clone(),
@@ -85,8 +81,8 @@ impl<T> Predicate<T> where T: TermStructure {
         );
 
         // A little copy here from T to Term<S, T> but should be fine since it's on meta model.
-        let var_base_expr: BaseExpr<T> = BaseExpr::Term(var);
-        let setcompre_base_expr: BaseExpr<T> = BaseExpr::SetComprehension(setcompre);
+        let var_base_expr: BaseExpr = BaseExpr::Term(var);
+        let setcompre_base_expr: BaseExpr = BaseExpr::SetComprehension(setcompre);
         
         let binary = Binary {
             op: BinOp::Eq,
@@ -97,8 +93,8 @@ impl<T> Predicate<T> where T: TermStructure {
         let big_zero = BigInt::from_i64(0 as i64).unwrap();
         let zero_atom_enum = AtomEnum::Int(big_zero);
         // Create a new type in atom but it's ok here.
-        let t = T::gen_atom_term(zero_atom_enum);
-        let zero_base_expr: BaseExpr<T> = BaseExpr::Term(t);
+        let t = AtomicTerm::gen_atom_term(zero_atom_enum);
+        let zero_base_expr: BaseExpr = BaseExpr::Term(t);
 
         let binary2 = Binary {
             op: BinOp::Eq,
@@ -137,41 +133,38 @@ impl Display for BinOp {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Binary<T> where T: TermStructure {
+pub struct Binary {
     pub op: BinOp,
-    pub left: Expr<T>,
-    pub right: Expr<T>,
+    pub left: Expr,
+    pub right: Expr,
 }
 
-impl<T> Display for Binary<T> where T: TermStructure {
+impl Display for Binary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.left, self.op, self.right)
     }
 }
 
-impl<T> BasicExprOps for Binary<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for Binary {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         let mut set = HashSet::new();
         set.extend(self.left.variables());
         set.extend(self.right.variables());
         set
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         self.left.replace_pattern(pattern, replacement);
         self.right.replace_pattern(pattern, replacement);
     }
 }
 
-impl<T> SetCompreOps for Binary<T> where T: TermStructure {
+impl SetCompreOps for Binary {
     fn has_set_comprehension(&self) -> bool {
         self.left.has_set_comprehension() || self.right.has_set_comprehension()
     }
 
-    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<&SetComprehension> {
         let mut list = vec![];
         let mut left_vec = self.left.set_comprehensions();
         let mut right_vec = self.right.set_comprehensions();
@@ -180,7 +173,8 @@ impl<T> SetCompreOps for Binary<T> where T: TermStructure {
         list
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<AtomicTerm, SetComprehension> {
         let mut map = HashMap::new();
         // If left side is a variable term and right side is set comprehension then do nothing.
         if let Expr::BaseExpr(be1) = &self.left {
@@ -201,10 +195,10 @@ impl<T> SetCompreOps for Binary<T> where T: TermStructure {
     }
 }
 
-impl<T> Binary<T> where T: TermStructure {
+impl Binary {
     /// Assume all set comprehensions are separatedly declared like `a = count({..}) and 
     /// will not occur elsewhere in other parts of the expression.
-    pub fn variables_current_level(&self) -> HashSet<T> {
+    pub fn variables_current_level(&self) -> HashSet<AtomicTerm> {
         if let Expr::BaseExpr(base_expr) = &self.right {
             if let BaseExpr::SetComprehension(_setcompre) = base_expr {
                 // if the right side is a set comprehension then return variable on the left side,
@@ -221,7 +215,7 @@ impl<T> Binary<T> where T: TermStructure {
         return self.left.has_set_comprehension() || self.right.has_set_comprehension(); 
     }
 
-    pub fn evaluate<M>(&self, binding: &M) -> Option<bool> where M: GenericMap<T, T> {
+    pub fn evaluate<M>(&self, binding: &M) -> Option<bool> where M: GenericMap<AtomicTerm, AtomicTerm> {
         // Cannot not directly handle set comprehension in evaluation of binary constraint.
         if self.has_set_comprehension() { 
             return None; 
@@ -244,44 +238,42 @@ impl<T> Binary<T> where T: TermStructure {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TypeConstraint<T> where T: TermStructure {
-    pub var: T,
+pub struct TypeConstraint {
+    pub var: AtomicTerm,
     pub sort: RawType,
 }
 
-impl<T> Display for TypeConstraint<T> where T: TermStructure {
+impl Display for TypeConstraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} : {}", self.var, self.sort)
     }
 }
 
-impl<T> BasicExprOps for TypeConstraint<T> where T: TermStructure {
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for TypeConstraint {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         self.var.variables()
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         self.replace_pattern(pattern, replacement);
     }
 }
 
 // #[enum_dispatch]
 // pub trait ConstraintBehavior {}
-// impl<T> ConstraintBehavior for Predicate<T> where T: TermStructure {}
-// impl<T> ConstraintBehavior for TypeConstraint<T> where T: TermStructure {}
-// impl<T> ConstraintBehavior for Binary<T> where T: TermStructure {}
+// impl ConstraintBehavior for Predicate where T: TermStructure {}
+// impl ConstraintBehavior for TypeConstraint where T: TermStructure {}
+// impl ConstraintBehavior for Binary where T: TermStructure {}
 // #[enum_dispatch(ConstraintBehavior)]
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Constraint<T> where T: TermStructure {
-    Predicate(Predicate<T>),
-    Binary(Binary<T>),
-    TypeConstraint(TypeConstraint<T>),
+pub enum Constraint {
+    Predicate(Predicate),
+    Binary(Binary),
+    TypeConstraint(TypeConstraint),
 }
 
-impl<T> Display for Constraint<T> where T: TermStructure {
+impl Display for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let con_str = match self {
             Constraint::Predicate(p) => { format!("{}", p) },
@@ -293,10 +285,10 @@ impl<T> Display for Constraint<T> where T: TermStructure {
     }
 }
 
-impl<T> TryFrom<Constraint<T>> for Predicate<T> where T: TermStructure {
+impl TryFrom<Constraint> for Predicate {
     type Error = &'static str;
 
-    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: Constraint) -> Result<Self, Self::Error> {
         match value {
             Constraint::Predicate(pred) => {
                 Ok(pred)
@@ -306,10 +298,10 @@ impl<T> TryFrom<Constraint<T>> for Predicate<T> where T: TermStructure {
     }
 }
 
-impl<T> TryFrom<Constraint<T>> for Binary<T> where T: TermStructure {
+impl TryFrom<Constraint> for Binary {
     type Error = &'static str;
 
-    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: Constraint) -> Result<Self, Self::Error> {
         match value {
             Constraint::Binary(binary) => {
                 Ok(binary)
@@ -319,10 +311,10 @@ impl<T> TryFrom<Constraint<T>> for Binary<T> where T: TermStructure {
     }
 }
 
-impl<T> TryFrom<Constraint<T>> for TypeConstraint<T> where T: TermStructure {
+impl TryFrom<Constraint> for TypeConstraint {
     type Error = &'static str;
 
-    fn try_from(value: Constraint<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: Constraint) -> Result<Self, Self::Error> {
         match value {
             Constraint::TypeConstraint(tc) => {
                 Ok(tc)
@@ -332,10 +324,8 @@ impl<T> TryFrom<Constraint<T>> for TypeConstraint<T> where T: TermStructure {
     }
 }
 
-impl<T> BasicExprOps for Constraint<T> where T: TermStructure {
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for Constraint {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         match self {
             Constraint::Predicate(p) => p.variables(),
             Constraint::Binary(b) => b.variables(),
@@ -343,7 +333,7 @@ impl<T> BasicExprOps for Constraint<T> where T: TermStructure {
         }
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         match self {
             Constraint::Predicate(p) => p.replace_pattern(pattern, replacement),
             Constraint::Binary(b) => b.replace_pattern(pattern, replacement),
@@ -352,7 +342,7 @@ impl<T> BasicExprOps for Constraint<T> where T: TermStructure {
     }
 }
 
-impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
+impl SetCompreOps for Constraint {
     fn has_set_comprehension(&self) -> bool {
         match self {
             Constraint::Predicate(p) => false,
@@ -361,7 +351,7 @@ impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
         }
     }
 
-    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<&SetComprehension> {
         match self {
             Constraint::Predicate(p) => Vec::new(),
             Constraint::Binary(b) => b.set_comprehensions(),
@@ -369,7 +359,8 @@ impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
         }
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<AtomicTerm, SetComprehension> {
         match self {
             Constraint::Predicate(p) => HashMap::new(),
             Constraint::Binary(b) => b.replace_set_comprehension(generator),
@@ -378,11 +369,11 @@ impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
     }
 }
 
-// impl<T> Expression for Constraint<T> where T: TermStructure {
+// impl Expression for Constraint where T: TermStructure {
 
 //     type TermOutput = T;
 
-//     fn variables(&self) -> HashSet<Self::TermOutput> {
+//     fn variables(&self) -> HashSet<AtomicTerm> {
 //         match self {
 //             Constraint::Predicate(p) => p.variables(),
 //             Constraint::Binary(b) => b.variables(),
@@ -390,7 +381,7 @@ impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
 //         }
 //     }
 
-//     fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+//     fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
 //         match self {
 //             Constraint::Predicate(p) => p.replace_pattern(pattern, replacement),
 //             Constraint::Binary(b) => b.replace_pattern(pattern, replacement),
@@ -398,7 +389,7 @@ impl<T> SetCompreOps for Constraint<T> where T: TermStructure {
 //         };
 //     }
 
-//     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+//     fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<AtomicTerm, SetComprehension<AtomicTerm>> {
 //         match self {
 //             Constraint::Predicate(p) => {
 //                 return p.replace_set_comprehension(generator);

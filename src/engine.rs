@@ -519,17 +519,17 @@ impl DomainDataflow {
     }
 }
 
-struct FormulaExecEngine<T: TermStructure> {
-    env: Env<T>,
+struct FormulaExecEngine {
+    env: Env,
     domains: HashMap<String, DomainDataflow>
 }
 
-impl FormulaExecEngine<AtomicTerm> {
+impl FormulaExecEngine {
     fn dataflow_by_name(&mut self, name: &str) -> &mut DomainDataflow {
         self.domains.get_mut(name).unwrap()
     }
 
-    fn new(env: Env<AtomicTerm>) -> Self {
+    fn new(env: Env) -> Self {
         let mut dataflows = HashMap::new();
         for (domain_name, domain) in env.domain_map.iter() {
             let meta = domain.meta_info();
@@ -540,7 +540,7 @@ impl FormulaExecEngine<AtomicTerm> {
             // Find all relations that need to be put into SCC.
             let mut scc_relname_set = HashSet::new();
             for rule in meta.rules() {
-                let head = rule.get_head();
+                let head = rule.head();
                 for term in head {
                     scc_relname_set.insert(term.type_id().into_owned());
                 }
@@ -623,7 +623,7 @@ impl FormulaExecEngine<AtomicTerm> {
                     }
                 }).collect();
 
-                let head = rule.get_head();
+                let head = rule.head();
                 
                 if pred_terms.len() == 1 {
                     // Match to only one term predicate and derive new terms without join operation. 
@@ -686,7 +686,7 @@ mod tests {
         let content = fs::read_to_string(path).unwrap() + "EOF";
         let (_, program_ast) = parse_program(&content);
           
-        let env: Env<AtomicTerm> = program_ast.build_env();
+        let env: Env = program_ast.build_env();
         let graph = env.get_domain_by_name("Graph").unwrap();
         let m = env.get_model_by_name("m").unwrap();
         println!("{:#?}", graph);
@@ -768,7 +768,7 @@ mod tests {
         let content = fs::read_to_string(path).unwrap() + "EOF";
         let (_, program_ast) = parse_program(&content);
           
-        let env: Env<AtomicTerm> = program_ast.build_env();
+        let env: Env = program_ast.build_env();
         // let graph = env.get_domain_by_name("Graph").unwrap();
 
         let mut engine = FormulaExecEngine::new(env);

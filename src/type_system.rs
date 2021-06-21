@@ -6,6 +6,9 @@ use std::string::String;
 
 use serde::{Serialize, Deserialize};
 
+use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
+
 use crate::term::*;
 use crate::util::wrapper::*;
 
@@ -18,6 +21,12 @@ pub enum RawType {
     // TODO: Change to `Any` type which is a union of all types in FORMULA.
     Undefined,
 }
+
+// impl<'source> pyo3::FromPyObject<'source> for RawType {
+//     fn extract(ob: &'source PyAny) -> PyResult<Self> {
+//         todo!()
+//     }
+// }
 
 impl PartialEq for RawType {
     fn eq(&self, other: &Self) -> bool {
@@ -165,6 +174,7 @@ impl HasUniqueForm<String> for FormulaTypeEnum {
     }
 }
 
+#[pyclass]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EnumType {
     pub name: String,
@@ -178,6 +188,7 @@ impl HasUniqueForm<String> for EnumType {
     }
 }
 
+#[pyclass]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct RenamedType {
     pub scope: String,
@@ -239,9 +250,12 @@ impl HasUniqueForm<String> for BaseType {
     }
 }
 
+#[pyclass]
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct CompositeType {
+    #[pyo3(get, set)]
     pub name: String,
+    // #[pyo3(get, set)]
     pub arguments: Vec<(Option<String>, RawType)>
 }
 
@@ -266,9 +280,12 @@ impl HasUniqueForm<String> for CompositeType {
     }
 }
 
+#[pyclass]
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct UnionType {
+    #[pyo3(get, set)]
     pub name: String,
+    // #[pyo3(get, set)]
     pub subtypes: Vec<RawType>,
 }
 
@@ -297,11 +314,11 @@ mod tests {
     use std::path::Path;
     use std::fs;
 
-    fn load_graph_domain() -> Domain<AtomicTerm> {
+    fn load_graph_domain() -> Domain {
         let path = Path::new("./tests/testcase/p0.4ml");
         let content = fs::read_to_string(path).unwrap() + "EOF";
         let (_, program_ast) = parse_program(&content);
-        let env: Env<AtomicTerm> = program_ast.build_env();
+        let env: Env = program_ast.build_env();
         let graph = env.get_domain_by_name("Graph").unwrap();
         graph.clone()
     }

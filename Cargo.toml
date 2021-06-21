@@ -1,5 +1,5 @@
 [package]
-name = "differential-formula"
+name = "differential_formula"
 version = "0.1.1"
 authors = ["Qishen Zhang <qishen23@gmail.com>"]
 edition = "2018"
@@ -64,3 +64,11 @@ lazy_static = "1.4.0"
 # Here we use the github repo to get the latest clap v3.  
 # clap = { git = "https://github.com/clap-rs/clap" }
 clap = "3.0.0-beta.1"
+
+[lib]
+name = "differential_formula"
+crate-type = ["cdylib"]
+
+[dependencies.pyo3]
+version = "0.13.2"
+features = ["extension-module"]

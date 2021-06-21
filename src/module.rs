@@ -7,6 +7,7 @@ use num::BigInt;
 use enum_dispatch::enum_dispatch;
 use petgraph::graph::*;
 use petgraph::algo::*;
+use pyo3::prelude::*;
 
 use crate::expression::*;
 use crate::term::*;
@@ -15,26 +16,26 @@ use crate::type_system::*;
 
 #[enum_dispatch]
 #[derive(Debug, Clone)]
-pub enum Program<T> where T: TermStructure 
-{
-    Domain(Domain<T>),
-    Model(Model<T>),
-    Transform(Transform<T>),
+pub enum Program {
+    Domain(Domain),
+    Model(Model),
+    Transform(Transform)
 }
 
 /// Meta information in a Formula Module like types and rules with a generic type for Formula
 /// type to enable easy access of wrapped Formula type when building terms.
+#[pyclass]
 #[derive(Clone, Debug)]
-pub struct MetaInfo<T> where T: TermStructure {
-    // Map string to a wrapped Formula type. 
+pub struct MetaInfo {
+    // #[pyo3(get)]
     type_map: HashMap<String, RawType>,
-    // Rules defined in transformation.
-    rules: Vec<Rule<T>>,
+    // #[pyo3(get)]
+    rules: Vec<Rule>,
 }
 
-impl<T> MetaInfo<T> where T: TermStructure {
+impl MetaInfo {
     /// Use type map and rules to create a new MetaInfo instance basically represents Formula Domain.
-    pub fn new(type_map: HashMap<String, RawType>, rules: Vec<Rule<T>>) -> Self {
+    pub fn new(type_map: HashMap<String, RawType>, rules: Vec<Rule>) -> Self {
         MetaInfo { type_map, rules }
     }
 
@@ -70,17 +71,17 @@ impl<T> MetaInfo<T> where T: TermStructure {
     }
 
     /// Add a new rule into meta info.
-    pub fn add_rule(&mut self, rule: Rule<T>) {
+    pub fn add_rule(&mut self, rule: Rule) {
         self.rules.push(rule);
     }
 
     /// Return all rules in current module without order.
-    pub fn rules(&self) -> Vec<Rule<T>> {
+    pub fn rules(&self) -> Vec<Rule> {
         self.rules.clone()
     }
 
     /// Return all headless conformance rules without order.
-    pub fn conformance_rules(&self) -> Vec<Rule<T>> {
+    pub fn conformance_rules(&self) -> Vec<Rule> {
         let mut conformance_rules = vec![];
         for rule in self.rules.clone() {
             if rule.is_conformance_rule() {
@@ -91,7 +92,7 @@ impl<T> MetaInfo<T> where T: TermStructure {
     }
 
     /// Return stratified rules excluding comformance rules.
-    pub fn stratified_rules(&self) -> Vec<Vec<Rule<T>>> {
+    pub fn stratified_rules(&self) -> Vec<Vec<Rule>> {
         // TODO: Rules may contains variable like `%id` that needs to be instantiated in transformation.
         let mut stratified_rules = vec![];
         for rule in self.rules.clone() {
@@ -168,24 +169,21 @@ impl<T> MetaInfo<T> where T: TermStructure {
 }
 
 pub trait AccessModel {
-
-    type Output: TermStructure;
-
     /// Return alias map.
-    fn alias_map(&self) -> BiMap<String, &Self::Output>;
+    fn alias_map(&self) -> BiMap<String, &AtomicTerm>;
 
     /// Return all terms as references in a vector.
-    fn terms(&self) -> Vec<&Self::Output>;
+    fn terms(&self) -> Vec<&AtomicTerm>;
 
     /// Check if a term exists with term reference.
-    fn contains_term(&self, term: &Self::Output) -> bool;
+    fn contains_term(&self, term: &AtomicTerm) -> bool;
 
     /// Add a new term and return its integer id.
-    fn add_term(&mut self, term: Self::Output) -> &Self::Output;
+    fn add_term(&mut self, term: AtomicTerm) -> &AtomicTerm;
 
     /// Remove a term by looking up with term reference and return the removed term if 
     /// the term is removed.
-    fn remove_term(&mut self, term: &Self::Output) -> Option<Self::Output>;
+    fn remove_term(&mut self, term: &AtomicTerm) -> Option<AtomicTerm>;
 }
 
 /// ModelStore efficiently stores all terms indexed in two hash maps, the first one map an unique
@@ -193,21 +191,22 @@ pub trait AccessModel {
 /// for the type of term that it can be for example `Arc<Term>` in multi-threads scenario or `Rc<Term>` 
 /// in single thread scenario or just `Term` if you don't care about too many duplicates as long as it 
 /// implements the required traits that make it look like a term.
+#[pyclass]
 #[derive(Clone)]
-pub struct UUIdTermStore<T> where T: TermStructure {
+pub struct UUIdTermStore {
     // Map each term to an unique integer id bi-directionally and the reference has to live
     // at least as long as the term store even though the reference should only point to the
     // term in the term set above.
-    id_bimap: BiMap<BigInt, T>,
+    id_bimap: BiMap<BigInt, AtomicTerm>,
     // Map alias string as a variable term reference to term reference and the term reference
     // has to live at least as long as the term store.
-    alias_bimap: BiMap<String, T>,
+    alias_bimap: BiMap<String, AtomicTerm>,
     // Use counter to assign id for new terms and increment each time
     // The number of terms will not hit a limit because BigInt is used here.
     counter: BigInt,
 }
 
-impl<T> Debug for UUIdTermStore<T> where T: TermStructure {
+impl Debug for UUIdTermStore {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let term_str_list: Vec<String> = self.id_bimap.iter().map(|(k, v)| {
             format!("{}: {}", k, v)
@@ -224,27 +223,25 @@ impl<T> Debug for UUIdTermStore<T> where T: TermStructure {
     }
 }
 
-impl<T> AccessModel for UUIdTermStore<T> where T: TermStructure {
+impl AccessModel for UUIdTermStore {
 
-    type Output = T;
-
-    fn alias_map(&self) -> BiMap<String, &Self::Output> {
+    fn alias_map(&self) -> BiMap<String, &AtomicTerm> {
         let map: BiMap<_,_> = self.alias_bimap.iter().map(|(k, v)| {
             (k.clone(), v)
         }).collect();
         map
     }
 
-    fn terms(&self) -> Vec<&Self::Output> {
-        let terms: Vec<&T> = self.id_bimap.right_values().collect();
+    fn terms(&self) -> Vec<&AtomicTerm> {
+        let terms: Vec<&AtomicTerm> = self.id_bimap.right_values().collect();
         terms
     }
 
-    fn contains_term(&self, term: &Self::Output) -> bool {
+    fn contains_term(&self, term: &AtomicTerm) -> bool {
         self.id_bimap.contains_right(term)
     }
 
-    fn add_term(&mut self, term: T) -> &Self::Output {
+    fn add_term(&mut self, term: AtomicTerm) -> &AtomicTerm {
         if !self.id_bimap.contains_right(&term) {
             let id = self.counter.clone();
             self.id_bimap.insert(id.clone(), term);
@@ -256,15 +253,15 @@ impl<T> AccessModel for UUIdTermStore<T> where T: TermStructure {
         }
     }
 
-    fn remove_term(&mut self, term: &T) -> Option<Self::Output>{
+    fn remove_term(&mut self, term: &AtomicTerm) -> Option<AtomicTerm> {
         self.alias_bimap.remove_by_right(term);
         self.id_bimap.remove_by_right(term).map(|(id, term)| term) 
 
     }
 }
 
-impl<T> UUIdTermStore<T> where T: TermStructure {
-    pub fn new(terms: HashSet<T>, alias_map: HashMap<String, T>) -> Self {
+impl UUIdTermStore {
+    pub fn new(terms: HashSet<AtomicTerm>, alias_map: HashMap<String, AtomicTerm>) -> Self {
         let mut counter: BigInt = 0.into();
         let mut id_bimap = BiMap::new();
         let mut alias_bimap = BiMap::new();
@@ -288,7 +285,7 @@ impl<T> UUIdTermStore<T> where T: TermStructure {
         store
     }
 
-    fn replace_alias_in_term(&self, term: &mut T) {
+    fn replace_alias_in_term(&self, term: &mut AtomicTerm) {
         term.traverse_mut(
             &|t| { t.is_var() && self.alias_bimap.contains_left(&format!("{}", t)) }, 
             &mut |t| {
@@ -345,59 +342,60 @@ impl<T> UUIdTermStore<T> where T: TermStructure {
         UUIdTermStore::new(renamed_terms, renamed_alias_map)
     }
 
-    pub fn get_term_by_id(&self, id: BigInt) -> Option<&T> {
+    pub fn get_term_by_id(&self, id: BigInt) -> Option<&AtomicTerm> {
         self.id_bimap.get_by_left(&id)
     }
 
-    pub fn get_term_by_alias(&self, name: &String) -> &T {
+    pub fn get_term_by_alias(&self, name: &String) -> &AtomicTerm {
         self.alias_bimap.get_by_left(name).unwrap()
     }
 
-    pub fn get_id_by_term(&self, term: &T) -> Option<BigInt> {
+    pub fn get_id_by_term(&self, term: &AtomicTerm) -> Option<BigInt> {
         self.id_bimap.get_by_right(&term).map(|x| x.clone())
     }
 
-    pub fn remove_term_by_id(&mut self, id: BigInt) -> Option<(BigInt, T)> {
+    pub fn remove_term_by_id(&mut self, id: BigInt) -> Option<(BigInt, AtomicTerm)> {
         self.id_bimap.remove_by_left(&id)
     }
 }
 
-pub trait FormulaModule<T> where T: TermStructure {
+pub trait FormulaModule {
     // Return all terms as reference in a vector.
-    fn terms(&self) -> Vec<&T>;
+    fn terms(&self) -> Vec<&AtomicTerm>;
     // Return meta inforamtion with type map and rules.
-    fn meta_info(&self) -> &MetaInfo<T>;
+    fn meta_info(&self) -> &MetaInfo;
     // Add a rule.
-    fn add_rule(&mut self, rule: Rule<T>);
+    fn add_rule(&mut self, rule: Rule);
 }
 
+#[pyclass]
 #[derive(Debug, Clone)]
-pub struct Transform<T> where T: TermStructure {
+pub struct Transform {
     // The name of transform.
     pub name: String,
     // Meta information including the ones from input and output domains.
-    pub metainfo: MetaInfo<T>,
+    pub metainfo: MetaInfo,
     // Store terms defined in the transform module.
-    pub store: UUIdTermStore<T>,
+    pub store: UUIdTermStore,
     // A list of strings representing the Ids of params.
     pub params: Vec<String>,
     // Some parameters in transform are terms.
     pub input_type_map: HashMap<String, RawType>,
     // The other parameters in transform are domains. 
-    pub input_domain_map: HashMap<String, Domain<T>>,
+    pub input_domain_map: HashMap<String, Domain>,
     // The domains in the output of transform.
-    pub output_domain_map: HashMap<String, Domain<T>>,
+    pub output_domain_map: HashMap<String, Domain>,
 }
 
-impl<T> Transform<T> where T: TermStructure {
+impl Transform {
     pub fn new(name: String, 
         type_map: HashMap<String, RawType>, 
-        rules: Vec<Rule<T>>,
+        rules: Vec<Rule>,
         params: Vec<String>, 
         input_type_map: HashMap<String, RawType>, 
-        input_domain_map: HashMap<String, Domain<T>>,
-        output_domain_map: HashMap<String, Domain<T>>, 
-        terms: HashSet<T>
+        input_domain_map: HashMap<String, Domain>,
+        output_domain_map: HashMap<String, Domain>, 
+        terms: HashSet<AtomicTerm>
     ) -> Self {
         let store = UUIdTermStore::new(terms, HashMap::new());
         let metainfo = MetaInfo::new(type_map, rules);
@@ -418,42 +416,42 @@ impl<T> Transform<T> where T: TermStructure {
     }
 }
 
-impl<T> FormulaModule<T> for Transform<T> where T: TermStructure
+impl FormulaModule for Transform
 {
-    fn terms(&self) -> Vec<&T> {
+    fn terms(&self) -> Vec<&AtomicTerm> {
         self.store.terms()
     }
 
-    fn meta_info(&self) -> &MetaInfo<T> {
+    fn meta_info(&self) -> &MetaInfo {
         &self.metainfo
     }
 
-    fn add_rule(&mut self, rule: Rule<T>) {
+    fn add_rule(&mut self, rule: Rule) {
         self.metainfo.add_rule(rule);
     }
 }
 
 /// `Transformation` is the instantiation of `Transform` with input terms and models.
-pub struct Transformation<T> where T: TermStructure {
+pub struct Transformation {
     // Meta model information.
-    pub metainfo: MetaInfo<T>,
+    pub metainfo: MetaInfo,
     // Term store.
-    pub store: UUIdTermStore<T>,
+    pub store: UUIdTermStore,
     // The domain of Transformation.
-    pub transform: Transform<T>,
+    pub transform: Transform,
     // Map string to term which is an input param.
-    pub input_term_map: HashMap<String, T>,
+    pub input_term_map: HashMap<String, AtomicTerm>,
     // Map string to model which is an input param.
-    pub input_model_map: HashMap<String, Model<T>>,
+    pub input_model_map: HashMap<String, Model>,
     // The terms defined in Transform with alias like `%id` replaced.
-    pub inherited_terms: HashSet<T>,
+    pub inherited_terms: HashSet<AtomicTerm>,
     // The rules defined in Transform with alias like `%id` replaced.
-    pub inherited_rules: Vec<Rule<T>>,
+    pub inherited_rules: Vec<Rule>,
 }
 
-impl<'a, T> FormulaModule<T> for Transformation<T> where T: TermStructure
+impl<'a> FormulaModule for Transformation
 {
-    fn terms(&self) -> Vec<&T> {
+    fn terms(&self) -> Vec<&AtomicTerm> {
         // Includes all terms in submodels and terms defined in Transform.
         let mut merged_terms = vec![];
 
@@ -470,11 +468,11 @@ impl<'a, T> FormulaModule<T> for Transformation<T> where T: TermStructure
         merged_terms
     }
 
-    fn meta_info(&self) -> &MetaInfo<T> {
+    fn meta_info(&self) -> &MetaInfo {
         &self.metainfo
     }
     
-    fn add_rule(&mut self, rule: Rule<T>) {
+    fn add_rule(&mut self, rule: Rule) {
         self.metainfo.add_rule(rule);
     }
 
@@ -510,15 +508,19 @@ impl<'a, T> FormulaModule<T> for Transformation<T> where T: TermStructure
     // }
 }
 
-impl<T> Transformation<T> where T: TermStructure {
-    pub fn new(transform: Transform<T>, input_term_map: HashMap<String, T>, input_model_map: HashMap<String, Model<T>>) -> Self {   
+impl Transformation {
+    pub fn new(
+        transform: Transform, 
+        input_term_map: HashMap<String, AtomicTerm>, 
+        input_model_map: HashMap<String, Model>
+    ) -> Self {   
         let mut inherited_terms = HashSet::new();
         let mut inherited_rules = Vec::new();
         // let mut renamed_input_model_map = HashMap::new();
 
         // Some additional terms may be defined in transform even with alias like %id that need to be replaced.
         for (key, replacement) in input_term_map.iter() {
-            let pattern = T::gen_raw_variable_term(key.clone(), vec![]);
+            let pattern = AtomicTerm::gen_raw_variable_term(key.clone(), vec![]);
             for raw_term in transform.terms() {
                 let mut term = raw_term.clone();
                 // FIXME
@@ -535,7 +537,7 @@ impl<T> Transformation<T> where T: TermStructure {
 
         // Replace parameter like %id in transform rules with term from `input_term_map`.
         for (key, replacement) in input_term_map.iter() {
-            let pattern = T::gen_raw_variable_term(key.clone(), vec![]);
+            let pattern = AtomicTerm::gen_raw_variable_term(key.clone(), vec![]);
             for mut rule in transform.meta_info().rules() {
                 rule.replace_pattern(&pattern, replacement);
                 inherited_rules.push(rule);
@@ -556,28 +558,31 @@ impl<T> Transformation<T> where T: TermStructure {
     }
 }
 
+#[pyclass]
 #[derive(Debug, Clone)]
-pub struct Domain<T> where T: TermStructure {
+pub struct Domain {
+    #[pyo3(get)]
     pub name: String,
-    pub metainfo: MetaInfo<T>,
+    #[pyo3(get)]
+    pub metainfo: MetaInfo,
 }
 
-impl<T> FormulaModule<T> for Domain<T> where T: TermStructure {
-    fn terms(&self) -> Vec<&T> {
+impl FormulaModule for Domain {
+    fn terms(&self) -> Vec<&AtomicTerm> {
         Vec::new()
     }
 
-    fn meta_info(&self) -> &MetaInfo<T> where T: TermStructure {
+    fn meta_info(&self) -> &MetaInfo {
         &self.metainfo
     }
     
-    fn add_rule(&mut self, rule: Rule<T>) {
+    fn add_rule(&mut self, rule: Rule) {
         self.metainfo.add_rule(rule);
     }
 }
 
-impl<T> Domain<T> where T: TermStructure {
-    pub fn new(name: String, type_map: HashMap<String, RawType>, rules: Vec<Rule<T>>) -> Self {
+impl Domain {
+    pub fn new(name: String, type_map: HashMap<String, RawType>, rules: Vec<Rule>) -> Self {
         let metainfo = MetaInfo::new(type_map, rules);
         Domain { name, metainfo }
     }
@@ -598,32 +603,33 @@ impl<T> Domain<T> where T: TermStructure {
     }
 }
 
+#[pyclass]
 #[derive(Clone, Debug)]
-pub struct Model<T> where T: TermStructure {
+pub struct Model {
     // The name of the model.
     pub name: String,
     // Meta info and rules that terms in the model need to conform.
-    pub metainfo: MetaInfo<T>,
+    pub metainfo: MetaInfo,
     // A model store with generic term type.
-    pub store: UUIdTermStore<T>,
+    pub store: UUIdTermStore,
 }
 
-impl<T> FormulaModule<T> for Model<T> where T: TermStructure {
-    fn terms(&self) -> Vec<&T> {
+impl FormulaModule for Model {
+    fn terms(&self) -> Vec<&AtomicTerm> {
         self.store.terms()
     }
 
-    fn meta_info(&self) -> &MetaInfo<T> {
+    fn meta_info(&self) -> &MetaInfo {
         &self.metainfo
     }
 
-    fn add_rule(&mut self, rule: Rule<T>) {
+    fn add_rule(&mut self, rule: Rule) {
         self.metainfo.add_rule(rule);
     }
 }
 
-impl<T> Model<T> where T: TermStructure {
-    pub fn new(name: String, metainfo: MetaInfo<T>, store: UUIdTermStore<T>) -> Self {
+impl Model {
+    pub fn new(name: String, metainfo: MetaInfo, store: UUIdTermStore) -> Self {
         Model {
             name,
             metainfo,
@@ -632,7 +638,7 @@ impl<T> Model<T> where T: TermStructure {
     }
 
     /// Return a model store reference
-    pub fn model_store(&self) -> &UUIdTermStore<T> {
+    pub fn model_store(&self) -> &UUIdTermStore {
         &self.store
     }
 
@@ -649,14 +655,18 @@ impl<T> Model<T> where T: TermStructure {
     }
 }
 
+#[pyclass]
 #[derive(Debug, Clone)]
-pub struct Env<T> where T: TermStructure {
-    pub domain_map: HashMap<String, Domain<T>>,
-    pub model_map: HashMap<String, Model<T>>,
-    pub transform_map: HashMap<String, Transform<T>>,
+pub struct Env {
+    #[pyo3(get)]
+    pub domain_map: HashMap<String, Domain>,
+    #[pyo3(get)]
+    pub model_map: HashMap<String, Model>,
+    #[pyo3(get)]
+    pub transform_map: HashMap<String, Transform>,
 }
 
-impl<T> Env<T> where T: TermStructure {
+impl Env {
     pub fn new() -> Self {
         Env {
             domain_map: HashMap::new(),
@@ -665,7 +675,7 @@ impl<T> Env<T> where T: TermStructure {
         }
     }
 
-    pub fn get_model_by_name(&self, name: &str) -> Option<&Model<T>> {
+    pub fn get_model_by_name(&self, name: &str) -> Option<&Model> {
         // Make a clone of the model in Env and return it.
         match self.model_map.get(name) {
             None => None,
@@ -673,7 +683,7 @@ impl<T> Env<T> where T: TermStructure {
         }
     }
 
-    pub fn get_domain_by_name(&self, name: &str) -> Option<&Domain<T>> {
+    pub fn get_domain_by_name(&self, name: &str) -> Option<&Domain> {
         // Make a clone of the domain in Env and return it.
         match self.domain_map.get(name) {
             None => None,
@@ -681,7 +691,7 @@ impl<T> Env<T> where T: TermStructure {
         }
     }
 
-    pub fn get_transform_by_name(&self, name: &str) -> Option<&Transform<T>> {
+    pub fn get_transform_by_name(&self, name: &str) -> Option<&Transform> {
         match self.transform_map.get(name) {
             None => None,
             Some(transform) => Some(transform)

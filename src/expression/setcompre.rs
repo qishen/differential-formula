@@ -18,14 +18,14 @@ use crate::util::*;
 
 #[readonly::make]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SetComprehension<T> where T: TermStructure {
-    pub vars: Vec<T>,
-    pub condition: Vec<Constraint<T>>,
+pub struct SetComprehension {
+    pub vars: Vec<AtomicTerm>,
+    pub condition: Vec<Constraint>,
     pub op: SetCompreOp,
     pub default: BigInt,
 }
 
-impl<T> Display for SetComprehension<T> where T: TermStructure {
+impl Display for SetComprehension {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headterm_strs: Vec<String> = self.vars.iter().map(|x| {
             let term_str = format!("{}", x);
@@ -44,8 +44,8 @@ impl<T> Display for SetComprehension<T> where T: TermStructure {
     }
 }
 
-impl<T> SetComprehension<T> where T: TermStructure {
-    pub fn new(vars: Vec<T>, condition: Vec<Constraint<T>>, op: SetCompreOp, default: BigInt) -> Self {
+impl SetComprehension {
+    pub fn new(vars: Vec<AtomicTerm>, condition: Vec<Constraint>, op: SetCompreOp, default: BigInt) -> Self {
         SetComprehension {
             vars,
             condition,
@@ -54,41 +54,39 @@ impl<T> SetComprehension<T> where T: TermStructure {
         }
     }
 
-    pub fn matched_variables(&self) -> HashSet<T> {
+    pub fn matched_variables(&self) -> HashSet<AtomicTerm> {
         // Convert it into a headless rule to use some rule methods.
-        let rule: Rule<T> = self.clone().into();
+        let rule: Rule = self.clone().into();
         rule.predicate_matched_variables()
     }
 }
 
-impl<T> BasicExprOps for SetComprehension<T> where T: TermStructure {
-
-    type TermOutput = T;
-
-    fn variables(&self) -> HashSet<Self::TermOutput> {
+impl BasicExprOps for SetComprehension {
+    fn variables(&self) -> HashSet<AtomicTerm> {
         // let mut vars = self.vars.variables();
         // vars.extend(self.condition.variables());
         // vars
         unimplemented!()
     }
 
-    fn replace_pattern(&mut self, pattern: &Self::TermOutput, replacement: &Self::TermOutput) {
+    fn replace_pattern(&mut self, pattern: &AtomicTerm, replacement: &AtomicTerm) {
         // self.vars.replace_pattern(pattern, replacement);
         // self.condition.replace_pattern(pattern, replacement);
         unimplemented!()
     }
 }
 
-impl<T> SetCompreOps for SetComprehension<T> where T: TermStructure {
+impl SetCompreOps for SetComprehension {
     fn has_set_comprehension(&self) -> bool {
         true
     }
 
-    fn set_comprehensions(&self) -> Vec<&SetComprehension<Self::TermOutput>> {
+    fn set_comprehensions(&self) -> Vec<&SetComprehension> {
         vec![self]
     }
 
-    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) -> HashMap<Self::TermOutput, SetComprehension<Self::TermOutput>> {
+    fn replace_set_comprehension(&mut self, generator: &mut NameGenerator) 
+    -> HashMap<AtomicTerm, SetComprehension> {
         // let dc_name = generator.generate_name();
         // let var = generator.generate_dc_term();
         // Recursively replace set comprehension inside the condition of current set comprehension.
@@ -98,8 +96,8 @@ impl<T> SetCompreOps for SetComprehension<T> where T: TermStructure {
 }
 
 // Turn SetComprehension into a headless rule.
-impl<T> From<SetComprehension<T>> for Rule<T> where T: TermStructure {
-    fn from(setcompre: SetComprehension<T>) -> Self {
+impl From<SetComprehension> for Rule {
+    fn from(setcompre: SetComprehension) -> Self {
         Rule::new(vec![], setcompre.condition.clone())
     }
 }
