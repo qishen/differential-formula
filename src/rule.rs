@@ -52,8 +52,8 @@ impl Display for Rule {
 
 impl BasicExprOps for Rule {
     fn variables(&self) -> HashSet<AtomicTerm> {
-        // All variables are found recursively including the ones in set comprehension.
-        // Head is ignored because the variables it should already exist in the body.
+        // Find all variables recursively in the body with set comprehension.
+        // Head is ignored because those variables in the head should already exist in the body.
         self.body.variables()
     }
 
@@ -86,6 +86,7 @@ impl Rule {
         // can't use when writing rules.
         let mut dc_generator = NameGenerator::new("~dc");
 
+        // The negation could be either set difference or set comprehension
         // Convert negation to set comprehension.
         // rule.replace_negative_predicate(&mut dc_generator);
 
@@ -102,11 +103,29 @@ impl Rule {
             rule.body.push(binary);
         }
 
-        if !rule.validate() {
-            // TODO: Raise exception
-        }
+        // TODO: Raise exception
+        if !rule.validate() {}
 
         rule
+    }
+
+    pub fn setcompre_map(&self) -> HashMap<AtomicTerm, SetComprehension> {
+        let mut map = HashMap::new();
+        for constraint in self.binary_constraints().into_iter() {
+            if let Constraint::Binary(binary) = constraint {
+                // The right hand must be a set comprehension and the left must a variable term
+                if let Expr::BaseExpr(base_expr) = &binary.right {
+                    if let BaseExpr::SetComprehension(setcompre) = base_expr {
+                        if let Expr::BaseExpr(var_expr) = &binary.left {
+                            if let BaseExpr::Term(var) = var_expr {
+                                map.insert(var.clone(), setcompre.clone());
+                            }
+                        }        
+                    }
+                }
+            }
+        }
+        map
     }
     
     /// Check if it is a headless conformance rule.
@@ -122,7 +141,7 @@ impl Rule {
         self.body.clone()
     }
 
-    pub fn preds(&self) -> Vec<&AtomicTerm> {
+    pub fn positive_terms(&self) -> Vec<&AtomicTerm> {
         self.body.iter().filter_map(|x| {
             match x {
                 Constraint::Predicate(pred) => {
@@ -134,7 +153,16 @@ impl Rule {
         }).collect()
     }
 
-    pub fn negated_preds(&self) -> Vec<&AtomicTerm> {
+    /// Return all vars in the positive terms in the predicate constraints.
+    pub fn vars_in_positive_terms(&self) -> HashSet<AtomicTerm> {
+        let mut set = HashSet::new();
+        for term in self.positive_terms() {
+            set.extend(term.variables())
+        }
+        set
+    }
+
+    pub fn negated_terms(&self) -> Vec<&AtomicTerm> {
         self.body.iter().filter_map(|x| {
             match x {
                 Constraint::Predicate(pred) => {
@@ -143,6 +171,28 @@ impl Rule {
                 },
                 _ => None,
             }
+        }).collect()
+    }
+
+    /// The negated terms whose variables have no connection with the outer scope.
+    /// For example, yes :- Edge(m, m), no Path(n, n). Reduce to set comprehension 
+    /// that the number of Path(n, n) should be zero.
+    pub fn negated_setcompre_terms(&self) -> Vec<&AtomicTerm> {
+        let pos_vars_set = self.vars_in_positive_terms();
+        self.negated_terms().into_iter().filter(|term| {
+            let neg_vars = term.variables();
+            neg_vars.iter().all(|var| { !pos_vars_set.contains(var)})    
+        }).collect()
+    }
+
+    /// The negated terms whose variables have connection with the outer scope.
+    /// NoCycle(n) :- n is Node(_), no Path(n, n). Reduce to set difference to find nodes
+    /// that in the left set of `n is Node(_)` but not in the set of `Path(n, n)`.
+    pub fn negated_setdiff_terms(&self) -> Vec<&AtomicTerm> {
+        let pos_vars_set = self.vars_in_positive_terms();
+        self.negated_terms().into_iter().filter(|term| {
+            let neg_vars = term.variables();
+            neg_vars.iter().any(|var| { pos_vars_set.contains(var)})    
         }).collect()
     }
 
@@ -198,7 +248,6 @@ impl Rule {
                 _ => { constraints.push(constraint); }
             }
         }
-
         self.body = constraints;
     }
 
