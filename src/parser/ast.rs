@@ -318,17 +318,17 @@ impl ProgramAst {
     /// Recursively create atomic type `AtomicStrType`, add the new created type into the type map
     /// and return the new created type or just return what already exists in the type map.
     fn create_raw_type(
-        &self, t: String, 
+        &self, tname: String, 
         ast_map: &mut HashMap<String, RawTypeDefAst>,      // Only has type ASTs in current domain.
         type_map: &mut HashMap<String, RawType>,  // Recursively put new created type into type map.
         generator: &mut NameGenerator,
     ) -> RawType {
-        if type_map.contains_key(&t) {
-            let existing_type = type_map.get(&t).unwrap();
+        if type_map.contains_key(&tname) {
+            let existing_type = type_map.get(&tname).unwrap();
             return existing_type.clone();
         } 
 
-        let type_ast = ast_map.get(&t).unwrap();
+        let type_ast = ast_map.get(&tname).unwrap();
         let new_type = match type_ast.clone() {
             RawTypeDefAst::AliasTypeDefAst(aliastypedef) => {
                 // At this point, type from subdomains should be available in `type_map`.
@@ -379,10 +379,8 @@ impl ProgramAst {
                 let typename = match utypedef.name() {
                     Some(name) => name,
                     None => {
-                        // Need to add it to `ast_map` because only ASTs of named type are included. 
-                        let auto_name = generator.generate_name();
-                        ast_map.insert(auto_name.clone(), type_ast.clone());
-                        auto_name
+                        ast_map.insert(tname.clone(), type_ast.clone());
+                        tname.clone()
                     }
                 };
                 for subtype_ast in utypedef.subtypes.iter() {
@@ -454,7 +452,7 @@ impl ProgramAst {
             }
         };
 
-        type_map.insert(t, new_type.clone());
+        type_map.insert(tname, new_type.clone());
         return new_type;
     }
 
@@ -640,7 +638,7 @@ impl ProgramAst {
             let name = match type_ast.name() {
                 Some(name) => name,
                 None => {
-                    // When it's an inline type definition.
+                    // Generate a type name for inline type definition.
                     generator.generate_name()
                 }
             };
