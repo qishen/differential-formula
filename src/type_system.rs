@@ -59,6 +59,18 @@ impl RawType {
         RawType::TypeId(self.type_id())
     }
 
+    pub fn is_base_type(&self) -> bool {
+        match &self {
+            &RawType::Type(raw_type) => {
+                match raw_type {
+                    FormulaTypeEnum::BaseType(_) => true,
+                    _ => false
+                }
+            },
+            &RawType::TypeId(_) => false
+        }
+    }
+
     pub fn is_subtype_of(&self, other: &RawType) -> bool {
         match other {
             RawType::Type(raw_type) => {
