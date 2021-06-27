@@ -1,0 +1,30 @@
+
+typedef Var = Var { root: string, fragments: Vec<string> }
+typedef Atom = AtomStr { i0: string } | AtomInt { i1: usize } | AtomFloat { i2: float }
+typedef Composite = Composite { name: string, arguments: Vec<Ref<Term>> }
+typedef Term =  CompositeTerm { i0: Composite } | 
+				VarTerm { i1: Var } | 
+				AtomTerm { i2: Atom }
+
+typedef TypeDef =   CompositeType { name: string, arguments: Vec<(string, Ref<TypeDef>)> } |
+					UnionType { name: string, subtypes: Vec<Ref<TypeDef>> } |
+					EnumType {items: Vec<Term>} |
+					ConstantType {constant: string} 
+
+typedef SetOp = Sum | Count | Max | Min
+typedef ArithOp = Plus | Minus | Mul | Div
+typedef BinOp = Eq | Neq | LE | GE | Leq | Geq 
+
+// The head terms and conditions are the same as head and body in a rule
+typedef Setcompre = Setcompre { rule: Rule, sop: SetOp }
+typedef Expr =  BaseExpr { term: Term } | 
+				SetcompreExpr { sc: Setcompre } |
+				ArithExpr { left: Ref<Expr>, right: Ref<Expr>, aop: ArithOp } |
+				BinExpr { left: Ref<Expr>, right: Ref<Expr>, bop: BinOp }
+
+// Constraints are either predicates or expressions that may contain set comprehension	
+typedef Constraint = PredCons {negated: bool, term: Term} | ExprCons {expr: Expr}
+typedef Rule = Rule { head: Vec<Term>, body: Vec<Constraint> }
+
+typedef Domain = Domin { typedefs: Vec<TypeDef>, rules: Vec<Rule> }
+typedef Model = Model { terms: Vec<Term>}
