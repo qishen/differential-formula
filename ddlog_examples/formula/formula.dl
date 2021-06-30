@@ -1,30 +1,176 @@
+/***********************************************/
+/******* FORMULA 2.0 Language Meta-model *******/
+/***********************************************/
+typedef Term =  AtomStr { i0: string } | AtomInt { i1: usize } | AtomFloat { i2: float } | AtomBool { i3: bool } |
+			    Variable { root: string, fragments: Vec<string> } |
+				Composite { name: string, arguments: Vec<Term> }
 
-typedef Var = Var { root: string, fragments: Vec<string> }
-typedef Atom = AtomStr { i0: string } | AtomInt { i1: usize } | AtomFloat { i2: float }
-typedef Composite = Composite { name: string, arguments: Vec<Ref<Term>> }
-typedef Term =  CompositeTerm { i0: Composite } | 
-				VarTerm { i1: Var } | 
-				AtomTerm { i2: Atom }
-
-typedef TypeDef =   CompositeType { name: string, arguments: Vec<(string, Ref<TypeDef>)> } |
-					UnionType { name: string, subtypes: Vec<Ref<TypeDef>> } |
-					EnumType {items: Vec<Term>} |
+// TODO: Field name is actually optional
+typedef Field = Field { field_name: string, type_spec: TypeSpec }
+typedef TypeSpec =  Integer | Boolean | FloatNum | String |
+					CompositeType { name: string, arguments: Vec<Field> } |
+					UnionType { name: string, subtypes: Vec<TypeSpec> } |
+					EnumType {name: string, items: Vec<Term>} |
 					ConstantType {constant: string} 
 
+// A relation named TypeSpec to hold all instance of TypeSpec
+input relation TypeSpec [TypeSpec]
+
+// Definition of common operators in both Formula and DDlog expression
 typedef SetOp = Sum | Count | Max | Min
 typedef ArithOp = Plus | Minus | Mul | Div
 typedef BinOp = Eq | Neq | LE | GE | Leq | Geq 
+typedef UnaryOp = BooleanNeg | BitwiseNeg | ArithNeg
 
-// The head terms and conditions are the same as head and body in a rule
+// The head terms and conditions are the same as head and body in a rule so the set 
+// comprehension can be viewed as a rule and set comprehension is applied to the set
+// of derived terms
 typedef Setcompre = Setcompre { rule: Rule, sop: SetOp }
 typedef Expr =  BaseExpr { term: Term } | 
 				SetcompreExpr { sc: Setcompre } |
 				ArithExpr { left: Ref<Expr>, right: Ref<Expr>, aop: ArithOp } |
-				BinExpr { left: Ref<Expr>, right: Ref<Expr>, bop: BinOp }
+				BinExpr { left: Ref<Expr>, right: Ref<Expr>, bop: BinOp } |
+				UnaryExpr { expr: Ref<Expr>, uop: UnaryOp }
 
 // Constraints are either predicates or expressions that may contain set comprehension	
-typedef Constraint = PredCons {negated: bool, term: Term} | ExprCons {expr: Expr}
-typedef Rule = Rule { head: Vec<Term>, body: Vec<Constraint> }
+typedef Constraint = PredCons { negated: bool, term: Term } | ExprCons { expr: Expr }
 
-typedef Domain = Domin { typedefs: Vec<TypeDef>, rules: Vec<Rule> }
+typedef Rule = Rule { head: Vec<Term>, body: Vec<Constraint> }
+input relation Rule [Rule]
+
+typedef Domain = Domin { typedefs: Vec<TypeSpec>, rules: Vec<Rule> }
 typedef Model = Model { terms: Vec<Term>}
+
+/*****************************************/
+/******* DDLog Language Meta-model *******/
+/*****************************************/
+typedef DDField = DDField { field_name: string, type_spec: DDTypeSpec }
+typedef DDTypeCons = DDTypeCons { cons_name: string, fields: Vec<DDField> }
+typedef DDTypeSpec = BigInt | Bool | Str | Bitvector | Int | Double | Float | // All supported primitive types
+					 // Represent either one type or an union of multiple types
+					 DDUnionTypeSpec { types: Vec<DDTypeCons> } |
+					 Empty 
+
+// A relation to hold all defined types in DDlog
+output relation DDTypeSpec [DDTypeSpec]
+
+// There are more term types defined in the DDlog language reference but we only need a few
+// https://github.com/vmware/differential-datalog/blob/master/doc/language_reference/language_reference.md
+typedef DDTerm = DDBigInt { i0: bigint } | DDBool { i1: bool } | DDStr { i2: string } |
+				 // It could be different value other than 32
+				 DDBitvector { i3: bit<32> } | DDInt { i4: signed<32> } | 
+				 DDDouble { i5: double} | DDFloat { i6: float } | 
+				 // A variable term in ddlog represented by a string
+				 DDVar { name: string } | 
+				 // var xxx = .., add keyword in the front to denote it is only for declaration
+				 DDVarDecl { name: string} | 
+				 // It has type name and a list of DDlog expressions
+				 DDCons { cons_name: string, arguments: Vec<DDExpr> } 
+				 // TODO: Add function term for aggregation
+
+// DDRelation represents a collection of records of certain type
+typedef DDRelation = DDRelation { is_input: bool, name: string, type_spec: DDTypeSpec } 
+// A relation to hold all defined DDRelation
+output relation DDRelation [DDRelation]
+
+// There are more expression in DDlog referene and we only pick a few we need
+typedef DDExpr =  DDTermExpr { term: DDTerm } | 
+				  // Access struct field by identifier	
+				  DDTermFieldExpr { expr: Ref<DDExpr>, field: string } |
+				  // Unary operator over expression
+				  DDUnaryExpr { expr: Ref<DDExpr>, uop: UnaryOp } |
+				  // Arithmetic operator over two expressions
+				  DDArithExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, aop: ArithOp } |
+				  // Binary operator over two expressions
+				  DDBinExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, bop: BinOp }
+
+// The complete form of DDlog predicate is `u in RelName[Term]` to represent predicate constraint
+typedef DDAtom = DDAtom { var_name: Option<string>, rel: Ref<DDRelation>, expr: DDExpr }
+typedef DDRhs = DDRhsAtom { negated: bool, atom: DDAtom } |
+			  	DDRhsCondition { expr: DDExpr } |
+			  	DDRhsAssignment { to: DDExpr, from: DDExpr } |
+				// TODO: `SetOp` could be replaced or extended by function term
+				// if the default set comprehension operators are not enough
+				DDGroup { var_name: string, group: DDExpr, by: DDExpr, sop: SetOp }
+
+typedef DDRule = DDRule { head: Vec<DDAtom>, body: Vec<DDRhs> }
+output relation DDRule [DDRule]
+
+
+/************************************/
+/******* Model Transformation *******/
+/************************************/
+DDTypeSpec[Int] :- TypeSpec[Integer].
+DDTypeSpec[Bool] :- TypeSpec[Boolean].
+DDTypeSpec[Float] :- TypeSpec[FloatNum].
+DDTypeSpec[Str] :- TypeSpec[String].
+
+// TODO: Since Formula does not distinguish between input and output relations but DDlog does, we need to 
+// define two relations for the same type with a rule as `T[t] :- t in T_input[..]`
+DDRelation[dd_relation], DDTypeSpec[single_union_type] :- ct in TypeSpec[CompositeType {cons_name, fields}], 
+				var single_union_type = to_dd_typespec(ct),
+				var dd_relation = DDRelation {true, cons_name, single_union_type}.
+
+DDRelation[dd_relation], DDTypeSpec[dd_union_type] :- ut in TypeSpec[UnionType {union_name, subtypes}], 
+				var dd_union_type = to_dd_typespec(ut),
+				var dd_relation = DDRelation {true, union_name, dd_union_type}.
+
+DDRelation[dd_relation], DDTypeSpec[dd_constant_type] :- ct in TypeSpec[ConstantType {constant}], 
+				var dd_constant_type = to_dd_typespec(ct),
+				var dd_relation = DDRelation {true, constant, dd_constant_type}.
+
+
+function to_string(type_spec: TypeSpec): string {
+	var type_spec_str = match (type_spec) {
+		Integer -> { "Int" },
+		Boolean -> { "Bool" },
+		FloatNum -> { "Float" },
+		String -> { "String" },
+		CompositeType {cons_name, _} -> { cons_name },
+		UnionType {union_name, _} -> { union_name },
+		ConstantType {constant} -> { constant },
+		EnumType {enum_name, _} -> { enum_name }
+	};
+	type_spec_str
+}
+
+function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
+	var dd_type_spec = match (type_spec) {
+		CompositeType {name, fields} -> {
+			var ddfields = vec_empty();
+			for (field in fields) {
+				var ddtypespec = to_dd_typespec(field.type_spec);
+				vec_push(ddfields, DDField {field.field_name, ddtypespec});
+			};
+			var dd_cons = DDTypeCons {name, ddfields};
+			DDUnionTypeSpec { [dd_cons] }
+		},
+		UnionType {union_name, subtypes} -> {
+			// From Formula union type to tagged union in DDlog
+			// TODO: How to merge union types rather than create a new tagged union?
+			// A ::= B + C.  // D ::= E + F.  // G ::= A + D.
+			var dd_cons_types = vec_empty();
+			for (subtype in subtypes) {
+				var dd_subtype_spec = to_dd_typespec(subtype);
+				var union_tag = union_name ++ to_string(subtype);
+				var single_dd_field = DDField {union_tag, dd_subtype_spec};
+				var dd_cons_type = DDTypeCons {union_tag, [single_dd_field]};
+				vec_push(dd_cons_types, dd_cons_type);
+			};
+			DDUnionTypeSpec { dd_cons_types }
+		},
+		ConstantType {constant} -> { 
+			// A constructor with no arguments or fields as `typedef Constant = Constant {}`
+			// The vector can not be empty in `DDTypeCons` so we create a new type named `Empty`
+			var dd_constant_cons_type = DDTypeCons {constant, [DDField{"Empty", Empty}]};
+			DDUnionTypeSpec { [dd_constant_cons_type] }	
+		},
+		// TODO: How to handle ConstantType and EnumType?
+		EnumType {enums, _} -> { Str },
+		Integer -> { Int },
+		Boolean -> { Bool },
+		FloatNum -> { Float },
+		String -> { Str }
+	};
+	dd_type_spec
+}
