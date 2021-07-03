@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 use differential_datalog::record::*;
 use ddlog_derive::*;
 
+use crate::term::TermTraversal;
 use crate::expression::*;
 use crate::module::Env;
 use super::generic::*;
@@ -346,6 +347,27 @@ impl AtomicTerm {
             AtomicTerm::Variable(var) => var.sort.type_id(),
             AtomicTerm::Atom(atom) => atom.sort.type_id()
         }
+    }
+
+    /// For example, Path(u, u, u) to Path(u, u1, u2), u == u1, u1 == u2.
+    pub fn replace_identical_vars(&self) -> (Self, HashMap<Self, Vec<Self>>) {
+        // Map normalized variables to a list of replaced variables.
+        let mut vmap: HashMap<Self, Vec<Self>> = HashMap::new();
+        let mut normalized_term = self.clone();
+        normalized_term.traverse_mut(
+            &|term| { term.is_var() && !term.is_donot_care_variable() },
+            &mut |var| {
+                if vmap.contains_key(var) {
+                    let new_var_id = format!("{}{}", var, vmap.get(var).unwrap().len());
+                    let new_var = Self::gen_raw_variable_term(new_var_id, vec![]);
+                    vmap.get_mut(var).unwrap().push(new_var.clone());
+                    *var = new_var;
+                } else {
+                    vmap.insert(var.clone(), vec![]);
+                }
+            }
+        );
+        return (normalized_term, vmap);
     }
 
     /// Compare the variables in two terms and return a tuple of intersection, left and right.
