@@ -1,0 +1,78 @@
+import ddlog
+import formula
+import list
+import operators
+
+/************************************/
+/******* Model Transformation *******/
+/************************************/
+DDTypeSpec[Int] :- TypeSpec[Integer].
+DDTypeSpec[Bool] :- TypeSpec[Boolean].
+DDTypeSpec[Float] :- TypeSpec[FloatNum].
+DDTypeSpec[Str] :- TypeSpec[String].
+
+// TODO: Since Formula does not distinguish between input and output relations but DDlog does, we need to 
+// define two relations for the same type with a rule as `T[t] :- t in T_input[..]`
+DDRelation[dd_relation], DDTypeSpec[single_union_type] :- ct in TypeSpec[CompositeType {cons_name, fields}], 
+				var single_union_type = to_dd_typespec(ct),
+				var dd_relation = DDRelation {true, cons_name, single_union_type}.
+
+DDRelation[dd_relation], DDTypeSpec[dd_union_type] :- ut in TypeSpec[UnionType {union_name, subtypes}], 
+				var dd_union_type = to_dd_typespec(ut),
+				var dd_relation = DDRelation {true, union_name, dd_union_type}.
+
+DDRelation[dd_relation], DDTypeSpec[dd_constant_type] :- ct in TypeSpec[ConstantType {constant}], 
+				var dd_constant_type = to_dd_typespec(ct),
+				var dd_relation = DDRelation {true, constant, dd_constant_type}.
+
+// Those negative predicates can be directly use in `DDRule`
+output relation NegPredAsSetdiff[(Term, Ref<Rule>)]
+NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], 
+								   NegPredInRule[(neg_pred, r)]. 
+
+// Those negative predicates need to be translated into set comprehension in `DDRule`
+output relation NegPredAsSetcompre[(Term, Ref<Rule>)]
+NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAsSetdiff[(neg_pred, r)].  
+
+function ddterm_to_dd_rhs(
+	var_name: Option<string>, 
+	rel: Ref<DDRelation>, 
+	dd_term: DDTerm, 
+	negated: bool
+): DDRhs {
+	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
+	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
+	DDRhsAtom { negated, dd_atom }
+}
+
+// Still in the form of `no pred(..)`
+output relation DDNegPredAsSetdiff[(DDRhs, Ref<Rule>)]
+DDNegPredAsSetdiff[(negated_dd_rhs_atom, r)] :- pair in NegPredAsSetdiff[(Composite {relname, _}, r)], 
+	rel in DDRelation[DDRelation {_, relname, _}], 
+	var dd_term = to_dd_term(pair.0), 
+	var negated_dd_rhs_atom = ddterm_to_dd_rhs(None, ref_new(rel), dd_term, false). 
+
+// Convert `no pred(..)` to count({ p | p is Pred(..) }) == 0
+// Pred(..), var g = (v1, v2, ..., vn).group_by(()), 
+// var reduced_val = g.group_count(), reduced_val == 0.
+// The relation contains tuples of 
+// 1) The variable in the negated term
+// 2) The Rhs expression that contains a positive term
+// 3) The current rule
+// Generate a new relation with a constant type as a switch for negated predicate as set comprehension
+output relation DDNegPredAsSetcompre[(Term, DDRhs, Ref<Rule>)]
+
+DDNegPredAsSetcompre[(variable, dd_rhs_atom, r)], 
+DDTypeSpec[constant_type], 
+DDRelation[constant_relation] :- 
+	pair in NegPredAsSetcompre[(Composite {relname, _}, r)],  
+	rel in DDRelation[DDRelation {_, relname, _}], 
+	VarOfTerm[(variable, pair.0)],
+	// Directly convert from `Term` to `DDTerm` and then to RHS expression
+	var dd_term = to_dd_term(pair.0), 
+	var dd_rhs_atom = ddterm_to_dd_rhs(None, ref_new(rel), dd_term, true),
+	// Synthesize a new name for the new constant type and relation
+	var constant_name = "hello", // TODO: Change name that includes rule id and position of neg term.
+	var constructor = DDTypeCons { constant_name, EMPTY },
+	var constant_type = DDUnionTypeSpec { from_singleton_to_nonnull_list(constructor) }, 
+	var constant_relation = DDRelation { false, constant_name, constant_type }. 

@@ -1,0 +1,149 @@
+
+/***********************************************/
+/******* Extra Library for General Usage *******/
+/***********************************************/
+
+// The `NonNullList` must have at least one item in the list and can't be null
+// `NonNullList` in Formula representation:
+// LinkedList ::= new (node: N, nxt: LinkedList + NULL)
+typedef NonNullList<'N> = NonNullList { node: 'N, nxt: NonNullNxt<'N> }
+typedef NonNullNxt<'N> = NonNullNxt { nxt: Ref<NonNullList<'N>> } | NULL
+
+function from_singleton_to_nonnull_list(item: 'N): NonNullList<'N> {
+	NonNullList { item, NULL }
+}
+
+function from_nonnull_vec(vector: Vec<'N>): NonNullList<'N> {
+	var first = unwrap_or_default(vec_nth(vector, 0));
+	NonNullList { first, NULL }
+}
+
+function nonnull_list_nth(list: NonNullList<'N>, i: usize): Option<'N> {
+	if (i == 0) {
+		Some{ list.node }
+	} else {
+		match (list.nxt) {
+			NonNullNxt { nxt_nonnull_list_ref } -> {
+				var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
+				nonnull_list_nth(nxt_nonnull_list, i-1)
+			},
+			NULL -> { None }
+		}
+	}
+}
+
+function nonnull_list_append(list: mut NonNullList<'N>, item: 'N): NonNullList<'N> {
+	match (list.nxt) {
+		NonNullNxt { nxt_nonnull_list_ref } -> {
+			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
+			var nxt_nonnull_list_with_item = nonnull_list_append(nxt_nonnull_list, item);
+			nxt_nonnull_list_with_item
+		},
+		NULL -> { 
+			// Create a NonNullList with two items
+			var nxt = NonNullNxt { ref_new(NonNullList { item, NULL }) };
+			NonNullList { list.node, nxt }
+		}
+	}
+}
+
+function nonnull_list_reverse(list: mut NonNullList<'N>): NonNullList<'N> {
+	match (list.nxt) {
+		NonNullNxt { nxt_nonnull_list_ref } -> {
+			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
+			var reversed_nxt_nonnull_list = nonnull_list_reverse(nxt_nonnull_list);
+			nonnull_list_append(reversed_nxt_nonnull_list, list.node)
+		},
+		NULL -> { 
+			// No need to reverse if only one item in the list
+			list 
+		}
+	}
+}
+
+function nonnull_list_map(list: NonNullList<'N>, f: function('N): 'M): NonNullList<'M> {
+	var new_node = f(list.node);
+	var mapped_nonnull_nxt = match (list.nxt) {
+		NonNullNxt {nxt_nonnull_list_ref} -> {
+			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
+			var mapped_nonnull_list = nonnull_list_map(nxt_nonnull_list, f);
+			NonNullNxt { ref_new(mapped_nonnull_list) }
+		},
+		NULL -> NULL
+	};
+	NonNullList { 
+		new_node, 
+		mapped_nonnull_nxt
+	}
+}
+
+// `List` in Formula representation:
+// NonNullLinkedList ::= new (node: N, nxt: LinkedList)
+// LinkedList ::= NonNullLinkedList + NULL 
+typedef List<'N> = List { node: 'N, nxt: ListNxt<'N> } | EMPTY
+typedef ListNxt<'N> = ListNxt { nxt: Ref<List<'N>> }
+
+function from_singleton_to_list(item: 'N): List<'N> {
+	List { item, ListNxt {ref_new(EMPTY)} }
+}
+
+function from_vec(vector: mut Vec<'N>): List<'N> {
+	if (vec_len(vector) == 0) {
+		EMPTY
+	} else {
+		var last = vector.pop().unwrap_or_default();
+		var list_without_last = from_vec(vector);
+		list_append(list_without_last, last)
+	}
+}
+
+function list_nth(list: List<'N>, i: usize): Option<'N> {
+	match (list) {
+		List { node, ListNxt {nxt_list_ref} } -> {
+			if (i == 0) { Some {node} } 
+			else {
+				var nxt_list = deref(nxt_list_ref);
+				list_nth(nxt_list, i-1)
+			}
+		},
+		EMPTY -> { None }
+	}
+}
+
+// Since `Ref<List<'N>>` is immutable we have to make a deep copy and append the new item
+function list_append(list: mut List<'N>, item: 'N): List<'N> {
+	match (list) {
+		List { node, ListNxt { nxt_list_ref } } -> {
+			var nxt_list = deref(nxt_list_ref);
+			var nxt_list_with_item = list_append(nxt_list, item);
+			List { node, ListNxt { ref_new(nxt_list_with_item) } }
+		},
+		EMPTY -> {
+			List { item, ListNxt { ref_new(EMPTY) } }
+		}
+	}
+}
+
+function list_reverse(list: mut List<'N>): List<'N> {
+	match (list) {
+		List { node, ListNxt {nxt_list_ref} } -> {
+			// TODO: Deref literally on every iteration is bad.
+			var nxt_list = deref(nxt_list_ref);
+			var reversed_nxt_list = list_reverse(nxt_list);
+			list_append(reversed_nxt_list, node)
+		},
+		EMPTY -> EMPTY
+	}
+}
+
+function list_map(list: List<'N>, f: function('N): 'M): List<'M> {
+    match (list) {
+		List { node, ListNxt {nxt_list_ref} } -> {
+			var nxt_list = deref(nxt_list_ref);
+			var mapped_nxt_list = list_map(nxt_list, f);
+			List { f(node), ListNxt {ref_new(mapped_nxt_list)} }
+		},
+		EMPTY -> EMPTY
+    }
+}
+

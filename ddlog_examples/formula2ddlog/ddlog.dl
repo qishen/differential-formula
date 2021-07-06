@@ -1,0 +1,60 @@
+import list
+import operators
+
+/*****************************************/
+/******* DDLog Language Meta-model *******/
+/*****************************************/
+typedef DDField = DDField { field_name: string, type_spec: Ref<DDTypeSpec> }
+typedef DDTypeCons = DDTypeCons { cons_name: string, fields: List<DDField> }
+typedef DDTypeSpec = BigInt | 
+					 Bool | 
+					 Str | 
+					 Bitvector | 
+					 Int | 
+					 Double | 
+					 Float | 
+					 DDUnionTypeSpec { types: NonNullList<DDTypeCons> }
+
+output relation DDTypeSpec [DDTypeSpec]
+
+// There are more term types defined in the DDlog language reference but we only need a few
+// https://github.com/vmware/differential-datalog/blob/master/doc/language_reference/language_reference.md
+typedef DDTerm = DDBigInt { i0: bigint } | DDBool { i1: bool } | DDStr { i2: string } |
+				 DDBitvector { i3: bit<64> } | DDInt { i4: signed<64> } | 
+				 DDDouble { i5: double} | DDFloat { i6: float } | 
+				 // A variable term in ddlog represented by a string
+				 DDVar { name: string } | 
+				 // var xxx = .., add keyword in the front to denote it is only for declaration
+				 DDVarDecl { name: string} | 
+				 // It has type name and a list of DDlog expressions
+				 DDCons { cons_name: string, arguments: List<DDExpr> } 
+				 // TODO: Add function term for aggregation
+
+output relation DDTermOfDDTypeSpec [(DDTerm, DDTypeSpec)]
+
+// DDRelation represents a collection of records of certain type
+typedef DDRelation = DDRelation { is_input: bool, name: string, type_spec: DDTypeSpec } 
+output relation DDRelation [DDRelation]
+
+// There are more expression in DDlog referene and we only pick a few we need
+typedef DDExpr =  DDTermExpr { term: Ref<DDTerm> } | 
+				  // Access struct field by identifier	
+				  DDTermFieldExpr { expr: Ref<DDExpr>, field: string } |
+				  // Unary operator over expression
+				  DDUnaryExpr { expr: Ref<DDExpr>, uop: UnaryOp } |
+				  // Arithmetic operator over two expressions
+				  DDArithExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, aop: ArithOp } |
+				  // Binary operator over two expressions
+				  DDBinExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, bop: BinOp }
+
+// The complete form of DDlog predicate is `u in RelName[Term]` to represent predicate constraint
+typedef DDAtom = DDAtom { var_name: Option<string>, rel: Ref<DDRelation>, expr: DDExpr }
+typedef DDRhs = DDRhsAtom { negated: bool, atom: DDAtom } |
+			  	DDRhsCondition { expr: DDExpr } |
+			  	DDRhsAssignment { to: DDExpr, from: DDExpr } |
+				// TODO: `SetOp` could be replaced or extended by function term
+				// if the default set comprehension operators are not enough
+				DDGroup { var_name: string, group: DDExpr, by: DDExpr, sop: SetOp }
+
+typedef DDRule = DDRule { head: Vec<DDAtom>, body: Vec<DDRhs> }
+output relation DDRule [DDRule]

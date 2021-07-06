@@ -1,0 +1,5 @@
+// Definition of common operators in both Formula and DDlog expression
+typedef SetOp = Sum | Count | Max | Min
+typedef ArithOp = Plus | Minus | Mul | Div
+typedef BinOp = Eq | Neq | LE | GE | Leq | Geq 
+typedef UnaryOp = BooleanNeg | BitwiseNeg | ArithNeg
