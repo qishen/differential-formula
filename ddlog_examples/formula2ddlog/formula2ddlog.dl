@@ -1,57 +1,16 @@
-import ddlog
-import formula
-import list
-import operators
+import group
+import langs::ddlog
+import langs::formula
+import langs::lib::list
+import langs::lib::operators
 
-/************************************/
-/******* Model Transformation *******/
-/************************************/
-DDTypeSpec[Int] :- TypeSpec[Integer].
-DDTypeSpec[Bool] :- TypeSpec[Boolean].
-DDTypeSpec[Float] :- TypeSpec[FloatNum].
-DDTypeSpec[Str] :- TypeSpec[String].
+/**********************************************************/
+/******* Model Transformation from Formula to DDlog *******/
+/**********************************************************/
 
-// TODO: Since Formula does not distinguish between input and output relations but DDlog does, we need to 
-// define two relations for the same type with a rule as `T[t] :- t in T_input[..]`
-DDRelation[dd_relation], DDTypeSpec[single_union_type] :- ct in TypeSpec[CompositeType {cons_name, fields}], 
-				var single_union_type = to_dd_typespec(ct),
-				var dd_relation = DDRelation {true, cons_name, single_union_type}.
-
-DDRelation[dd_relation], DDTypeSpec[dd_union_type] :- ut in TypeSpec[UnionType {union_name, subtypes}], 
-				var dd_union_type = to_dd_typespec(ut),
-				var dd_relation = DDRelation {true, union_name, dd_union_type}.
-
-DDRelation[dd_relation], DDTypeSpec[dd_constant_type] :- ct in TypeSpec[ConstantType {constant}], 
-				var dd_constant_type = to_dd_typespec(ct),
-				var dd_relation = DDRelation {true, constant, dd_constant_type}.
-
-// Those negative predicates can be directly use in `DDRule`
-output relation NegPredAsSetdiff[(Term, Ref<Rule>)]
-NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], 
-								   NegPredInRule[(neg_pred, r)]. 
-
-// Those negative predicates need to be translated into set comprehension in `DDRule`
-output relation NegPredAsSetcompre[(Term, Ref<Rule>)]
-NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAsSetdiff[(neg_pred, r)].  
-
-function ddterm_to_dd_rhs(
-	var_name: Option<string>, 
-	rel: Ref<DDRelation>, 
-	dd_term: DDTerm, 
-	negated: bool
-): DDRhs {
-	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
-	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
-	DDRhsAtom { negated, dd_atom }
-}
-
+/****************** Relations for Transformation ******************/
 // Still in the form of `no pred(..)`
 output relation DDNegPredAsSetdiff[(DDRhs, Ref<Rule>)]
-DDNegPredAsSetdiff[(negated_dd_rhs_atom, r)] :- pair in NegPredAsSetdiff[(Composite {relname, _}, r)], 
-	rel in DDRelation[DDRelation {_, relname, _}], 
-	var dd_term = to_dd_term(pair.0), 
-	var negated_dd_rhs_atom = ddterm_to_dd_rhs(None, ref_new(rel), dd_term, false). 
-
 // Convert `no pred(..)` to count({ p | p is Pred(..) }) == 0
 // Pred(..), var g = (v1, v2, ..., vn).group_by(()), 
 // var reduced_val = g.group_count(), reduced_val == 0.
@@ -62,17 +21,274 @@ DDNegPredAsSetdiff[(negated_dd_rhs_atom, r)] :- pair in NegPredAsSetdiff[(Compos
 // Generate a new relation with a constant type as a switch for negated predicate as set comprehension
 output relation DDNegPredAsSetcompre[(Term, DDRhs, Ref<Rule>)]
 
-DDNegPredAsSetcompre[(variable, dd_rhs_atom, r)], 
-DDTypeSpec[constant_type], 
-DDRelation[constant_relation] :- 
-	pair in NegPredAsSetcompre[(Composite {relname, _}, r)],  
+// Extract term from each term list in the head of set comprehension and derive its type
+output relation TermListInSetcompreHead [(NonNullList<Term>, Setcompre, Ref<Rule>)]
+output relation DDTermInSetcompreHead [(DDTerm, Setcompre, Ref<Rule>)]
+output relation DDTypeSpecInSetcompreHead [(DDTypeSpec, Setcompre, Ref<Rule>)]
+
+output relation DDAtomInRule [(DDAtom, Ref<Rule>)]
+output relation DDRhsInRule [(DDRhs, Ref<Rule>)]
+output relation AtomVecOfRule [(Vec<DDAtom>, Ref<Rule>)]
+output relation RhsVecOfRule [(Vec<DDRhs>, Ref<Rule>)]
+
+
+/************** Rules for Transformation ****************/
+
+// Mapping of primitive type from Formula to DDlog
+DDTypeSpec[Int] :- TypeSpec[Integer].
+DDTypeSpec[Bool] :- TypeSpec[Boolean].
+DDTypeSpec[Float] :- TypeSpec[FloatNum].
+DDTypeSpec[Str] :- TypeSpec[String].
+
+// TODO: Since Formula does not distinguish between input and output relations but DDlog does, we need to 
+// define two relations for the same type with a rule as `T[t] :- t in T_input[..]`
+DDRelation[dd_relation], DDTypeSpec[dd_type] :- TypeSpec[t], 
+	var dd_type = to_dd_typespec(t),
+	var rel_name = to_string(t),
+	var dd_relation = DDRelation { true, rel_name, dd_type }.
+
+/**************** Handle Positive Predicate Term in Rule ********************/
+// TODO: What if the head term is a boolean variable.
+DDAtomInRule[(atom, rule)] :- pair in HeadInRule[(Composite{relname, _}, rule)], 
 	rel in DDRelation[DDRelation {_, relname, _}], 
-	VarOfTerm[(variable, pair.0)],
-	// Directly convert from `Term` to `DDTerm` and then to RHS expression
-	var dd_term = to_dd_term(pair.0), 
-	var dd_rhs_atom = ddterm_to_dd_rhs(None, ref_new(rel), dd_term, true),
-	// Synthesize a new name for the new constant type and relation
-	var constant_name = "hello", // TODO: Change name that includes rule id and position of neg term.
+	var head_term = pair.0,
+	var dd_head_term = to_dd_term(head_term),
+	var atom = ddterm_to_ddatom(None, ref_new(rel), dd_head_term). 
+
+DDRhsInRule[(positive_dd_rhs_atom, rule)] :- pair in PosPredInRule[(Composite {relname, _}, rule)], 
+	// Find the relation by the name of the composite term
+	rel in DDRelation[DDRelation {_, relname, _}], 
+	var pos_term = pair.0,
+	var dd_term = to_dd_term(pos_term),
+	var positive_dd_rhs_atom = ddterm_to_ddrhs(None, ref_new(rel), dd_term, false).
+
+/**************** Handle Negative Predicate Term in Rule ********************/
+// Translate a DDTerm `no Pred(..)` into a DDRhs such as `not x in Relation[Pred(..)]` as set difference
+DDRhsInRule[(negated_dd_rhs_atom, rule)] :- pair in NegPredAsSetdiff[(Composite {relname, _}, rule)], 
+	rel in DDRelation[DDRelation {_, relname, _}], 
+	var neg_term = pair.0,
+	var dd_term = to_dd_term(neg_term), 
+	var negated_dd_rhs_atom = ddterm_to_ddrhs(None, ref_new(rel), dd_term, true). 
+
+// Translate a negated DDTerm `no Pred(..)` into set comprehension in the format of Formula as 
+// `no_such_pred :- x = count({ p | Pred(..) }), x == 0`.
+//
+// Generate a new rule in the format of DDlog:
+// BoolRelation[BoolConstant{}]:- p in Pred(..), var g = (p).group_by(()), var num = g.group_count(), num == 0.
+//
+// The negation in original rule is replaced by a new predicate composed by the new `BoolRelation` and 
+// `BoolConstant` type as `Head :- C1, C2, ..., BoolRelation[BoolConstant{}], CN.`
+DDTypeSpec[constant_type], 
+DDRelation[constant_relation],
+DDRhsInRule[(dd_rhs_bool_constant_atom, rule)], 
+DDRule[DDRule { head, body }]:-
+	// TODO: the term could also be a boolean variable in the rule
+	pair in NegPredAsSetcompre[(Composite {relname, _}, rule)],  
+	rel in DDRelation[DDRelation {_, relname, _}], 
+	var rule_id = rule.id,
+	var neg_term = pair.0,
+	var dd_neg_term = to_dd_term(neg_term), 
+	// Synthesize a new name for the new constant type and relation e.g. BoolConstantR1N2
+	// TODO: Change name that includes rule id and position
+	// TODO: Need a unique id for constraint of neg term
+	var constant_name = "BoolConstant" ++ rule_id ++ "N", 
 	var constructor = DDTypeCons { constant_name, EMPTY },
-	var constant_type = DDUnionTypeSpec { from_singleton_to_nonnull_list(constructor) }, 
-	var constant_relation = DDRelation { false, constant_name, constant_type }. 
+	// For example, typedef BoolConstantR1N2 = BoolConstantR1N2 {}
+	// output relation BoolConstantR1N2 [BoolConstantR1N2{}]
+	var constant_type = DDUnionTypeSpec { constant_name, from_singleton_to_nonnull_list(constructor) }, 
+	var constant_relation = DDRelation { false, constant_name, constant_type },
+	// Generate `BoolConstantRelation[p]` as one of the Rhs to replace negated predicate in the origin rule
+	var dd_rhs_bool_constant_atom = ddterm_to_ddrhs(None, ref_new(constant_relation), DDVar{"p"}, false), 
+	var head = [DDAtom { None, ref_new(constant_relation), DDTermExpr{ref_new(DDVar{"p"})} }],
+	// From a positive term `p in Pred[Pred(..)]` to a RHS expression in DDlog.
+	var dd_atom_rhs = ddterm_to_ddrhs(Some{"p"}, ref_new(rel), dd_neg_term, false),
+	// var g = (p).group_by(()).
+	var p_ref = ref_new(DDVar { "p" }),
+	var p_expr_ref = ref_new(DDTermExpr { p_ref }),
+	var p_vec = [p_expr_ref],
+	var group_assignment = DDGroup { "g", DDTupleExpr{p_vec}, DDTupleExpr{vec_empty()} }, 
+	// var num = g.group_count().
+	var g_ref = ref_new(DDVar { "g" }),
+	var g_expr_ref = ref_new(DDTermExpr { g_ref }),
+	var num_ref = ref_new(DDVar { "num" }),
+	var num_expr = DDTermExpr { num_ref },
+	var aggregation_expr = DDDotFunctionCallExpr { g_expr_ref, "group_count", vec_empty() },
+	var num_assignment = DDRhsAssignment { num_expr, aggregation_expr },
+	// num == 0. 
+	var zero_ref = ref_new(DDInt { 0 }),
+	var zero_expr_ref = ref_new(DDTermExpr{zero_ref}),
+	var count_is_zero = DDRhsCondition { DDBinExpr {ref_new(num_expr), zero_expr_ref, Eq} },
+	var body = [dd_atom_rhs, group_assignment, num_assignment, count_is_zero].
+
+/************** Handle Independent Set Comprehension **************/
+TermListInSetcompreHead[(sc_rule.head, setcompre, rule)] :- 
+	IndependentSetcompre[(def_term, setcompre, rule)], 
+	var sc_rule = deref(setcompre.rule).
+
+TermListInSetcompreHead[(nxt_nonnull_list, setcompre, rule)] :- 
+	TermListInSetcompreHead[(NonNullList { _, NonNullNxt { nxt_nonnull_list_ref } }, setcompre, rule)],
+	var nxt_nonnull_list = deref(nxt_nonnull_list_ref).
+
+DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, r)], 
+DDTermInSetcompreHead[(ddterm, setcompre, r)] :- 
+	TermListInSetcompreHead[(term_nonnull_list, setcompre, r)],
+	var term = term_nonnull_list.node, 
+	var ddterm = to_dd_term(term),
+	// Find the type of `DDTerm`
+	DDTermOfDDTypeSpec[(ddterm, ddtypespec)].
+
+// Create a new DDTypeSpec that includes all types used in the head of set comprehension
+DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
+	IndependentSetcompre[(def_term, setcompre, rule)],
+	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
+	var ddtype_group = (ddtype).group_by((setcompre, rule)),
+	var ddtype_vec = ddtype_group.map(|t| t),
+	// setcompre and rule are both consumed in the aggregation
+	(var sc, var r) = ddtype_group.group_key(),
+	var rule_id = r.id,
+	// TODO: The name of new union type should include
+	// TODO: Add the index of setcompre rule id and setcompre id
+	var union_type_name = "SCHeadUnion" ++ rule_id, 
+	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
+	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
+
+// Create head atom for each rule inside the set comprehension as 
+// SCHeadUnion[t1], SCHeadUnion[t1],..., SCHeadUnion[tn] :- C1, C2, ..., Cn. in which `Cn` is the 
+// constraint inside the set comprehension.
+//
+// In the original rule Head :- C1, C2, ..., def_term = setcompre, Cn.
+// Do set comprehension only on `SCHeadUnion[t]` as in Formula `result = count({t | SCHeadUnion(t)})` 
+// Or in DDlog as `SCHeadUnion[t], var g = (t).group_by(()), var result = g.group_count().`
+DDAtomInRule[(dd_atom_for_sc_rule, sc_rule)], 
+DDRhsInRule[(group_assignment, rule)], 
+DDRhsInRule[(result_assignment, rule)], 
+DDRhsInRule[(dd_head_union_atom_rhs, rule)] 
+:- 
+	IndependentSetcompre[(def_term, setcompre, rule)],
+	DDTermInSetcompreHead[(dd_term, setcompre, rule)], 
+	var rule_id = rule.id,
+	var sc_rule = setcompre.rule,
+	var dd_sc_head_term_expr = DDTermExpr { ref_new(dd_term) }, 
+	var union_type_name = "SCHeadUnion" ++ rule_id, // TODO: Add the index of setcompre.
+	// Find the auto-generated new relation by name
+	dd_sc_head_union_relation in DDRelation[DDRelation {_,union_type_name,_}],
+	// SCHeadUnion[tn] where `tn` is the term from the head of set comprehension
+	var dd_atom_for_sc_rule = DDAtom { None, ref_new(dd_sc_head_union_relation), dd_sc_head_term_expr },
+	// TODO: May have conflict if a rule has multiple independent set comprehensions
+	// Add a new atom SCHeadUnion[t] to the rule
+	var dd_head_union_atom_rhs = ddterm_to_ddrhs(None, ref_new(dd_sc_head_union_relation), DDVar{"t"}, false),
+	// var g = (t).group_by(()).
+	var t_ref = ref_new(DDVar { "t" }),
+	var t_expr_ref = ref_new(DDTermExpr { t_ref }),
+	var t_vec = [t_expr_ref],
+	var group_assignment = DDGroup { "g", DDTupleExpr{t_vec}, DDTupleExpr{vec_empty()} }, 
+	// var result = g.group_count().
+	var g_ref = ref_new(DDVar { "g" }),
+	var g_expr_ref = ref_new(DDTermExpr { g_ref }),
+	var result_ref = ref_new(DDVar { "result" }),
+	var result_expr = DDTermExpr { result_ref },
+	// TODO: Replace `group_count` based on the exact setcompre.sop
+	var aggregation_expr = DDDotFunctionCallExpr { g_expr_ref, "group_count", vec_empty() },
+	var result_assignment = DDRhsAssignment { result_expr, aggregation_expr }.
+
+/************** Handle Dependent Set Comprehension *************/
+// The shared variables between outer scope and inner scope of set comprehension cannot occur
+// in the nested inner set comprehension inside the current set comprehension.
+//    o1
+// ------------ rule
+//         |s1|  i1 = o2
+//         ------------------ setcompre(1) inside rule
+//						 |s2|   i2
+//                  	 ------------ setcompre(2) inside previous setcompre(1)
+//
+// o1 and o2 represent the variables in the outer scope
+// i1 and i2 represent the variables in the inner scope of set comprehension
+// s1 and s2 represent the shared variable between inner and outer scope
+
+
+
+/***************** Create New DDRule in DDlog ********************/
+AtomVecOfRule[(atom_vec, rule_ref)] :- Rule[rule], var rule_ref = ref_new(rule), DDAtomInRule[(ddatom, rule_ref)], 
+	var atom_group = (ddatom).group_by((rule_ref)),
+	var atom_vec = atom_group.map(|atom| atom).
+
+RhsVecOfRule[(rhs_vec, rule_ref)] :- Rule[rule], var rule_ref = ref_new(rule), DDRhsInRule[(ddrhs, rule_ref)], 
+	var rhs_group = (ddrhs).group_by((rule_ref)),
+	var rhs_vec = rhs_group.map(|rhs| rhs).
+
+// Finally, let's combine head and body into a DDRule.
+DDRule[ddrule] :- AtomVecOfRule[(atom_vec, rule)], RhsVecOfRule[(rhs_vec, rule)],
+	var ddrule = DDRule { atom_vec, rhs_vec }.
+
+/********** Helper Functions for Transformation **********/
+function to_dd_term(term: Term): DDTerm {
+	var dd_term = match (term) {
+		AtomStr { str } -> DDStr { str },
+		AtomInt { int } -> DDInt { int },
+		AtomPosInt { pint } -> DDInt { pint },
+		AtomNegInt { nint } -> DDInt { nint },
+		AtomFloat { float_num } -> DDFloat { float_num },
+		AtomBool { boolean } -> DDBool { boolean },
+		Variable { root, fragments } -> {
+			DDVar { root }
+		},
+		Composite { name, term_ref_arguments_head } -> {
+			var term_arguments_head = list_map(term_ref_arguments_head, |t_ref| {
+				deref(t_ref)
+			});
+			var dd_expr_arguments_head = list_map(term_arguments_head, |t| { 
+				var dd_t = to_dd_term(t);
+				DDTermExpr { ref_new(dd_t) } 
+			});
+			DDCons { name, dd_expr_arguments_head }
+		},
+	};
+	dd_term
+}
+
+// Recursively translate a Formula type spec into DDlog type spec 
+function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
+	var dd_type_spec = match (type_spec) {
+		CompositeType {name, fields} -> {
+			var ddfields = vec_empty();
+			for (field in fields) {
+				var ddtypespec = to_dd_typespec(field.type_spec);
+				vec_push(ddfields, DDField { field.field_name, ref_new(ddtypespec) });
+			};
+			var dd_cons = DDTypeCons { name, from_vec(ddfields) };
+			DDUnionTypeSpec { name, from_singleton_to_nonnull_list(dd_cons) }
+		},
+		UnionType {union_name, subtypes} -> {
+			// From Formula union type to tagged union in DDlog
+			// TODO: How to merge union types rather than create a new tagged union?
+			// A ::= B + C.  // D ::= E + F.  // G ::= A + D.
+			var dd_cons_types = vec_empty();
+			for (subtype in subtypes) {
+				var dd_subtype_spec = to_dd_typespec(subtype);
+				var union_tag = union_name ++ to_string(subtype);
+				var single_dd_field = DDField { union_tag, ref_new(dd_subtype_spec) };
+				var field_list = [single_dd_field];
+				var dd_cons_type = DDTypeCons { union_tag, from_vec(field_list) };
+				vec_push(dd_cons_types, dd_cons_type);
+			};
+			DDUnionTypeSpec { union_name, from_nonnull_vec(dd_cons_types) }
+		},
+		ConstantType {constant} -> { 
+			// A constructor with no arguments or fields as `typedef Constant = Constant {}`
+			// The vector can not be empty in `DDTypeCons` so we create a new type named `Empty`
+			var empty_list = vec_empty();
+			var dd_constant_cons_type = DDTypeCons {
+				constant, 
+				from_vec(empty_list)
+			};
+			DDUnionTypeSpec { constant, from_singleton_to_nonnull_list(dd_constant_cons_type) }	
+		},
+		// TODO: How to handle ConstantType and EnumType?
+		EnumType {enums, _} -> { Str },
+		Integer -> { Int },
+		Boolean -> { Bool },
+		FloatNum -> { Float },
+		String -> { Str }
+	};
+	dd_type_spec
+}

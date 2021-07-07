@@ -1,0 +1,116 @@
+import langs::lib::list
+import langs::lib::operators
+
+/*****************************************/
+/******* DDLog Language Meta-model *******/
+/*****************************************/
+typedef DDField = DDField { field_name: string, type_spec: Ref<DDTypeSpec> }
+typedef DDTypeCons = DDTypeCons { cons_name: string, fields: List<DDField> }
+typedef DDTypeSpec = BigInt | 
+					 Bool | 
+					 Str | 
+					 Bitvector | 
+					 Int | 
+					 Double | 
+					 Float | 
+					 DDTupleTypeSpec { name: string, tuple: NonNullList<Ref<DDTypeSpec>> } |
+					 DDUnionTypeSpec { name: string, types: NonNullList<DDTypeCons> }
+
+// There are more term types defined in the DDlog language reference but we only need a few
+// https://github.com/vmware/differential-datalog/blob/master/doc/language_reference/language_reference.md
+typedef DDTerm = DDBigInt { i0: bigint } | DDBool { i1: bool } | DDStr { i2: string } |
+				 DDBitvector { i3: bit<64> } | DDInt { i4: signed<64> } | 
+				 DDDouble { i5: double} | DDFloat { i6: float } | 
+				 // A variable term in ddlog represented by a string
+				 DDVar { name: string } | 
+				 // var xxx = .., add keyword in the front to denote it is only for declaration
+				 DDVarDecl { name: string} | 
+				 // It has type name and a list of DDlog expressions
+				 DDCons { cons_name: string, arguments: List<DDExpr> } 
+				 // TODO: Add function term for aggregation
+
+// DDRelation represents a collection of records of certain type
+typedef DDRelation = DDRelation { is_input: bool, name: string, type_spec: DDTypeSpec } 
+
+// There are more expression in DDlog referene and we only pick a few we need
+typedef DDExpr =  DDTermExpr { term: Ref<DDTerm> } | 
+				  // A tuple of DDExpr as (e1, e2, ..., en)
+				  DDTupleExpr { terms: Vec<Ref<DDExpr>> } |
+				  // Function call as `func(arguments)`
+				  DDFunctionCallExpr { func: Ref<DDExpr>, arguments: Vec<Ref<DDExpr>> } |
+				  // Function call on an object as `a.call(arguments)`
+				  DDDotFunctionCallExpr { obj: Ref<DDExpr>, func_name: string, arguments: Vec<Ref<DDExpr>> } |
+				  // Access struct field by identifier like `list.node`	
+				  DDTermFieldExpr { expr: Ref<DDExpr>, field: string } |
+				  // Unary operator over expression
+				  DDUnaryExpr { expr: Ref<DDExpr>, uop: UnaryOp } |
+				  // Arithmetic operator over two expressions
+				  DDArithExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, aop: ArithOp } |
+				  // Binary operator over two expressions
+				  DDBinExpr { left: Ref<DDExpr>, right: Ref<DDExpr>, bop: BinOp }
+
+// The complete form of DDlog predicate is `u in RelName[Term]` to represent predicate constraint
+typedef DDAtom = DDAtom { var_name: Option<string>, rel: Ref<DDRelation>, expr: DDExpr }
+typedef DDRhs = DDRhsAtom { negated: bool, atom: DDAtom } |
+			  	DDRhsCondition { expr: DDExpr } |
+			  	DDRhsAssignment { to: DDExpr, from: DDExpr } |
+				// TODO: `SetOp` could be replaced or extended by a customized aggregation function
+				// if the default set comprehension operators are not flexible enough
+				// `DDGroup` could be viewed as a special case of `DDRhsAssignment`
+				DDGroup { var_name: string, group: DDExpr, by: DDExpr }
+
+typedef DDRule = DDRule { head: Vec<DDAtom>, body: Vec<DDRhs> }
+
+/********** Relations ***********/
+output relation DDTypeSpec [DDTypeSpec]
+output relation DDTermOfDDTypeSpec [(DDTerm, DDTypeSpec)]
+output relation DDRelation [DDRelation]
+output relation DDRule [DDRule]
+
+
+/********** Helper Functions *********/
+function to_string(type_spec: DDTypeSpec): string {
+	match (type_spec) {
+		BigInt -> { "BigInt" },
+		Bool -> { "Bool" },
+		Str -> { "String" },
+		Bitvector -> { "Bitvector" },
+		Int -> { "Int" },
+		Double -> { "Double" },
+		Float -> { "Float" },
+		DDTupleTypeSpec { name, _ } -> { name },
+		DDUnionTypeSpec { name, _ } -> { name },
+	}
+}
+
+function ddterm_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
+	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
+	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
+	dd_atom
+}
+
+// Translate a DDTerm `Pred(..)` into a DDRhs such as `not x in Relation[Pred(..)]`
+// given some parameters. Relation must have the same type as current DDTerm
+function ddterm_to_ddrhs(
+	var_name: Option<string>, 
+	rel: Ref<DDRelation>, 
+	dd_term: DDTerm, 
+	negated: bool
+): DDRhs {
+	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
+	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
+	DDRhsAtom { negated, dd_atom }
+}
+
+function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpec {
+	var constructors = vec_empty();
+	for (t in types) {
+		// Use the type name as its field name
+		var field_name = to_string(t);
+		var cons_name = union_name ++ "_" ++ field_name;
+		var field = DDField { field_name, ref_new(t) };
+		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
+		constructors.push(constructor);
+	};
+	DDUnionTypeSpec { union_name, from_nonnull_vec(constructors) }
+}

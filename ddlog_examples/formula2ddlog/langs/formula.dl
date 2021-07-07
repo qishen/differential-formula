@@ -1,0 +1,144 @@
+import langs::lib::list
+import langs::lib::operators
+
+/***********************************************/
+/******* FORMULA 2.0 Language Meta-model *******/
+/***********************************************/
+
+// There are some restrictions on the field name for each variant that they have to be unique
+typedef Term =  AtomStr { i0: string } | AtomInt { i1: signed<64> } | AtomPosInt { i2: signed<64> } |
+				AtomNegInt { i3: signed<64> } | AtomFloat { i4: float } | AtomBool { i5: bool } |
+			    Variable { root: string, fragments: Vec<string> } |
+				// Constant can be viewed as Composite term without arguments
+				Composite { name: string, arguments: List<Ref<Term>> }
+
+// TODO: Field name is actually optional
+typedef Field = Field { field_name: string, type_spec: TypeSpec }
+typedef TypeSpec =  Integer | Boolean | FloatNum | String |
+					CompositeType { name: string, arguments: Vec<Field> } |
+					UnionType { name: string, subtypes: Vec<TypeSpec> } |
+					EnumType {name: string, items: Vec<Term>} |
+					ConstantType {constant: string} 
+
+// The head terms and conditions are the same as head and body in a rule so the set 
+// comprehension can be viewed as a rule and set comprehension is applied to the set
+// of derived terms
+typedef Setcompre = Setcompre { rule: Ref<Rule>, sop: SetOp, default: Term }
+typedef Expr =  BaseExpr { term: Term } | 
+				SetcompreExpr { sc: Ref<Setcompre> } |
+				UnaryExpr { expr: Ref<Expr>, uop: UnaryOp } |
+				ArithExpr { left: Ref<Expr>, right: Ref<Expr>, aop: ArithOp }
+
+// Constraints are either predicates or expressions that may contain set comprehension	
+// `ExprCons` could be 
+// 1) a binary constraint over two expressions. 
+// 2) An assignment that holds the result of the evaluation of right hand side expression.
+// 3) Type constraint in the form of `var: Type`
+typedef Constraint = PredCons { negated: bool, term: Term } | 
+					 BinaryCons { left: Expr, right: Expr, bop: BinOp } |
+					 AssignCons { variable: Term, expr: Expr } | 
+					 TypeCons { variable: Term, var_type: TypeSpec }
+
+// A rule is composed by a linked list of head terms and a linked list of constraints
+// Rule has at least one constraint and at least one head term otherwise the rule is meaningless
+// The term in the head could be ground term and only count once in the set
+typedef Rule = Rule { id: string, head: NonNullList<Term>, body: NonNullList<Constraint> }
+typedef Domain = Domin { typedefs: List<TypeSpec>, rules: List<Rule> }
+typedef Model = Model { terms: List<Term>}
+typedef Transform = Transform {}
+
+
+/****************** Relations *******************/
+// Store all the terms from rules or more places like model and transformation depending on your need
+// A relation named TypeSpec to hold all instance of TypeSpec
+input relation TypeSpec [TypeSpec]
+input relation InputTerm [Term]
+// TODO: Don't forget to add set comprehension into the Rule input relation too 
+input relation Rule [Rule]
+
+output relation Term [Term]
+output relation ArgListOfTerm [(List<Ref<Term>>, Term)]
+output relation ArgOfTerm [(Term, Term)]
+output relation VarOfTerm [(Term, Term)]
+
+// The head of each constraint list cannot be null otherwise it's meaningless
+output relation PosPredInRule [(Term, Ref<Rule>)]
+output relation NegPredInRule [(Term, Ref<Rule>)]
+
+// Those negative predicates can be directly use in `DDRule` as `not Pred(..)`
+output relation NegPredAsSetdiff[(Term, Ref<Rule>)]
+// Those negative predicates that need to be translated into set comprehension in `DDRule` not set difference
+output relation NegPredAsSetcompre[(Term, Ref<Rule>)]
+
+// Track variables as variable terms in the positive predicates of a rule 
+// TODO: How about the variables in set comprehension
+output relation PosVarInRule [(Term, Ref<Rule>)]
+// Track variables as variable terms in the negative predicates of a rule 
+output relation NegVarInRule [(Term, Ref<Rule>)]
+
+output relation HeadListInRule [(NonNullList<Term>, Ref<Rule>)]
+output relation HeadInRule[(Term, Ref<Rule>)]  
+output relation ConstraintListInRule [(NonNullList<Constraint>, Ref<Rule>)]
+output relation ConstraintInRule [(Constraint, Ref<Rule>)]
+output relation SetcompreInRule [(Term, Setcompre, Ref<Rule>)]
+// The first term in the tuple is the definition term
+output relation IndependentSetcompre [(Term, Setcompre, Ref<Rule>)]
+// The second term in the tuple is the shared variable with outer scope
+output relation DependentSetcompre [(Term, Term, Setcompre, Ref<Rule>)]
+
+/******************** Rules *********************/
+// Add all composite subterm from `InputTerm` into the `Term` relation
+Term[term] :- InputTerm[term].
+// Intermediate results to derive `ArgOfTerm` because we use linked list and the reason
+// I don't use `Flatmap()` on `Vec<Term>` instead is that Formula does not support it.
+ArgListOfTerm[(arg_list, c)] :- c in Term[Composite{_, arg_list}].
+ArgListOfTerm[(deref(nxt_arg_list), c)] :- ArgListOfTerm[(List {_, ListNxt {nxt_arg_list}}, c)].
+
+ArgOfTerm[(deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(List {term_ref, _}, c)].
+VarOfTerm[(v, v)] :- v in Term[Variable{}].
+VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(Variable{}, term)], var variable = pair.0.
+
+HeadListInRule[(head_head, ref_new(r))] :- r in Rule[Rule {_, head_head, _}].
+HeadListInRule[(deref(nxt_head), r)] :- HeadListInRule[(NonNullList {_, NonNullNxt { nxt_head }}, r)].
+HeadInRule[(term, r)] :- HeadListInRule[(NonNullList {term, _}, r)].
+
+ConstraintListInRule[(constraint_head, ref_new(r))] :- r in Rule[Rule{ _, _, constraint_head }].
+ConstraintListInRule[(deref(nxt_constraint), r)] :- 
+	ConstraintListInRule[(NonNullList {_, NonNullNxt { nxt_constraint }}, r)].
+ConstraintInRule[(constraint, r)] :- ConstraintListInRule[(NonNullList {constraint, _}, r)]. 
+
+PosPredInRule[(pos_term, r)] :- ConstraintInRule[(PredCons {false, pos_term}, r)].
+NegPredInRule[(neg_term, r)] :- ConstraintInRule[(PredCons {true, neg_term}, r)].
+PosVarInRule[(variable, r)] :- PosPredInRule[(pos_term, r)], VarOfTerm[(variable, pos_term)].
+NegVarInRule[(variable, r)] :- NegPredInRule[(neg_term, r)], VarOfTerm[(variable, neg_term)].
+NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], NegPredInRule[(neg_pred, r)]. 
+NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAsSetdiff[(neg_pred, r)].  
+SetcompreInRule[(def_term, deref(setcompre_ref), r)] :- ConstraintInRule[(AssignCons{def_term, SetcompreExpr{setcompre_ref}}, r)].
+
+DependentSetcompre[(def_term, shared_var, setcompre, rule)] :- 
+	sc_tuple in SetcompreInRule[(def_term, setcompre, rule)],
+	var sc_rule = setcompre.rule,
+	// TODO: What about the negative variables in rules?
+	PosVarInRule[(shared_var, sc_rule)], 
+	PosVarInRule[(shared_var, rule)].
+
+IndependentSetcompre[(def_term, setcompre, rule)] :- 
+	SetcompreInRule[(def_term, setcompre, rule)], 
+	not DependentSetcompre[(def_term, _, setcompre, rule)].
+
+/***********************************************************/
+/******* Helper Functions for Formula 2.0 Meta-model *******/
+/***********************************************************/
+
+function to_string(type_spec: TypeSpec): string {
+	match (type_spec) {
+		Integer -> { "Int" },
+		Boolean -> { "Bool" },
+		FloatNum -> { "Float" },
+		String -> { "String" },
+		CompositeType {cons_name, _} -> { cons_name },
+		UnionType {union_name, _} -> { union_name },
+		ConstantType {constant} -> { constant },
+		EnumType {enum_name, _} -> { enum_name }
+	}
+}
