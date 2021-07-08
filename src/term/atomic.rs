@@ -6,7 +6,7 @@ use std::hash::Hash;
 
 use serde::{Serialize, Deserialize};
 use differential_datalog::record::*;
-use ddlog_derive::*;
+// use ddlog_derive::*;
 
 use crate::term::TermTraversal;
 use crate::expression::*;
@@ -121,38 +121,38 @@ impl Mutator<AtomicTerm> for Record {
     }
 }
 
-impl IntoRecord for AtomicTerm {
-    fn into_record(self) -> Record {
-        match self {
-            AtomicTerm::Atom(atom) => {
-                atom.val.into_record()
-            },
-            AtomicTerm::Variable(var) => {
-                // Record::Variable(Cow::from(format!("{}", var)))
-                // TODO: Avoid the copy but fragments are skipped.
-                Record::Variable(Cow::from(var.root))
-            },
-            AtomicTerm::Composite(composite) => {
-                // Don't make extra copy for type name unless necessary.
-                let type_name = match composite.sort {
-                    RawType::Type(t) => {
-                        match t {
-                            FormulaTypeEnum::CompositeType(ctype) => Cow::from(ctype.name),
-                            _ => { Cow::from(format!("{}", t)) }
-                        }
-                    },
-                    RawType::TypeId(cow) => cow,
-                };  
-                let mut arguments = vec![];
-                for arg in composite.arguments {
-                    let r = arg.into_record();
-                    arguments.push(r);
-                }
-                Record::PosStruct(type_name, arguments)
-            }
-        }
-    }
-}
+// impl IntoRecord for AtomicTerm {
+//     fn into_record(self) -> Record {
+//         match self {
+//             AtomicTerm::Atom(atom) => {
+//                 atom.val.into_record()
+//             },
+//             AtomicTerm::Variable(var) => {
+//                 // Record::Variable(Cow::from(format!("{}", var)))
+//                 // TODO: Avoid the copy but fragments are skipped.
+//                 Record::Variable(Cow::from(var.root))
+//             },
+//             AtomicTerm::Composite(composite) => {
+//                 // Don't make extra copy for type name unless necessary.
+//                 let type_name = match composite.sort {
+//                     RawType::Type(t) => {
+//                         match t {
+//                             FormulaTypeEnum::CompositeType(ctype) => Cow::from(ctype.name),
+//                             _ => { Cow::from(format!("{}", t)) }
+//                         }
+//                     },
+//                     RawType::TypeId(cow) => cow,
+//                 };  
+//                 let mut arguments = vec![];
+//                 for arg in composite.arguments {
+//                     let r = arg.into_record();
+//                     arguments.push(r);
+//                 }
+//                 Record::PosStruct(type_name, arguments)
+//             }
+//         }
+//     }
+// }
 
 impl FromRecord for AtomicTerm {
     fn from_record(val: &Record) -> std::result::Result<Self, String> {

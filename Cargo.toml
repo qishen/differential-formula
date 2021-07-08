@@ -33,10 +33,11 @@ differential-dataflow = { path = "../differential-dataflow" }
 
 # Import a local differential-datalog library.
 # types = { path = "../differential-datalog/rust/template/types" }
-differential_datalog = { path = "../differential-datalog/rust/template/differential_datalog" }
-differential_datalog_test = { path = "../differential-datalog/rust/template/differential_datalog_test" }
+# differential_datalog = { path = "../differential-datalog/rust/template/differential_datalog" }
+differential_datalog = { path = "ddlog_examples/formula2ddlog/formula2ddlog_ddlog/differential_datalog" }
+# differential_datalog_test = { path = "../differential-datalog/rust/template/differential_datalog_test" }
 # ddlog_lib = { path = "../differential-datalog/lib"}
-ddlog_derive = { path = "../differential-datalog/rust/template/ddlog_derive" }
+# ddlog_derive = { path = "ddlog_examples/formula2ddlog/formula2ddlog_ddlog/differential-datalog/rust/template/ddlog_derive" }
 
 rand = "0.4"
 enum_dispatch = "0.3.1"

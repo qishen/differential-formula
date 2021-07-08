@@ -52,34 +52,34 @@ use differential_datalog::record::*;
 // }
 
 // Translate `TermAst` into ddlog `Record` without context of type information.
-impl IntoRecord for TermAst {
-    fn into_record(self) -> Record {
-        let dd_record = match self {
-            TermAst::AtomTermAst(atom) => {
-                // TODO: Use internment when the data is large like a big string.
-                atom.clone().into_record()
-            },
-            TermAst::CompositeTermAst(composite_ast) => {
-                // TODO: Too much deep copy here. 
-                // 1. Copy of subtree for each layer of traversal
-                // 2. The type name could be Cow<&'static str> to save more memory.
-                let term_arguments: Vec<Record> = composite_ast.arguments.iter().map(|argument_ast| { 
-                    // into_ddlog_record(arg_ast.as_ref(), metainfo)
-                    argument_ast.as_ref().clone().into_record()
-                }).collect();
-                // The type name can only be the name of specific composite type, which is the relation
-                // name in ddlog.
-                let type_name = composite_ast.sort.name().unwrap();
-                Record::PosStruct(Cow::from(type_name), term_arguments)
-            },
-            TermAst::VariableTermAst(variable_ast) => {
-                // TODO: It could be symbolic value too.
-                Record::Variable(Cow::from(variable_ast.root))
-            }
-        };
-        dd_record
-    }
-}
+// impl IntoRecord for TermAst {
+//     fn into_record(self) -> Record {
+//         let dd_record = match self {
+//             TermAst::AtomTermAst(atom) => {
+//                 // TODO: Use internment when the data is large like a big string.
+//                 atom.clone().into_record()
+//             },
+//             TermAst::CompositeTermAst(composite_ast) => {
+//                 // TODO: Too much deep copy here. 
+//                 // 1. Copy of subtree for each layer of traversal
+//                 // 2. The type name could be Cow<&'static str> to save more memory.
+//                 let term_arguments: Vec<Record> = composite_ast.arguments.iter().map(|argument_ast| { 
+//                     // into_ddlog_record(arg_ast.as_ref(), metainfo)
+//                     argument_ast.as_ref().clone().into_record()
+//                 }).collect();
+//                 // The type name can only be the name of specific composite type, which is the relation
+//                 // name in ddlog.
+//                 let type_name = composite_ast.sort.name().unwrap();
+//                 Record::PosStruct(Cow::from(type_name), term_arguments)
+//             },
+//             TermAst::VariableTermAst(variable_ast) => {
+//                 // TODO: It could be symbolic value too.
+//                 Record::Variable(Cow::from(variable_ast.root))
+//             }
+//         };
+//         dd_record
+//     }
+// }
 
 // #[enum_dispatch(TermAstBehavior)]
 #[derive(Debug, Clone)]
