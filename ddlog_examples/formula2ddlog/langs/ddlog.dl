@@ -103,11 +103,15 @@ function ddterm_to_ddrhs(
 }
 
 function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpec {
+	// typedef T1 = T11 {..} | T12 {..}
+	// typedef T2 = T21 {..} | T22 {..}
+	// typedef U = U_T1 { u_t1: T1 } | U_T2 { u_t2: T2 } 
 	var constructors = vec_empty();
 	for (t in types) {
-		// Use the type name as its field name
-		var field_name = to_string(t);
-		var cons_name = union_name ++ "_" ++ field_name;
+		// Use the type name in lowercase as its field name
+		var type_name = to_string(t);
+		var field_name = to_lowercase(type_name);
+		var cons_name = union_name ++ "_" ++ type_name;
 		var field = DDField { field_name, ref_new(t) };
 		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
 		constructors.push(constructor);

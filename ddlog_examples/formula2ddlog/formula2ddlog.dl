@@ -73,10 +73,10 @@ DDRhsInRule[(negated_dd_rhs_atom, rule)] :- pair in NegPredAsSetdiff[(Composite 
 // Translate a negated DDTerm `no Pred(..)` into set comprehension in the format of Formula as 
 // `no_such_pred :- x = count({ p | Pred(..) }), x == 0`.
 //
-// Generate a new rule in the format of DDlog:
+// 1. Generate a new rule in the format of DDlog:
 // BoolRelation[BoolConstant{}]:- p in Pred(..), var g = (p).group_by(()), var num = g.group_count(), num == 0.
 //
-// The negation in original rule is replaced by a new predicate composed by the new `BoolRelation` and 
+// 2. The negation in original rule is replaced by a new predicate composed by the new `BoolRelation` and 
 // `BoolConstant` type as `Head :- C1, C2, ..., BoolRelation[BoolConstant{}], CN.`
 DDTypeSpec[constant_type], 
 DDRelation[constant_relation],
@@ -85,13 +85,12 @@ DDRule[DDRule { head, body }]:-
 	// TODO: the term could also be a boolean variable in the rule
 	pair in NegPredAsSetcompre[(Composite {relname, _}, rule)],  
 	rel in DDRelation[DDRelation {_, relname, _}], 
+	ConstraintInRule[(constraint_id, PredCons {true, neg_term}, rule)],
+	neg_term == pair.0,
 	var rule_id = rule.id,
-	var neg_term = pair.0,
 	var dd_neg_term = to_dd_term(neg_term), 
 	// Synthesize a new name for the new constant type and relation e.g. BoolConstantR1N2
-	// TODO: Change name that includes rule id and position
-	// TODO: Need a unique id for constraint of neg term
-	var constant_name = "BoolConstant" ++ rule_id ++ "N", 
+	var constant_name = "BoolConstant" ++ "R" ++ rule_id ++ "N" ++ constraint_id, 
 	var constructor = DDTypeCons { constant_name, EMPTY },
 	// For example, typedef BoolConstantR1N2 = BoolConstantR1N2 {}
 	// output relation BoolConstantR1N2 [BoolConstantR1N2{}]
@@ -122,8 +121,7 @@ DDRule[DDRule { head, body }]:-
 
 /************** Handle Independent Set Comprehension **************/
 TermListInSetcompreHead[(sc_rule.head, setcompre, rule)] :- 
-	IndependentSetcompre[(def_term, setcompre, rule)], 
-	var sc_rule = deref(setcompre.rule).
+	IndependentSetcompre[(setcompre, rule)], var sc_rule = deref(setcompre.rule).
 
 TermListInSetcompreHead[(nxt_nonnull_list, setcompre, rule)] :- 
 	TermListInSetcompreHead[(NonNullList { _, NonNullNxt { nxt_nonnull_list_ref } }, setcompre, rule)],
@@ -137,39 +135,48 @@ DDTermInSetcompreHead[(ddterm, setcompre, r)] :-
 	// Find the type of `DDTerm`
 	DDTermOfDDTypeSpec[(ddterm, ddtypespec)].
 
-// Create a new DDTypeSpec that includes all types used in the head of set comprehension
+// 1. Create a new union type to represent all types in the head of set comprehension
+// typedef SCHeadUnion = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn}
+// 
+// 2. Generate a new rule in the format of DDlog:
+// SCHeadUnion[T1{h1}], SCHeadUnion[T1{h2}], SCHeadUnion[Tn{hn}] :- SCPred(v1, v2,..., vn), SCPredn(..). 
+// in which `hn` may contain the variables in `Pred(v1,...,vn)`
+// 
+// TODO: Variables in `Cn` are all consumed if we do aggregation in the current rule so they cannot be
+// used again in the head for assignment. One solution is to group by all variables in the `Cn` and 
+// add `(var v1,..., var vn) = g.group_key()` but may have to rename the variables.
+// The other solution is to create a new type and relation to hold the aggregated result.
+//
+// 3. The set comprehension `def_term = SetOp({..})`in the original rule is replaced by three atoms 
+// Head :- SCHeadUnion[t], var g = (t).group_by(()), var def_term = g.group_count(), C1, C2,..., Cn.
+// in which `Cn` is the remaining non-aggregation constraints in the rule.
 DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
-	IndependentSetcompre[(def_term, setcompre, rule)],
+	IndependentSetcompre[(setcompre, rule)],
 	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
-	var ddtype_group = (ddtype).group_by((setcompre, rule)),
+	ConstraintInRule[(setcompre_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
+	setcompre == deref(setcompre_ref),
+	var ddtype_group = (ddtype).group_by((setcompre_id, setcompre, rule)),
 	var ddtype_vec = ddtype_group.map(|t| t),
-	// setcompre and rule are both consumed in the aggregation
-	(var sc, var r) = ddtype_group.group_key(),
+	// Access the key because setcompre_id, setcompre and rule are all consumed in the aggregation
+	(var sc_id, var sc, var r) = ddtype_group.group_key(),
 	var rule_id = r.id,
-	// TODO: The name of new union type should include
-	// TODO: Add the index of setcompre rule id and setcompre id
-	var union_type_name = "SCHeadUnion" ++ rule_id, 
+	// The name of new union type should include the rule id and the setcompre id
+	var union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
 	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
 	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
 
-// Create head atom for each rule inside the set comprehension as 
-// SCHeadUnion[t1], SCHeadUnion[t1],..., SCHeadUnion[tn] :- C1, C2, ..., Cn. in which `Cn` is the 
-// constraint inside the set comprehension.
-//
-// In the original rule Head :- C1, C2, ..., def_term = setcompre, Cn.
-// Do set comprehension only on `SCHeadUnion[t]` as in Formula `result = count({t | SCHeadUnion(t)})` 
-// Or in DDlog as `SCHeadUnion[t], var g = (t).group_by(()), var result = g.group_count().`
 DDAtomInRule[(dd_atom_for_sc_rule, sc_rule)], 
 DDRhsInRule[(group_assignment, rule)], 
 DDRhsInRule[(result_assignment, rule)], 
-DDRhsInRule[(dd_head_union_atom_rhs, rule)] 
-:- 
-	IndependentSetcompre[(def_term, setcompre, rule)],
-	DDTermInSetcompreHead[(dd_term, setcompre, rule)], 
+DDRhsInRule[(dd_head_union_atom_rhs, rule)] :- 
+	IndependentSetcompre[(setcompre, rule)], 
+	DDTermInSetcompreHead[(dd_head_term, setcompre, rule)], 
+	ConstraintInRule[(sc_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
+	setcompre == deref(setcompre_ref),
 	var rule_id = rule.id,
 	var sc_rule = setcompre.rule,
-	var dd_sc_head_term_expr = DDTermExpr { ref_new(dd_term) }, 
-	var union_type_name = "SCHeadUnion" ++ rule_id, // TODO: Add the index of setcompre.
+	var dd_sc_head_term_expr = DDTermExpr { ref_new(dd_head_term) }, 
+	var union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
 	// Find the auto-generated new relation by name
 	dd_sc_head_union_relation in DDRelation[DDRelation {_,union_type_name,_}],
 	// SCHeadUnion[tn] where `tn` is the term from the head of set comprehension
@@ -206,6 +213,31 @@ DDRhsInRule[(dd_head_union_atom_rhs, rule)]
 // s1 and s2 represent the shared variable between inner and outer scope
 
 
+// 1. Create a new union type to represent all types in the head of set comprehension
+// typedef SCHeadUnion = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn}
+// 
+// 2. Generate a new rule in the format of DDlog:
+// SCHeadUnion[T1{h1}], SCHeadUnion[T1{h2}], SCHeadUnion[Tn{hn}] :- SCPred(v1, v2,..., vn), SCPredn(..). 
+// in which `hn` may contain the variables in `Pred(v1,...,vn)`
+// 
+// 3. The set comprehension `def_term = SetOp({..})`in the original rule is replaced by three atoms 
+// Head :- SCHeadUnion[t], var g = (t).group_by(()), var def_term = g.group_count(), C1, C2,..., Cn.
+// in which `Cn` is the remaining non-aggregation constraints in the rule.
+DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
+	OuterVarInDepSetcompre[(shared_var, setcompre, rule)],
+	DependentSetcompre[(setcompre, rule)],
+	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
+	var ddtype_group = (ddtype).group_by((setcompre, rule)),
+	var ddtype_vec = ddtype_group.map(|t| t),
+	// setcompre and rule are both consumed in the aggregation
+	(var sc, var r) = ddtype_group.group_key(),
+	var rule_id = r.id,
+	// TODO: The name of new union type should include
+	// TODO: Add the index of setcompre rule id and setcompre id
+	var union_type_name = "SCHeadUnion" ++ rule_id, 
+	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
+	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
+
 
 /***************** Create New DDRule in DDlog ********************/
 AtomVecOfRule[(atom_vec, rule_ref)] :- Rule[rule], var rule_ref = ref_new(rule), DDAtomInRule[(ddatom, rule_ref)], 
@@ -216,7 +248,7 @@ RhsVecOfRule[(rhs_vec, rule_ref)] :- Rule[rule], var rule_ref = ref_new(rule), D
 	var rhs_group = (ddrhs).group_by((rule_ref)),
 	var rhs_vec = rhs_group.map(|rhs| rhs).
 
-// Finally, let's combine head and body into a DDRule.
+// Combine head and body into a DDRule.
 DDRule[ddrule] :- AtomVecOfRule[(atom_vec, rule)], RhsVecOfRule[(rhs_vec, rule)],
 	var ddrule = DDRule { atom_vec, rhs_vec }.
 
@@ -229,9 +261,7 @@ function to_dd_term(term: Term): DDTerm {
 		AtomNegInt { nint } -> DDInt { nint },
 		AtomFloat { float_num } -> DDFloat { float_num },
 		AtomBool { boolean } -> DDBool { boolean },
-		Variable { root, fragments } -> {
-			DDVar { root }
-		},
+		Variable { root, fragments } -> { DDVar { root } },
 		Composite { name, term_ref_arguments_head } -> {
 			var term_arguments_head = list_map(term_ref_arguments_head, |t_ref| {
 				deref(t_ref)

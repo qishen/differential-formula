@@ -49,25 +49,23 @@ typedef Transform = Transform {}
 
 
 /****************** Relations *******************/
-// Store all the terms from rules or more places like model and transformation depending on your need
-// A relation named TypeSpec to hold all instance of TypeSpec
 input relation TypeSpec [TypeSpec]
 input relation InputTerm [Term]
-// TODO: Don't forget to add set comprehension into the Rule input relation too 
-input relation Rule [Rule]
-
 output relation Term [Term]
 output relation ArgListOfTerm [(List<Ref<Term>>, Term)]
 output relation ArgOfTerm [(Term, Term)]
 output relation VarOfTerm [(Term, Term)]
+// It should contain both rule in the domain and rule in the set comprehension
+input relation InputRule [Rule]
+output relation Rule [Rule]
 
 // The head of each constraint list cannot be null otherwise it's meaningless
 output relation PosPredInRule [(Term, Ref<Rule>)]
+// Negative predicates can be directly use in `DDRule` as `not Pred(..)` or
+// translated into set comprehension in `DDRule` rather than set difference depending on
+// if the variables in negative term occur in the outer scope. 
 output relation NegPredInRule [(Term, Ref<Rule>)]
-
-// Those negative predicates can be directly use in `DDRule` as `not Pred(..)`
 output relation NegPredAsSetdiff[(Term, Ref<Rule>)]
-// Those negative predicates that need to be translated into set comprehension in `DDRule` not set difference
 output relation NegPredAsSetcompre[(Term, Ref<Rule>)]
 
 // Track variables as variable terms in the positive predicates of a rule 
@@ -76,55 +74,68 @@ output relation PosVarInRule [(Term, Ref<Rule>)]
 // Track variables as variable terms in the negative predicates of a rule 
 output relation NegVarInRule [(Term, Ref<Rule>)]
 
-output relation HeadListInRule [(NonNullList<Term>, Ref<Rule>)]
+output relation HeadListInRule [(NonNullList<Term>, Ref<Rule>)] // Intermediate results because we use List
 output relation HeadInRule[(Term, Ref<Rule>)]  
-output relation ConstraintListInRule [(NonNullList<Constraint>, Ref<Rule>)]
-output relation ConstraintInRule [(Constraint, Ref<Rule>)]
-output relation SetcompreInRule [(Term, Setcompre, Ref<Rule>)]
-// The first term in the tuple is the definition term
-output relation IndependentSetcompre [(Term, Setcompre, Ref<Rule>)]
-// The second term in the tuple is the shared variable with outer scope
-output relation DependentSetcompre [(Term, Term, Setcompre, Ref<Rule>)]
+// the first item of usize is the unique index or id of the constraint
+output relation ConstraintListInRule [(usize, NonNullList<Constraint>, Ref<Rule>)]
+output relation ConstraintInRule [(usize, Constraint, Ref<Rule>)]
+
+// The variable term in the rule to define Setcompre 
+output relation DefTermOfSetcompre [(Term, Setcompre, Ref<Rule>)]
+output relation OuterVarInDepSetcompre [(Term, Setcompre, Ref<Rule>)]
+output relation Setcompre [(Setcompre, Ref<Rule>)]
+output relation IndependentSetcompre [(Setcompre, Ref<Rule>)]
+output relation DependentSetcompre [(Setcompre, Ref<Rule>)]
 
 /******************** Rules *********************/
 // Add all composite subterm from `InputTerm` into the `Term` relation
 Term[term] :- InputTerm[term].
+Rule[rule] :- InputRule[rule].
 // Intermediate results to derive `ArgOfTerm` because we use linked list and the reason
 // I don't use `Flatmap()` on `Vec<Term>` instead is that Formula does not support it.
 ArgListOfTerm[(arg_list, c)] :- c in Term[Composite{_, arg_list}].
 ArgListOfTerm[(deref(nxt_arg_list), c)] :- ArgListOfTerm[(List {_, ListNxt {nxt_arg_list}}, c)].
 
 ArgOfTerm[(deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(List {term_ref, _}, c)].
-VarOfTerm[(v, v)] :- v in Term[Variable{}].
+VarOfTerm[(variable, variable)] :- variable in Term[Variable{}].
 VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(Variable{}, term)], var variable = pair.0.
 
 HeadListInRule[(head_head, ref_new(r))] :- r in Rule[Rule {_, head_head, _}].
 HeadListInRule[(deref(nxt_head), r)] :- HeadListInRule[(NonNullList {_, NonNullNxt { nxt_head }}, r)].
 HeadInRule[(term, r)] :- HeadListInRule[(NonNullList {term, _}, r)].
 
-ConstraintListInRule[(constraint_head, ref_new(r))] :- r in Rule[Rule{ _, _, constraint_head }].
-ConstraintListInRule[(deref(nxt_constraint), r)] :- 
-	ConstraintListInRule[(NonNullList {_, NonNullNxt { nxt_constraint }}, r)].
-ConstraintInRule[(constraint, r)] :- ConstraintListInRule[(NonNullList {constraint, _}, r)]. 
+ConstraintListInRule[(0, constraint_head, ref_new(r))] :- r in Rule[Rule{ _, _, constraint_head }].
+ConstraintListInRule[(index + 1, deref(nxt_constraint), r)] :- 
+	ConstraintListInRule[(index, NonNullList {_, NonNullNxt { nxt_constraint }}, r)].
+ConstraintInRule[(index, constraint, r)] :- ConstraintListInRule[(index, NonNullList {constraint, _}, r)]. 
 
-PosPredInRule[(pos_term, r)] :- ConstraintInRule[(PredCons {false, pos_term}, r)].
-NegPredInRule[(neg_term, r)] :- ConstraintInRule[(PredCons {true, neg_term}, r)].
+// Add all positive and negative terms into the Term relation
+Term[pos_term], PosPredInRule[(pos_term, r)] :- ConstraintInRule[(_, PredCons {false, pos_term}, r)].
+Term[neg_term], NegPredInRule[(neg_term, r)] :- ConstraintInRule[(_, PredCons {true, neg_term}, r)].
 PosVarInRule[(variable, r)] :- PosPredInRule[(pos_term, r)], VarOfTerm[(variable, pos_term)].
 NegVarInRule[(variable, r)] :- NegPredInRule[(neg_term, r)], VarOfTerm[(variable, neg_term)].
-NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], NegPredInRule[(neg_pred, r)]. 
+NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], 
+	VarOfTerm[(variable, neg_pred)], 
+	NegPredInRule[(neg_pred, r)].
 NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAsSetdiff[(neg_pred, r)].  
-SetcompreInRule[(def_term, deref(setcompre_ref), r)] :- ConstraintInRule[(AssignCons{def_term, SetcompreExpr{setcompre_ref}}, r)].
 
-DependentSetcompre[(def_term, shared_var, setcompre, rule)] :- 
-	sc_tuple in SetcompreInRule[(def_term, setcompre, rule)],
+// Add inner rule of set comprehension back into the Rule relation
+Rule[inner_rule],
+Setcompre[(setcompre, rule)], 
+DefTermOfSetcompre[(def_term, setcompre, rule)] :-
+	ConstraintInRule[(_, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
+	var setcompre = deref(setcompre_ref),
+	var inner_rule = deref(setcompre.rule).
+
+DependentSetcompre[(setcompre, rule)], OuterVarInDepSetcompre[(shared_var, setcompre, rule)] :- 
+	Setcompre[(setcompre, rule)],
 	var sc_rule = setcompre.rule,
 	// TODO: What about the negative variables in rules?
 	PosVarInRule[(shared_var, sc_rule)], 
 	PosVarInRule[(shared_var, rule)].
 
-IndependentSetcompre[(def_term, setcompre, rule)] :- 
-	SetcompreInRule[(def_term, setcompre, rule)], 
-	not DependentSetcompre[(def_term, _, setcompre, rule)].
+IndependentSetcompre[(setcompre, rule)] :- Setcompre[(setcompre, rule)], 
+	not DependentSetcompre[(setcompre, rule)].
 
 /***********************************************************/
 /******* Helper Functions for Formula 2.0 Meta-model *******/
