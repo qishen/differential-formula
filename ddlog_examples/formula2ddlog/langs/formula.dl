@@ -153,3 +153,23 @@ function to_string(type_spec: TypeSpec): string {
 		EnumType {enum_name, _} -> { enum_name }
 	}
 }
+
+function to_string(term: Term): string {
+	match (term) {
+		AtomStr { str } -> str,
+		AtomInt { i } -> to_string(i),
+		AtomPosInt { i } -> to_string(i),
+		AtomNegInt { i } -> to_string(i),
+		AtomFloat { f } -> to_string(f),
+		AtomBool { b } -> to_string(b),
+		Variable { root, fragments } -> {
+			root ++ "." ++ fragments.join(".")
+		},
+		Composite { name, args} -> {
+			var arg_str_list = list_map(args, |x| to_string(deref(x)));
+			var arg_str_vec = into_vec(arg_str_list);
+			var args_str = arg_str_vec.join(", ");
+			name ++ "(" ++ args_str ++ ")"
+		},
+	} 
+}

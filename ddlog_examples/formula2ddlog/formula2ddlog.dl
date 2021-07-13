@@ -135,68 +135,107 @@ DDTermInSetcompreHead[(ddterm, setcompre, r)] :-
 	// Find the type of `DDTerm`
 	DDTermOfDDTypeSpec[(ddterm, ddtypespec)].
 
-// 1. Create a new union type to represent all types in the head of set comprehension
-// typedef SCHeadUnion = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn}
-// 
-// 2. Generate a new rule in the format of DDlog:
-// SCHeadUnion[T1{h1}], SCHeadUnion[T1{h2}], SCHeadUnion[Tn{hn}] :- SCPred(v1, v2,..., vn), SCPredn(..). 
-// in which `hn` may contain the variables in `Pred(v1,...,vn)`
-// 
-// TODO: Variables in `Cn` are all consumed if we do aggregation in the current rule so they cannot be
-// used again in the head for assignment. One solution is to group by all variables in the `Cn` and 
-// add `(var v1,..., var vn) = g.group_key()` but may have to rename the variables.
-// The other solution is to create a new type and relation to hold the aggregated result.
-//
-// 3. The set comprehension `def_term = SetOp({..})`in the original rule is replaced by three atoms 
-// Head :- SCHeadUnion[t], var g = (t).group_by(()), var def_term = g.group_count(), C1, C2,..., Cn.
-// in which `Cn` is the remaining non-aggregation constraints in the rule.
-DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
+// 1. Create a new union type to represent all types in the head of set comprehension 
+// `typedef SCHeadUnionR0SC1 = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn }`
+// `SCHeadUnionR0SC1` means the second set comprehension in the first rule 
+// A new relation is created to hold all records of the union type 
+// every term in the head of set comprehension is wrapped in a new constructor `Ti {term}` 
+// before adding to the new output relation
+// `output relation SCHeadUnionR0SC1 [SCHeadUnionR0SC1]`
+DDTypeSpec[setcompre_head_union_type], 
+DDRelation[setcompre_head_ddrelation] :- 
 	IndependentSetcompre[(setcompre, rule)],
 	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
 	ConstraintInRule[(setcompre_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
 	setcompre == deref(setcompre_ref),
 	var ddtype_group = (ddtype).group_by((setcompre_id, setcompre, rule)),
 	var ddtype_vec = ddtype_group.map(|t| t),
-	// Access the key because setcompre_id, setcompre and rule are all consumed in the aggregation
 	(var sc_id, var sc, var r) = ddtype_group.group_key(),
 	var rule_id = r.id,
 	// The name of new union type should include the rule id and the setcompre id
 	var union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
+	// Generate `typedef SCHeadUnion = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn}`
+	// given a list of types `ddtype_vec = [T1, T2, ..., Tn]`
 	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
 	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
 
-DDAtomInRule[(dd_atom_for_sc_rule, sc_rule)], 
-DDRhsInRule[(group_assignment, rule)], 
-DDRhsInRule[(result_assignment, rule)], 
-DDRhsInRule[(dd_head_union_atom_rhs, rule)] :- 
+// 2. Generate a new rule in the format of DDlog to derive terms in the head:
+// SCHeadUnion[T1{h1}], SCHeadUnion[T1{h2}], SCHeadUnion[Tn{hn}] :- SCPred(v1, v2,..., vn), SCPredn(..). 
+// in which `hn` may contain the variables in `SCPred(v1,...,vn)` which is the predicate constraint in
+// the set comprehension
+DDAtomInRule[(dd_atom_for_sc_rule, sc_rule)] :- 
 	IndependentSetcompre[(setcompre, rule)], 
 	DDTermInSetcompreHead[(dd_head_term, setcompre, rule)], 
 	ConstraintInRule[(sc_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
 	setcompre == deref(setcompre_ref),
 	var rule_id = rule.id,
 	var sc_rule = setcompre.rule,
+	// TODO: Need to wrap the term into T{term} because of the union type
 	var dd_sc_head_term_expr = DDTermExpr { ref_new(dd_head_term) }, 
 	var union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
 	// Find the auto-generated new relation by name
 	dd_sc_head_union_relation in DDRelation[DDRelation {_,union_type_name,_}],
 	// SCHeadUnion[tn] where `tn` is the term from the head of set comprehension
-	var dd_atom_for_sc_rule = DDAtom { None, ref_new(dd_sc_head_union_relation), dd_sc_head_term_expr },
+	var dd_atom_for_sc_rule = DDAtom { None, ref_new(dd_sc_head_union_relation), dd_sc_head_term_expr }.
+
+// 3. New relation and type to hold the result of set comprehension
+// TODO: Think about the type of aggregation results other than int and float.
+// typedef SCResultR0SC1 = SCResultR0SC1Int {i: usize} | SCResultR0SC1Float {f: float}
+// SCResultR0SC1[t] :- SCHeadUnion[t], var g = (t).group_by(()), var result = g.group_count().
+DDTypeSpec[setcompre_result_type], 
+DDRelation[setcompre_result_ddrelation] :- 
+	IndependentSetcompre[(setcompre, rule)],
+	ConstraintInRule[(setcompre_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
+	setcompre == deref(setcompre_ref),
+	var rule_id = rule.id,
+	// The name of new union type should include the rule id and the setcompre id
+	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ setcompre_id, 
+	var setcompre_result_type = union_of_ddtypes(sc_result_name, [Int, Float]),
+	var setcompre_result_ddrelation = DDRelation { false, sc_result_name, setcompre_result_type }.
+
+// 4. The set comprehension `def_term = SetOp({..})` in the original rule is replaced with a new rule
+// and a predicate in the original rule. 
+// SCResultR0SC1[SCResultR0SC1_Int{ result }] :- SCHeadUnion[t], var g = (t).group_by(()), var result = g.group_count().
+// Original rule only has predicates in it:
+// Head :- def_term in SCResultR0SC1[t], C1, C2, ..., Cn.
+DDRule[DDRule { [sc_result_head_atom], [group_assignment, result_assignment, dd_head_union_atom_rhs] }],
+DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
+	IndependentSetcompre[(setcompre, rule)], 
+	ConstraintInRule[(sc_id, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
+	setcompre == deref(setcompre_ref),
+	var rule_id = rule.id,
+	var union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
+	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
+	dd_sc_head_union_relation in DDRelation[DDRelation {_,union_type_name,_}],
+	dd_sc_result_relation in DDRelation[DDRelation {_,sc_result_name,_}],
 	// TODO: May have conflict if a rule has multiple independent set comprehensions
-	// Add a new atom SCHeadUnion[t] to the rule
-	var dd_head_union_atom_rhs = ddterm_to_ddrhs(None, ref_new(dd_sc_head_union_relation), DDVar{"t"}, false),
+	// Add a new Rhs SCHeadUnion[t] to the new rule
+	var dd_head_union_atom_rhs = ddterm_to_ddrhs(
+		None, 
+		ref_new(dd_sc_head_union_relation), 
+		DDVar{"t"}, 
+		false),
+	// Add a new Rhs def_term in SCHeadUnion[t] to the original rule
+	var dd_head_union_atom_rhs_with_def = ddterm_to_ddrhs(
+		Some { to_string(def_term) }, 
+		ref_new(dd_sc_head_union_relation), 
+		DDVar{"t"}, 
+		false),
 	// var g = (t).group_by(()).
 	var t_ref = ref_new(DDVar { "t" }),
 	var t_expr_ref = ref_new(DDTermExpr { t_ref }),
 	var t_vec = [t_expr_ref],
 	var group_assignment = DDGroup { "g", DDTupleExpr{t_vec}, DDTupleExpr{vec_empty()} }, 
 	// var result = g.group_count().
-	var g_ref = ref_new(DDVar { "g" }),
-	var g_expr_ref = ref_new(DDTermExpr { g_ref }),
 	var result_ref = ref_new(DDVar { "result" }),
 	var result_expr = DDTermExpr { result_ref },
+	var g_ref = ref_new(DDVar { "g" }),
+	var g_expr_ref = ref_new(DDTermExpr { g_ref }),
 	// TODO: Replace `group_count` based on the exact setcompre.sop
 	var aggregation_expr = DDDotFunctionCallExpr { g_expr_ref, "group_count", vec_empty() },
-	var result_assignment = DDRhsAssignment { result_expr, aggregation_expr }.
+	var result_assignment = DDRhsAssignment { result_expr, aggregation_expr },
+	var sc_result_head_atom = DDAtom { None, ref_new(dd_sc_result_relation), DDTermExpr { result_ref } }.
+
 
 /************** Handle Dependent Set Comprehension *************/
 // The shared variables between outer scope and inner scope of set comprehension cannot occur
@@ -223,20 +262,21 @@ DDRhsInRule[(dd_head_union_atom_rhs, rule)] :-
 // 3. The set comprehension `def_term = SetOp({..})`in the original rule is replaced by three atoms 
 // Head :- SCHeadUnion[t], var g = (t).group_by(()), var def_term = g.group_count(), C1, C2,..., Cn.
 // in which `Cn` is the remaining non-aggregation constraints in the rule.
-DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
-	OuterVarInDepSetcompre[(shared_var, setcompre, rule)],
-	DependentSetcompre[(setcompre, rule)],
-	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
-	var ddtype_group = (ddtype).group_by((setcompre, rule)),
-	var ddtype_vec = ddtype_group.map(|t| t),
-	// setcompre and rule are both consumed in the aggregation
-	(var sc, var r) = ddtype_group.group_key(),
-	var rule_id = r.id,
-	// TODO: The name of new union type should include
-	// TODO: Add the index of setcompre rule id and setcompre id
-	var union_type_name = "SCHeadUnion" ++ rule_id, 
-	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
-	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
+
+// DDTypeSpec[setcompre_head_union_type], DDRelation[setcompre_head_ddrelation] :- 
+// 	OuterVarInDepSetcompre[(shared_var, setcompre, rule)],
+// 	DependentSetcompre[(setcompre, rule)],
+// 	DDTypeSpecInSetcompreHead[(ddtype, setcompre, rule)],
+// 	var ddtype_group = (ddtype).group_by((setcompre, rule)),
+// 	var ddtype_vec = ddtype_group.map(|t| t),
+// 	// setcompre and rule are both consumed in the aggregation
+// 	(var sc, var r) = ddtype_group.group_key(),
+// 	var rule_id = r.id,
+// 	// TODO: The name of new union type should include
+// 	// TODO: Add the index of setcompre rule id and setcompre id
+// 	var union_type_name = "SCHeadUnion" ++ rule_id, 
+// 	var setcompre_head_union_type = union_of_ddtypes(union_type_name, ddtype_vec),
+// 	var setcompre_head_ddrelation = DDRelation { false, union_type_name, setcompre_head_union_type }.
 
 
 /***************** Create New DDRule in DDlog ********************/
@@ -301,7 +341,7 @@ function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
 				var dd_cons_type = DDTypeCons { union_tag, from_vec(field_list) };
 				vec_push(dd_cons_types, dd_cons_type);
 			};
-			DDUnionTypeSpec { union_name, from_nonnull_vec(dd_cons_types) }
+			DDUnionTypeSpec { union_name, from_nonnull_vec(dd_cons_types).unwrap_or_default() }
 		},
 		ConstantType {constant} -> { 
 			// A constructor with no arguments or fields as `typedef Constant = Constant {}`

@@ -12,9 +12,22 @@ function from_singleton_to_nonnull_list(item: 'N): NonNullList<'N> {
 	NonNullList { item, NULL }
 }
 
-function from_nonnull_vec(vector: Vec<'N>): NonNullList<'N> {
-	var first = unwrap_or_default(vec_nth(vector, 0));
-	NonNullList { first, NULL }
+function from_nonnull_vec(vector: mut Vec<'N>): Option<NonNullList<'N>> {
+	if (vec_len(vector) == 0) {
+		None
+	} else {
+		var last = vector.pop().unwrap_or_default();
+		var list_without_last_opt = from_nonnull_vec(vector);
+		match (list_without_last_opt) {
+			Some {list_without_last} -> {
+				var nonnull_list = nonnull_list_append(list_without_last, last);
+				Some { nonnull_list }
+			},
+			None -> { 
+				Some { NonNullList { last, NULL } }
+			}
+		}
+	}
 }
 
 function nonnull_list_nth(list: NonNullList<'N>, i: usize): Option<'N> {
@@ -93,6 +106,19 @@ function from_vec(vector: mut Vec<'N>): List<'N> {
 		var last = vector.pop().unwrap_or_default();
 		var list_without_last = from_vec(vector);
 		list_append(list_without_last, last)
+	}
+}
+
+function into_vec(list: mut List<'N>): Vec<'N> {
+	var reversed_list = list_reverse(list);
+	match (reversed_list) {
+		List { node, ListNxt {nxt_list_ref} } -> {
+			var nxt_list = deref(nxt_list_ref);
+			var inner_vec = into_vec(nxt_list);
+			vec_push(inner_vec, node);
+			inner_vec
+		},
+		EMPTY -> { vec_empty() }
 	}
 }
 

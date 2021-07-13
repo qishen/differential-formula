@@ -13,25 +13,27 @@ use differential_datalog::program::Update; // A type representing updates to the
 // use differential_datalog::record::{FromRecord, IntoRecord}; // A type representing individual facts
 // The `differential_datalog::program::config` module declares datatypes
 // used to configure DDlog program on startup.
-use differential_datalog::program::config::{Config, ProfilingKind};
+use differential_datalog::program::config::{Config, ProfilingConfig};
+use differential_datalog::api::HDDlog;
 // use differential_datalog::api::HDDlog;
 
-
 use formula2ddlog_ddlog::typedefs::langs::formula::Term;
-use formula2ddlog_ddlog::typedefs::langs::lib::list::from_vec;
+use formula2ddlog_ddlog::typedefs::langs::lib::list::{from_nonnull_vec, from_vec};
 use rand::{Rng, SeedableRng, StdRng};
-use formula2ddlog_ddlog::api::HDDlog;
 use formula2ddlog_ddlog::Relations;
 use formula2ddlog_ddlog::relid2name;
 
 // import all types defined by the datalog program itself
-use formula2ddlog_ddlog::typedefs::ddlog_std::{Ref, Vec, vec_empty};
+use formula2ddlog_ddlog::typedefs::ddlog_std::{Ref, Vec, option_unwrap_or_default, vec_empty};
 use formula2ddlog_ddlog::typedefs::langs::formula::*;
 use formula2ddlog_ddlog::typedefs::langs::ddlog::*;
 
 
 use differential_formula::term::*;
 use differential_formula::module::*;
+use differential_formula::constraint::{Constraint as FConstraint};
+use differential_formula::expression::*;
+use differential_formula::rule::Rule as FRule;
 use differential_formula::parser::combinator::parse_program;
 
 fn convert_raw_type(raw_type: RawType) -> Option<TypeSpec> {
@@ -101,15 +103,30 @@ fn convert_term(atomic_term: AtomicTerm) -> Term {
     }
 }
 
+fn convert_constraint(constraint: FConstraint) -> Constraint {
+    todo!()
+}
+
+fn convert_rule(rid: String, rule: FRule) -> Rule {
+    let mut terms: Vec<Term> = rule.head().into_iter().map(|x| convert_term(x.clone())).collect();
+    let mut cons: Vec<Constraint> = rule.body().into_iter().map(|x| convert_constraint(x)).collect();
+    let term_list = option_unwrap_or_default(&from_nonnull_vec(&mut terms));
+    let cons_list = option_unwrap_or_default(&from_nonnull_vec(&mut cons));
+    let rule = Rule { id: rid, head: term_list, body: cons_list };
+    rule
+}
+
 pub struct DDLogTransformation{
     hddlog: HDDlog,
 }
 
 impl DDLogTransformation {
     pub fn new()  -> Result<DDLogTransformation, String> {
-        // let config = Config::new();
+        let config = Config::new()
+            .with_timely_workers(1)
+            .with_profiling_config(ProfilingConfig::SelfProfiling);
         // let (hddlog, init_state) = formula2ddlog_ddlog::run_with_config(config, false); 
-        let (hddlog, init_state) = formula2ddlog_ddlog::api::HDDlog::run(1, true)?;
+        let (hddlog, init_state) = formula2ddlog_ddlog::run_with_config(config, false)?;
         Self::dump_delta(&init_state);
         return Ok(Self{hddlog});
     }
@@ -129,7 +146,6 @@ impl DDLogTransformation {
                 v: type_spec.into_ddvalue()
             }
         }).collect::<Vec<_>>();
-
         updates
     } 
 
@@ -141,7 +157,17 @@ impl DDLogTransformation {
                 v: term.into_ddvalue(),
             }
         }).collect::<Vec<_>>();
+        updates
+    } 
 
+    pub fn create_rules(&mut self, rules: Vec<FRule>) -> Vec<Update<DDValue>> {
+        let updates = rules.into_iter().enumerate().map(|(i, rule)| {
+            let rule = convert_rule(i.to_string(), rule);
+            Update::Insert {
+                relid: Relations::langs_formula_Rule as RelId,
+                v: rule.into_ddvalue(),
+            }
+        }).collect::<Vec<_>>();
         updates
     } 
 
@@ -170,6 +196,7 @@ fn main() {
     let graph = env.get_domain_by_name("Graph").unwrap();
     let m = env.get_model_by_name("m").unwrap();
     let meta = graph.meta_info();
+    let rules = meta.rules();
     let tmap = meta.type_map();
     let raw_types = tmap.into_iter().map(|(name, raw_type)| raw_type.clone()).collect::<Vec<RawType>>();
     let terms = m.terms().into_iter().map(|x| x.clone()).collect();
@@ -177,6 +204,7 @@ fn main() {
     let mut updates = vec_empty();
     let type_updates = xform_ddlog.create_types(raw_types);
     let term_updates = xform_ddlog.create_terms(terms);
+    // let rule_updates = xform_ddlog.create_rules(rules);
     updates.extend(type_updates);
     updates.extend(term_updates);
     let delta = xform_ddlog.flush_updates(updates).unwrap();

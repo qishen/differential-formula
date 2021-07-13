@@ -1,3 +1,4 @@
+import vec
 import langs::lib::list
 import langs::lib::operators
 
@@ -35,7 +36,7 @@ typedef DDRelation = DDRelation { is_input: bool, name: string, type_spec: DDTyp
 // There are more expression in DDlog referene and we only pick a few we need
 typedef DDExpr =  DDTermExpr { term: Ref<DDTerm> } | 
 				  // A tuple of DDExpr as (e1, e2, ..., en)
-				  DDTupleExpr { terms: Vec<Ref<DDExpr>> } |
+				  DDTupleExpr { exprs: Vec<Ref<DDExpr>> } |
 				  // Function call as `func(arguments)`
 				  DDFunctionCallExpr { func: Ref<DDExpr>, arguments: Vec<Ref<DDExpr>> } |
 				  // Function call on an object as `a.call(arguments)`
@@ -67,8 +68,6 @@ output relation DDTermOfDDTypeSpec [(DDTerm, DDTypeSpec)]
 output relation DDRelation [DDRelation]
 output relation DDRule [DDRule]
 
-
-/********** Helper Functions *********/
 function to_string(type_spec: DDTypeSpec): string {
 	match (type_spec) {
 		BigInt -> { "BigInt" },
@@ -83,6 +82,85 @@ function to_string(type_spec: DDTypeSpec): string {
 	}
 }
 
+function to_string(term: DDTerm): string {
+	match (term) {
+		DDBigInt { bigint_val } -> { to_string(bigint_val) },
+		DDBool { b } -> { to_string(b) },
+		DDStr { str } -> { str },
+		DDBitvector { bv } -> { to_string(bv) },
+		DDInt { i } -> { to_string(i) },
+		DDDouble { d } -> { to_string(d) },
+		DDFloat { f } -> { to_string(f) },
+		DDVar { var_name } -> { var_name },
+		DDVarDecl { var_name } -> { "var" ++ var_name },
+		DDCons { cons_name, args } -> {
+			var arguments = args;
+			var arg_vec = into_vec(arguments);
+			var args_str = arg_vec.map(|x| to_string(x)).join(", ");
+			cons_name ++ "{" ++ args_str ++ "}"
+		},
+	}
+}
+
+function to_string(expr: DDExpr): string {
+	match (expr) {
+		DDTermExpr { term_ref } -> { to_string(deref(term_ref)) },
+		DDTupleExpr { exprs } -> {
+			var exprs_str = exprs.map(|x| to_string(deref(x))).join(", "); 
+			"(" ++ exprs_str ++ ")"
+		},
+		DDFunctionCallExpr { expr, args } -> {
+			var args_str = args.map(|x| to_string(deref(x))).join(", "); 
+			to_string(deref(expr)) ++ "(" ++ args_str ++ ")"
+		},
+		DDDotFunctionCallExpr { obj, func_name, arguments } -> {
+			var args_str = arguments.map(|x| to_string(deref(x))).join(", ");
+			to_string(deref(obj)) ++ "." ++ func_name ++ "(" ++ args_str ++ ")"
+		},
+		DDTermFieldExpr { expr, field } -> { to_string(deref(expr)) ++ "." ++ field },
+		DDUnaryExpr { expr, uop } -> { to_string(uop) ++ to_string(deref(expr)) },
+		DDArithExpr { left, right, aop } -> {
+			to_string(deref(left)) ++ to_string(aop) ++ to_string(deref(right))
+		},
+		DDBinExpr { left, right, bop } -> {
+			to_string(deref(left)) ++ to_string(bop) ++ to_string(deref(right))
+		},
+	}
+}
+
+function to_string(atom: DDAtom): string {
+	var atom_str = deref(atom.rel).name ++ "[" ++ to_string(atom.expr) ++ "]";
+	match (atom.var_name) {
+		Some { var_name } -> { var_name ++ "in" ++ atom_str },
+		None -> { atom_str }
+	}
+}
+
+function to_string(rhs: DDRhs): string {
+	match (rhs) {
+		DDRhsAtom { negated, atom } -> {
+			if (negated) {
+				"not" ++ to_string(atom)
+			} else {
+				to_string(atom)
+			}
+		},
+		DDRhsCondition { expr } -> to_string(expr),
+		DDRhsAssignment { to, from } -> to_string(to) ++ "=" ++ to_string(from),
+		DDGroup { var_name, group, by } -> {
+			"var" ++ var_name ++ "=" ++ to_string(group) ++ ".group_by(" ++ to_string(by) ++ ")"
+		}
+	}
+}
+
+function to_string(rule: DDRule): string {
+	var head_str = rule.head.map(|x| to_string(x)).join(", ");
+	var body_str = rule.body.map(|x| to_string(x)).join(", ");
+	head_str ++ " :- " ++ body_str ++ "."
+}
+
+
+/******************** Helper Functions *****************/
 function ddterm_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
 	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
 	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
@@ -116,5 +194,5 @@ function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpe
 		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
 		constructors.push(constructor);
 	};
-	DDUnionTypeSpec { union_name, from_nonnull_vec(constructors) }
+	DDUnionTypeSpec { union_name, from_nonnull_vec(constructors).unwrap_or_default() }
 }
