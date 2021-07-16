@@ -1,9 +1,12 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::convert::TryInto;
 
+use differential_datalog::record::IntoRecord;
 // Trait that must be implemented by an instance of a DDlog program. 
 // Type that represents a set of changes to DDlog relations.
 // Returned by `DDlog::transaction_commit_dump_changes()`.
+use differential_datalog::record::FromRecord;
 use differential_datalog::{DDlog, DDlogDump, DDlogDynamic}; 
 use differential_datalog::DeltaMap; // A trait representing the changes resulting from a given update.
 use differential_datalog::ddval::DDValue; // A generic DLog value type
@@ -15,24 +18,29 @@ use differential_datalog::program::Update; // A type representing updates to the
 // used to configure DDlog program on startup.
 use differential_datalog::program::config::{Config, ProfilingConfig};
 use differential_datalog::api::HDDlog;
-// use differential_datalog::api::HDDlog;
 
 use formula2ddlog_ddlog::typedefs::langs::formula::Term;
 use formula2ddlog_ddlog::typedefs::langs::lib::list::{from_nonnull_vec, from_vec};
-use rand::{Rng, SeedableRng, StdRng};
 use formula2ddlog_ddlog::Relations;
 use formula2ddlog_ddlog::relid2name;
 
 // import all types defined by the datalog program itself
-use formula2ddlog_ddlog::typedefs::ddlog_std::{Ref, Vec, option_unwrap_or_default, vec_empty};
+use formula2ddlog_ddlog::typedefs::ddlog_std::{Ref, Vec, option_unwrap_or_default, ref_new, vec_empty};
 use formula2ddlog_ddlog::typedefs::langs::formula::*;
 use formula2ddlog_ddlog::typedefs::langs::ddlog::*;
+use formula2ddlog_ddlog::typedefs::langs::lib::list::*;
+use formula2ddlog_ddlog::typedefs::langs::lib::operators::*;
 
 
 use differential_formula::term::*;
 use differential_formula::module::*;
 use differential_formula::constraint::{Constraint as FConstraint};
-use differential_formula::expression::*;
+use differential_formula::expression::{
+    Expr as FExpr, 
+    BaseExpr as FBaseExpr, 
+    BasicExprOps, 
+    SetComprehension
+};
 use differential_formula::rule::Rule as FRule;
 use differential_formula::parser::combinator::parse_program;
 
@@ -103,8 +111,65 @@ fn convert_term(atomic_term: AtomicTerm) -> Term {
     }
 }
 
+fn convert_setcompre(rid: String, sc: SetComprehension) -> Setcompre {
+    let sc_rule: FRule = sc.clone().into();
+    let sop = match &sc.op {
+        differential_formula::expression::SetCompreOp::Count => SetOp::Count,
+        differential_formula::expression::SetCompreOp::Sum => SetOp::Sum,
+        differential_formula::expression::SetCompreOp::MaxAll => SetOp::Max,
+        differential_formula::expression::SetCompreOp::MinAll => SetOp::Min,
+        _ => SetOp::Count
+    };
+    let atom: AtomEnum = AtomEnum::Int(sc.default.clone());
+    let default_term = AtomicTerm::Atom(AtomicAtom{
+        sort: RawType::TypeId(Cow::from("Integer")),
+        val: atom
+    });
+    let default = convert_term(default_term);
+    Setcompre { rule: ref_new(&convert_rule(rid, sc_rule)), sop, default}
+}
+
+fn convert_expr(expr: FExpr) -> Expr {
+    match expr {
+        FExpr::BaseExpr(base_expr) => {
+            match base_expr {
+                FBaseExpr::Term(term) => { 
+                    Expr::BaseExpr { term: convert_term(term)} 
+                },
+                FBaseExpr::SetComprehension(setcompre) => {
+                    // TODO: Derive a new name for the rule of set comprehension 
+                    Expr::SetcompreExpr { sc: ref_new(&convert_setcompre("".to_string(), setcompre)) }
+                }
+            }
+        },
+        FExpr::ArithExpr(arith_expr) => {
+            todo!()
+        } 
+    }
+}
+
 fn convert_constraint(constraint: FConstraint) -> Constraint {
-    todo!()
+    match constraint {
+        FConstraint::Predicate(pred) => {
+            Constraint::PredCons { negated: pred.negated, term: convert_term(pred.term) }
+        },
+        FConstraint::Binary(bin) => {
+            let bop = match bin.op {
+                differential_formula::constraint::BinOp::Eq => BinOp::Eq,
+                differential_formula::constraint::BinOp::Ne => BinOp::Neq,
+                differential_formula::constraint::BinOp::Ge => BinOp::Geq,
+                differential_formula::constraint::BinOp::Gt => BinOp::Gt,
+                differential_formula::constraint::BinOp::Le => BinOp::Leq,
+                differential_formula::constraint::BinOp::Lt => BinOp::Lt,
+            };
+            Constraint::BinaryCons {
+                left: convert_expr(bin.left),
+                right: convert_expr(bin.right),
+                bop 
+            }
+        },
+        FConstraint::TypeConstraint(_) => { todo!() }
+    }
 }
 
 fn convert_rule(rid: String, rule: FRule) -> Rule {
@@ -164,7 +229,7 @@ impl DDLogTransformation {
         let updates = rules.into_iter().enumerate().map(|(i, rule)| {
             let rule = convert_rule(i.to_string(), rule);
             Update::Insert {
-                relid: Relations::langs_formula_Rule as RelId,
+                relid: Relations::langs_formula_InputRule as RelId,
                 v: rule.into_ddvalue(),
             }
         }).collect::<Vec<_>>();
@@ -180,11 +245,34 @@ impl DDLogTransformation {
         }
     }
 
+    pub fn print_program(delta: &DeltaMap<DDValue>) {
+        let ddrule_changes = delta.try_get_rel(Relations::langs_ddlog_DDRule as RelId).unwrap();
+        let ddtype_changes = delta.try_get_rel(Relations::langs_ddlog_DDTypeSpec as RelId).unwrap();
+        let ddrel_changes = delta.try_get_rel(Relations::langs_ddlog_DDRelation as RelId).unwrap();
+        for (val, _weight) in ddtype_changes.iter() {
+            // println!("{} {:+}", val, weight);
+            let ddtype_record = val.clone().into_record();
+            let ddtype: DDTypeSpec = DDTypeSpec::from_record(&ddtype_record).unwrap();
+            println!("{}", to_string_langs_ddlog_DDTypeSpec___Stringval(&ddtype));
+        }
+        for (val, _weight) in ddrel_changes.iter() {
+            // println!("{} {:+}", val, weight);
+            let ddrelation_record = val.clone().into_record();
+            let ddrelation: DDRelation = DDRelation::from_record(&ddrelation_record).unwrap();
+            println!("{}", to_string_langs_ddlog_DDRelation___Stringval(&ddrelation));
+        }
+        for (val, _weight) in ddrule_changes.iter() {
+            // println!("{} {:+}", val, weight);
+            let ddrule_record = val.clone().into_record();
+            let ddrule: DDRule = DDRule::from_record(&ddrule_record).unwrap();
+            println!("{}", to_string_langs_ddlog_DDRule___Stringval(&ddrule));
+        }
+    }
+
     pub fn stop(&mut self){
         self.hddlog.stop().unwrap();
     }
 }
-
 
 fn main() {
     let mut xform_ddlog = DDLogTransformation::new().unwrap();
@@ -196,7 +284,7 @@ fn main() {
     let graph = env.get_domain_by_name("Graph").unwrap();
     let m = env.get_model_by_name("m").unwrap();
     let meta = graph.meta_info();
-    let rules = meta.rules();
+    let rules: Vec<FRule> = meta.rules().into();
     let tmap = meta.type_map();
     let raw_types = tmap.into_iter().map(|(name, raw_type)| raw_type.clone()).collect::<Vec<RawType>>();
     let terms = m.terms().into_iter().map(|x| x.clone()).collect();
@@ -204,10 +292,12 @@ fn main() {
     let mut updates = vec_empty();
     let type_updates = xform_ddlog.create_types(raw_types);
     let term_updates = xform_ddlog.create_terms(terms);
-    // let rule_updates = xform_ddlog.create_rules(rules);
+    let rule_updates = xform_ddlog.create_rules(rules);
     updates.extend(type_updates);
     updates.extend(term_updates);
+    updates.extend(rule_updates);
     let delta = xform_ddlog.flush_updates(updates).unwrap();
 
-    DDLogTransformation::dump_delta(&delta);
+    // DDLogTransformation::dump_delta(&delta);
+    DDLogTransformation::print_program(&delta);
 }

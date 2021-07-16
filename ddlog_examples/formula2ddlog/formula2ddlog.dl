@@ -335,7 +335,7 @@ function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
 			var dd_cons_types = vec_empty();
 			for (subtype in subtypes) {
 				var dd_subtype_spec = to_dd_typespec(subtype);
-				var union_tag = union_name ++ to_string(subtype);
+				var union_tag = union_name ++ type_alias(dd_subtype_spec);
 				var single_dd_field = DDField { union_tag, ref_new(dd_subtype_spec) };
 				var field_list = [single_dd_field];
 				var dd_cons_type = DDTypeCons { union_tag, from_vec(field_list) };

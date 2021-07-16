@@ -30,6 +30,35 @@ function from_nonnull_vec(vector: mut Vec<'N>): Option<NonNullList<'N>> {
 	}
 }
 
+function into_nonnull_vec(list: mut NonNullList<'N>): Vec<'N> {
+	// Have to reverse the list first because `Vec<T>` does not support insertion
+	// at the beginning of the vector
+	var reversed_list = nonnull_list_reverse(list);
+	// FIXME: A workarond to please the compiler
+	// var node = reversed_list.node;
+	var node = nonnull_list_nth(reversed_list, 0).unwrap_or_default();
+	var nxt = nonnull_list_nxt(reversed_list);
+	// match (reversed_list.nxt) {
+	match (nxt) {
+		NonNullNxt { nxt_nonnull_list_ref } -> {
+			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
+			var vector = into_nonnull_vec(nxt_nonnull_list);
+			vec_push(vector, node);
+			vector
+		},
+		NULL -> {
+			var vector = vec_empty();
+			vec_push(vector, node);
+			vector
+		}
+	}
+}
+
+// A helper function for the temporary workaroud
+function nonnull_list_nxt(list: NonNullList<'N>): NonNullNxt<'N> {
+	list.nxt
+}
+
 function nonnull_list_nth(list: NonNullList<'N>, i: usize): Option<'N> {
 	if (i == 0) {
 		Some{ list.node }
@@ -66,10 +95,7 @@ function nonnull_list_reverse(list: mut NonNullList<'N>): NonNullList<'N> {
 			var reversed_nxt_nonnull_list = nonnull_list_reverse(nxt_nonnull_list);
 			nonnull_list_append(reversed_nxt_nonnull_list, list.node)
 		},
-		NULL -> { 
-			// No need to reverse if only one item in the list
-			list 
-		}
+		NULL -> { list }
 	}
 }
 
