@@ -70,20 +70,22 @@ output relation DDTermOfDDTypeSpec [(DDTerm, DDTypeSpec)]
 output relation DDRelation [DDRelation]
 output relation DDRule [DDRule]
 
+// Print out only the type alias or type name in DDLog
 function type_alias(type_spec: DDTypeSpec): string {
 	match (type_spec) {
-		BigInt -> { "BigInt" },
-		Bool -> { "Bool" },
-		Str -> { "String" },
-		Bitvector -> { "Bitvector" },
-		Int -> { "Int" },
-		Double -> { "Double" },
-		Float -> { "Float" },
+		BigInt -> { "bigint" },
+		Bool -> { "bool" },
+		Str -> { "string" },
+		Bitvector -> { "bit<64>" },
+		Int -> { "usize" },
+		Double -> { "double" },
+		Float -> { "float" },
 		DDTupleTypeSpec { name, _ } -> { name },
 		DDUnionTypeSpec { name, _ } -> { name },
 	}
 }
 
+// Print out complete type definition in DDLog
 function to_string(cons: DDTypeCons): string {
 	var cons_name = cons.cons_name;
 	var fields = cons.fields;
@@ -129,7 +131,7 @@ function to_string(term: DDTerm): string {
 		DDDouble { d } -> { to_string(d) },
 		DDFloat { f } -> { to_string(f) },
 		DDVar { var_name } -> { var_name },
-		DDVarDecl { var_name } -> { "var" ++ var_name },
+		DDVarDecl { var_name } -> { "var " ++ var_name },
 		DDCons { cons_name, args } -> {
 			var arguments = args;
 			var arg_vec = into_vec(arguments);
@@ -163,12 +165,12 @@ function to_string(expr: DDExpr): string {
 			to_string(deref(obj)) ++ "." ++ func_name ++ "(" ++ args_str ++ ")"
 		},
 		DDTermFieldExpr { expr, field } -> { to_string(deref(expr)) ++ "." ++ field },
-		DDUnaryExpr { expr, uop } -> { to_string(uop) ++ to_string(deref(expr)) },
+		DDUnaryExpr { expr, uop } -> { to_string(uop) ++ " " ++ to_string(deref(expr)) },
 		DDArithExpr { left, right, aop } -> {
-			to_string(deref(left)) ++ to_string(aop) ++ to_string(deref(right))
+			to_string(deref(left)) ++ " " ++ to_string(aop) ++ " " ++ to_string(deref(right))
 		},
 		DDBinExpr { left, right, bop } -> {
-			to_string(deref(left)) ++ to_string(bop) ++ to_string(deref(right))
+			to_string(deref(left)) ++ " " ++ to_string(bop) ++ " " ++ to_string(deref(right))
 		},
 	}
 }
@@ -176,7 +178,7 @@ function to_string(expr: DDExpr): string {
 function to_string(atom: DDAtom): string {
 	var atom_str = deref(atom.rel).name ++ "[" ++ to_string(atom.expr) ++ "]";
 	match (atom.var_name) {
-		Some { var_name } -> { var_name ++ "in" ++ atom_str },
+		Some { var_name } -> { var_name ++ " in " ++ atom_str },
 		None -> { atom_str }
 	}
 }
@@ -185,15 +187,15 @@ function to_string(rhs: DDRhs): string {
 	match (rhs) {
 		DDRhsAtom { negated, atom } -> {
 			if (negated) {
-				"not" ++ to_string(atom)
+				"not " ++ to_string(atom)
 			} else {
 				to_string(atom)
 			}
 		},
 		DDRhsCondition { expr } -> to_string(expr),
-		DDRhsAssignment { to, from } -> to_string(to) ++ "=" ++ to_string(from),
+		DDRhsAssignment { to, from } -> to_string(to) ++ " = " ++ to_string(from),
 		DDGroup { var_name, group, by } -> {
-			"var" ++ var_name ++ "=" ++ to_string(group) ++ ".group_by(" ++ to_string(by) ++ ")"
+			"var " ++ var_name ++ " = " ++ to_string(group) ++ ".group_by(" ++ to_string(by) ++ ")"
 		}
 	}
 }
@@ -236,7 +238,8 @@ function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpe
 		var field_name = to_lowercase(type_name);
 		var cons_name = union_name ++ "_" ++ type_name;
 		var field = DDField { field_name, ref_new(t) };
-		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
+		// Note that the field name has to be starting with lowercase letter
+		var constructor = DDTypeCons { to_lowercase(cons_name), from_singleton_to_list(field) };
 		constructors.push(constructor);
 	};
 	DDUnionTypeSpec { union_name, from_nonnull_vec(constructors).unwrap_or_default() }

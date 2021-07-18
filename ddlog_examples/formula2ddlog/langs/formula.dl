@@ -141,6 +141,16 @@ IndependentSetcompre[(setcompre, rule)] :- Setcompre[(setcompre, rule)],
 /******* Helper Functions for Formula 2.0 Meta-model *******/
 /***********************************************************/
 
+function is_primitive_type(type_spec: TypeSpec): bool {
+	match (type_spec) {
+		Integer -> true,
+		Boolean -> true,
+		FloatNum -> true,
+		String -> true,
+		_ -> false
+	}
+}
+
 function to_string(type_spec: TypeSpec): string {
 	match (type_spec) {
 		Integer -> { "Int" },
