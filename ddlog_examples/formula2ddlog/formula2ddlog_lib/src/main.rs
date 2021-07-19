@@ -25,7 +25,11 @@ use formula2ddlog_ddlog::Relations;
 use formula2ddlog_ddlog::relid2name;
 
 // import all types defined by the datalog program itself
-use formula2ddlog_ddlog::typedefs::ddlog_std::{Ref, Vec, option_unwrap_or_default, ref_new, vec_empty};
+use formula2ddlog_ddlog::typedefs::ddlog_std::{
+    Option as DDOption, Ref, Vec, 
+    option_unwrap_or_default, 
+    ref_new, 
+    vec_empty};
 use formula2ddlog_ddlog::typedefs::langs::formula::*;
 use formula2ddlog_ddlog::typedefs::langs::ddlog::*;
 use formula2ddlog_ddlog::typedefs::langs::lib::list::*;
@@ -151,7 +155,18 @@ fn convert_expr(expr: FExpr) -> Expr {
 fn convert_constraint(constraint: FConstraint) -> Constraint {
     match constraint {
         FConstraint::Predicate(pred) => {
-            Constraint::PredCons { negated: pred.negated, term: convert_term(pred.term) }
+            let alias = match pred.alias {
+                Some(x) => {
+                    let alias_str = format!("{}", x);
+                    DDOption::Some{ x: alias_str }
+                }, 
+                None => DDOption::None
+            };
+            Constraint::PredCons { 
+                negated: pred.negated, 
+                term: convert_term(pred.term), 
+                alias
+            }
         },
         FConstraint::Binary(bin) => {
             let bop = match bin.op {

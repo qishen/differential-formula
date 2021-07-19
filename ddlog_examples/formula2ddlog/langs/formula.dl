@@ -34,7 +34,7 @@ typedef Expr =  BaseExpr { term: Term } |
 // 1) a binary constraint over two expressions. 
 // 2) An assignment that holds the result of the evaluation of right hand side expression.
 // 3) Type constraint in the form of `var: Type`
-typedef Constraint = PredCons { negated: bool, term: Term } | 
+typedef Constraint = PredCons { negated: bool, term: Term, alias: Option<string> } | 
 					 BinaryCons { left: Expr, right: Expr, bop: BinOp } |
 					 AssignCons { variable: Term, expr: Expr } | 
 					 TypeCons { variable: Term, var_type: TypeSpec }
@@ -110,8 +110,8 @@ ConstraintListInRule[(index + 1, deref(nxt_constraint), r)] :-
 ConstraintInRule[(index, constraint, r)] :- ConstraintListInRule[(index, NonNullList {constraint, _}, r)]. 
 
 // Add all positive and negative terms into the Term relation
-Term[pos_term], PosPredInRule[(pos_term, r)] :- ConstraintInRule[(_, PredCons {false, pos_term}, r)].
-Term[neg_term], NegPredInRule[(neg_term, r)] :- ConstraintInRule[(_, PredCons {true, neg_term}, r)].
+Term[pos_term], PosPredInRule[(pos_term, r)] :- ConstraintInRule[(_, PredCons {false, pos_term, _}, r)].
+Term[neg_term], NegPredInRule[(neg_term, r)] :- ConstraintInRule[(_, PredCons {true, neg_term, _}, r)].
 PosVarInRule[(variable, r)] :- PosPredInRule[(pos_term, r)], VarOfTerm[(variable, pos_term)].
 NegVarInRule[(variable, r)] :- NegPredInRule[(neg_term, r)], VarOfTerm[(variable, neg_term)].
 NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], 

@@ -40,20 +40,43 @@ DDTypeSpec[Bool] :- TypeSpec[Boolean].
 DDTypeSpec[Float] :- TypeSpec[FloatNum].
 DDTypeSpec[Str] :- TypeSpec[String].
 
-// TODO: Since Formula does not distinguish between input and output relations but DDlog does, we need to 
-// define two relations for the same type with a rule as `T[t] :- t in T_input[..]`
+// Since Formula does not distinguish between input and output relations but DDlog does, we need to 
+// define two relations for the same type with a rule as `T[t] :- Tinput[t]`
+DDTypeSpec[dd_type], 
 DDRelation[dd_input_relation], DDRelation[dd_relation], 
-DDTypeSpec[dd_type] :- 
+DDRule[DDRule { input_rule_head, input_rule_body }] :- 
 	TypeSpec[t], not is_primitive_type(t),
 	var dd_type = to_dd_typespec(t),
 	var rel_name = to_string(t),
 	var input_rel_name = rel_name ++ "Input",
 	var dd_relation = DDRelation { false, rel_name, dd_type },
-	var dd_input_relation = DDRelation { true, input_rel_name, dd_type }.
+	var dd_input_relation = DDRelation { true, input_rel_name, dd_type },
+	// An input rule: T[p] :- TInput[p]
+	var pterm = DDVar{"p"},
+	var atom = ddterm_to_ddatom(None, ref_new(dd_relation), pterm),
+	var input_rule_head = [atom],
+	var input_atom = ddterm_to_ddatom(None, ref_new(dd_input_relation), pterm),
+	var input_ddrhs = DDRhsAtom {false, input_atom},
+	var input_rule_body = [input_ddrhs].
 
 /**************** Handle Positive Predicate Term in Rule ********************/
-// TODO: What if the head term is a boolean variable like hascycle :- no Path(u, u).
-// Need to generate a new typedef and relation to represent hascycle
+// If the head term is a boolean variable like hascycle :- no Path(u, u).
+// Need to generate a new typedef and relation named `BoolConstantHasCycle` to represent hascycle
+DDTypeSpec[constant_type], 
+DDRelation[constant_relation],
+DDAtomInRule[(boolean_atom, rule)] :- 
+	pair in HeadInRule[(Variable{root, _}, rule)], 
+	var constant_name = "BoolConstant" ++ root, 
+	// typedef BoolConstantX = BoolConstantX{}
+	var constructor = DDTypeCons { constant_name, EMPTY },
+	var constant_type = DDUnionTypeSpec { constant_name, from_singleton_to_nonnull_list(constructor) }, 
+	// output relation BoolConstantX [BoolConstantX{}]
+	var constant_relation = DDRelation { false, constant_name, constant_type },
+	// BoolConstantX[BoolConstantX{}] as the new head predicate to replace the variable term in the head
+	// BoolConstantX[BoolConstantX{}] :- constraints.
+	var boolean_atom = ddterm_to_ddatom(None, ref_new(constant_relation), DDCons{constant_name, EMPTY}). 
+
+// If the head term is a composite term with variables then nothing needs to change
 DDAtomInRule[(atom, rule)] :- pair in HeadInRule[(Composite{relname, _}, rule)], 
 	rel in DDRelation[DDRelation {_, relname, _}], 
 	var head_term = pair.0,
@@ -63,9 +86,10 @@ DDAtomInRule[(atom, rule)] :- pair in HeadInRule[(Composite{relname, _}, rule)],
 DDRhsInRule[(positive_dd_rhs_atom, rule)] :- pair in PosPredInRule[(Composite {relname, _}, rule)], 
 	// Find the relation by the name of the composite term
 	rel in DDRelation[DDRelation {_, relname, _}], 
-	var pos_term = pair.0,
+	ConstraintInRule[(_, PredCons {false, pos_term, optional_alias}, rule)],
+	pos_term == pair.0,
 	var dd_term = to_dd_term(pos_term),
-	var positive_dd_rhs_atom = ddterm_to_ddrhs(None, ref_new(rel), dd_term, false).
+	var positive_dd_rhs_atom = ddterm_to_ddrhs(optional_alias, ref_new(rel), dd_term, false).
 
 /**************** Handle Negative Predicate Term in Rule ********************/
 // Translate a DDTerm `no Pred(..)` into a DDRhs such as `not x in Relation[Pred(..)]` as set difference
@@ -87,10 +111,10 @@ DDTypeSpec[constant_type],
 DDRelation[constant_relation],
 DDRhsInRule[(dd_rhs_bool_constant_atom, rule)], 
 DDRule[DDRule { head, body }]:-
-	// TODO: the term could also be a boolean variable in the rule
 	pair in NegPredAsSetcompre[(Composite {relname, _}, rule)],  
 	rel in DDRelation[DDRelation {_, relname, _}], 
-	ConstraintInRule[(constraint_id, PredCons {true, neg_term}, rule)],
+	// Negated predicate should not have alias
+	ConstraintInRule[(constraint_id, PredCons {true, neg_term, _}, rule)],
 	neg_term == pair.0,
 	var rule_id = rule.id,
 	var dd_neg_term = to_dd_term(neg_term), 
