@@ -920,8 +920,6 @@ pub struct PredicateAst {
 
 impl ConstraintAstBehavior for PredicateAst {
     fn to_constraint(&self, metainfo: &MetaInfo) -> Constraint {
-        // Use `AtomicStrType` and atomic terms by default for the terms in constraints.
-        let undefined = metainfo.type_map().get("~Undefined").unwrap().clone();
         let alias = match self.alias.clone() {
             None => None,
             Some(a) => {
@@ -1003,18 +1001,18 @@ mod tests {
 
     #[test]
     fn test_parse_models() {
-        let path = Path::new("./tests/testcase/p0.4ml");
+        let path = Path::new("./tests/testcase/p3.4ml");
         let content = fs::read_to_string(path).unwrap() + "EOF";
         let (_, program_ast) = parse_program(&content);
           
         let terms = program_ast.model_ast_map.get("m").unwrap().clone().models;
-        for term_ast in terms {
-            let record: Record = term_ast.into_record();
-            println!("Record: {}", record);
-        }
+        // for term_ast in terms {
+        //     let record: Record = term_ast.into_record();
+        //     println!("Record: {}", record);
+        // }
           
         let env: Env = program_ast.build_env();
-        // println!("{:#?}", env.get_domain_by_name("Graph").unwrap());
+        println!("{:#?}", env.get_domain_by_name("Graph").unwrap());
         println!("{:#?}", env.get_model_by_name("m").unwrap());
     }
 }

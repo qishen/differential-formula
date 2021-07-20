@@ -227,6 +227,19 @@ function ddterm_to_ddrhs(
 	DDRhsAtom { negated, dd_atom }
 }
 
+function atom_term_type(term: DDTerm): Option<DDTypeSpec> {
+	match (term) {
+		DDBigInt {_} -> { Some{BigInt} },
+		DDBool {_} -> { Some{Bool} },
+		DDStr {_} -> { Some{Str} },
+		DDBitvector {_} -> { Some{Bitvector} },
+		DDInt {_} -> { Some{Int} },
+		DDDouble {_} -> { Some{Double} },
+		DDFloat {_} -> { Some{Float} },
+		_ -> None 
+	}
+}
+
 function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpec {
 	// typedef T1 = T11 {..} | T12 {..}
 	// typedef T2 = T21 {..} | T22 {..}
@@ -238,8 +251,7 @@ function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpe
 		var field_name = to_lowercase(type_name);
 		var cons_name = union_name ++ "_" ++ type_name;
 		var field = DDField { field_name, ref_new(t) };
-		// Note that the field name has to be starting with lowercase letter
-		var constructor = DDTypeCons { to_lowercase(cons_name), from_singleton_to_list(field) };
+		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
 		constructors.push(constructor);
 	};
 	DDUnionTypeSpec { union_name, from_nonnull_vec(constructors).unwrap_or_default() }

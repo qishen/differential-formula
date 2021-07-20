@@ -177,10 +177,17 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
                 differential_formula::constraint::BinOp::Le => BinOp::Leq,
                 differential_formula::constraint::BinOp::Lt => BinOp::Lt,
             };
-            Constraint::BinaryCons {
-                left: convert_expr(bin.left),
-                right: convert_expr(bin.right),
-                bop 
+            if bin.is_setcompre_assignment() {
+                Constraint::AssignCons { 
+                    variable: convert_term(bin.left_term().unwrap()), 
+                    expr: convert_expr(bin.right)
+                }
+            } else {
+                Constraint::BinaryCons {
+                    left: convert_expr(bin.left),
+                    right: convert_expr(bin.right),
+                    bop 
+                }
             }
         },
         FConstraint::TypeConstraint(_) => { todo!() }
@@ -188,10 +195,16 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
 }
 
 fn convert_rule(rid: String, rule: FRule) -> Rule {
+    // print!("rule{}: {}", rid, rule);
     let mut terms: Vec<Term> = rule.head().into_iter().map(|x| convert_term(x.clone())).collect();
     let mut cons: Vec<Constraint> = rule.body().into_iter().map(|x| convert_constraint(x)).collect();
-    let term_list = option_unwrap_or_default(&from_nonnull_vec(&mut terms));
-    let cons_list = option_unwrap_or_default(&from_nonnull_vec(&mut cons));
+    let term_list_opt: Option<NonNullList<Term>> = from_nonnull_vec(&mut terms).into();
+    let term_list = term_list_opt.unwrap();
+    let cons_list_opt: Option<NonNullList<Constraint>> = from_nonnull_vec(&mut cons).into();
+    let cons_list = cons_list_opt.unwrap();
+    // FIXME: Why does it cause stack overflow?
+    // let term_list = option_unwrap_or_default(&from_nonnull_vec(&mut terms));
+    // let cons_list = option_unwrap_or_default(&from_nonnull_vec(&mut cons));
     let rule = Rule { id: rid, head: term_list, body: cons_list };
     rule
 }
@@ -260,6 +273,13 @@ impl DDLogTransformation {
         }
     }
 
+    pub fn dump_delta_by_relid(delta: &DeltaMap<DDValue>, relid: RelId) {
+        let ddrel_changes = delta.try_get_rel(relid).unwrap();
+        for (val, weight) in ddrel_changes.iter() {
+            println!("{:#?} {:+}", val, weight);
+        }
+    }
+
     pub fn print_program(delta: &DeltaMap<DDValue>) {
         let ddrule_changes = delta.try_get_rel(Relations::langs_ddlog_DDRule as RelId).unwrap();
         let ddtype_changes = delta.try_get_rel(Relations::langs_ddlog_DDTypeSpec as RelId).unwrap();
@@ -292,7 +312,8 @@ impl DDLogTransformation {
 fn main() {
     let mut xform_ddlog = DDLogTransformation::new().unwrap();
 
-	let path = std::path::Path::new("../../../tests/testcase/p3.4ml");
+	// let path = std::path::Path::new("../../../tests/testcase/p3.4ml");
+	let path = std::path::Path::new("src/p.4ml");
     let content = std::fs::read_to_string(path).unwrap() + "EOF";
     let (_, program_ast) = parse_program(&content);
     let env: Env = program_ast.build_env();
@@ -301,10 +322,10 @@ fn main() {
     let meta = graph.meta_info();
     let rules: Vec<FRule> = meta.rules().into();
     let tmap = meta.type_map();
-    let raw_types = tmap.into_iter().map(|(name, raw_type)| raw_type.clone()).collect::<Vec<RawType>>();
-    let terms = m.terms().into_iter().map(|x| x.clone()).collect();
+    let raw_types = tmap.into_iter().map(|(_name, raw_type)| raw_type.clone()).collect::<Vec<RawType>>();
+    let terms = m.terms().into_iter().map(|x| x.clone()).collect::<Vec<AtomicTerm>>();
 
-    let mut updates = vec_empty();
+    let mut updates: Vec<Update<DDValue>> = vec_empty();
     let type_updates = xform_ddlog.create_types(raw_types);
     let term_updates = xform_ddlog.create_terms(terms);
     let rule_updates = xform_ddlog.create_rules(rules);
@@ -314,5 +335,7 @@ fn main() {
     let delta = xform_ddlog.flush_updates(updates).unwrap();
 
     // DDLogTransformation::dump_delta(&delta);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_Setcompre as RelId);
     DDLogTransformation::print_program(&delta);
+    DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
 }

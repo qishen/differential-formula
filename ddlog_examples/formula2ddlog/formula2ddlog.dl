@@ -161,13 +161,26 @@ TermListInSetcompreHead[(nxt_nonnull_list, setcompre, rule)] :-
 	TermListInSetcompreHead[(NonNullList { _, NonNullNxt { nxt_nonnull_list_ref } }, setcompre, rule)],
 	var nxt_nonnull_list = deref(nxt_nonnull_list_ref).
 
-DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, r)], 
-DDTermInSetcompreHead[(ddterm, setcompre, r)] :- 
-	TermListInSetcompreHead[(term_nonnull_list, setcompre, r)],
+// This relation contains all terms in the head of set comprehension and the terms could be 
+// variable term or even ground term
+DDTermInSetcompreHead[(ddterm, setcompre, rule)] :- 
+	TermListInSetcompreHead[(term_nonnull_list, setcompre, rule)],
 	var term = term_nonnull_list.node, 
-	var ddterm = to_dd_term(term),
-	// Find the type of `DDTerm`
-	DDTermOfDDTypeSpec[(ddterm, ddtypespec)].
+	var ddterm = to_dd_term(term).
+
+// The type of atom term could be found by checking the type of the value of the atom,
+DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, rule)] :- 
+	DDTermInSetcompreHead[(dd_atom_term, setcompre, rule)], 
+	var type_opt = atom_term_type(dd_atom_term),
+	type_opt.is_some(), 
+	var ddtypespec = type_opt.unwrap_or_default().
+
+// The type of composite term could be found by the name of constructor,
+DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, rule)] :- 
+	DDTermInSetcompreHead[(DDCons {cons_name, _}, setcompre, rule)], 
+	ddtypespec in DDTypeSpec[DDUnionTypeSpec{cons_name, _}].
+
+// TODO: The type of variable term has to be inferred from the body of the set comprehension
 
 // 1. Create a new union type to represent all types in the head of set comprehension 
 // `typedef SCHeadUnionR0SC1 = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn }`

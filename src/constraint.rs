@@ -196,6 +196,30 @@ impl SetCompreOps for Binary {
 }
 
 impl Binary {
+    /// Check if a binary constraint is actually a set comprehension assignment
+    pub fn is_setcompre_assignment(&self) -> bool {
+        if let Expr::BaseExpr(base_expr) = &self.left {
+            if let BaseExpr::Term(_) = base_expr {
+                if let Expr::BaseExpr(base_expr2) = &self.right {
+                    if let BaseExpr::SetComprehension(_) = base_expr2 {
+                        return true
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Return the definition term from the left side of binary constraint
+    pub fn left_term(&self) -> Option<AtomicTerm> {
+        if let Expr::BaseExpr(base_expr) = &self.left {
+            if let BaseExpr::Term(term) = base_expr {
+                return Some(term.clone())
+            }
+        }
+        None
+    }
+
     /// Assume all set comprehensions are separatedly declared like `a = count({..}) and 
     /// will not occur elsewhere in other parts of the expression.
     pub fn variables_current_level(&self) -> HashSet<AtomicTerm> {

@@ -39,7 +39,7 @@ impl Display for SetComprehension {
 
         let head_str = headterm_strs.join(", ");
         let body_str = constraint_strs.join(", ");
-        let mut setcompre_str = format!("{}({{ {} | {} }})", self.op, head_str, body_str); 
+        let setcompre_str = format!("{}({{ {} | {} }})", self.op, head_str, body_str); 
         write!(f, "{}", setcompre_str)
     }
 }
@@ -98,7 +98,7 @@ impl SetCompreOps for SetComprehension {
 // Turn SetComprehension into a headless rule.
 impl From<SetComprehension> for Rule {
     fn from(setcompre: SetComprehension) -> Self {
-        Rule::new(vec![], setcompre.condition.clone())
+        Rule::new(setcompre.vars, setcompre.condition.clone())
     }
 }
 

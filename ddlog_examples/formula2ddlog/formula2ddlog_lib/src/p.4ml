@@ -1,0 +1,40 @@
+domain Graph {
+    Node ::= new(name: Integer + String).
+    Edge ::= new(src: Node, dst: Node).
+    Path ::= new(src: Node, dst: Node).
+    Line ::= new(a: Node, b: Node, c: Node, d: Node).
+
+    Nocycle ::= new(node: Node).
+    TwoEdge ::= new(first: Edge, second: Edge).
+
+    OutdegreeByNode ::= new(node: Node, degrees: Integer).
+    Outdegree ::= new(degrees: Integer).
+
+    //Edge(a, c) :- Edge(a, b), Edge(b, c).
+    //Path(a, b) :- Edge(a, b).
+    //Path(a, c) :- Path(a, b), Path(a, c). 
+    //In `u is Node(_)` u is not recognized as variable
+    //Nocycle(u) :- u is Node(_), no Path(u, u).
+    //Nocycle(u) :- Edge(u, v), no Path(u, u).
+    //HasNoCycle :- no Path(u, u).
+    //OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e | e is Edge(src, dst) }). 
+	// src :- e is Edge(src, dst).
+    Outdegree(amt) :- amt = count({ Edge(src, dst) | e is Edge(src, dst) }). 
+}
+
+model m of Graph {
+    n0 is Node(0).
+    n1 is Node(1).
+    n2 is Node(2).
+    n3 is Node(3).
+    n4 is Node(4).
+
+    Edge(n0, n1).
+    Edge(n1, n2).
+    Edge(n2, n3).
+    Edge(n3, n4).
+}
+
+model m1 of Graph {
+    n0 is Node(x).
+}
