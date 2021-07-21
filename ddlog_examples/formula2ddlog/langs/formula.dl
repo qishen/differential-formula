@@ -178,7 +178,11 @@ function to_string(term: Term): string {
 		AtomFloat { f } -> to_string(f),
 		AtomBool { b } -> to_string(b),
 		Variable { root, fragments } -> {
-			root ++ "." ++ fragments.join(".")
+			if (vec_len(fragments) == 0) {
+				root
+			} else {
+				root ++ "." ++ fragments.join(".")
+			}
 		},
 		Composite { name, args} -> {
 			var arg_str_list = list_map(args, |x| to_string(deref(x)));
