@@ -82,6 +82,7 @@ fn convert_raw_type(raw_type: RawType) -> Option<TypeSpec> {
                     let type_spec = TypeSpec::UnionType { name, subtypes };
                     Some(type_spec)
                 },
+                // TODO: Handle enumeration type and range type
                 _ => { Some(TypeSpec::Boolean) }
             }
         },
@@ -153,6 +154,7 @@ fn convert_expr(expr: FExpr) -> Expr {
 }
 
 fn convert_constraint(constraint: FConstraint) -> Constraint {
+    println!("debug constraint: {:?}", constraint);
     match constraint {
         FConstraint::Predicate(pred) => {
             let alias = match pred.alias {
@@ -195,7 +197,6 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
 }
 
 fn convert_rule(rid: String, rule: FRule) -> Rule {
-    // print!("rule{}: {}", rid, rule);
     let mut terms: Vec<Term> = rule.head().into_iter().map(|x| convert_term(x.clone())).collect();
     let mut cons: Vec<Constraint> = rule.body().into_iter().map(|x| convert_constraint(x)).collect();
     let term_list_opt: Option<NonNullList<Term>> = from_nonnull_vec(&mut terms).into();
@@ -337,5 +338,4 @@ fn main() {
     // DDLogTransformation::dump_delta(&delta);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_Setcompre as RelId);
     DDLogTransformation::print_program(&delta);
-    DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
 }

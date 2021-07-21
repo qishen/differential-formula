@@ -58,6 +58,8 @@ output relation VarOfTerm [(Term, Term)]
 // It should contain both rule in the domain and rule in the set comprehension
 input relation InputRule [Rule]
 output relation Rule [Rule]
+output relation SetcompreRule [Rule]
+output relation NonSetcompreRule [Rule]
 
 // The head of each constraint list cannot be null otherwise it's meaningless
 output relation PosPredInRule [(Term, Ref<Rule>)]
@@ -92,10 +94,9 @@ output relation DependentSetcompre [(Setcompre, Ref<Rule>)]
 Term[term] :- InputTerm[term].
 Rule[rule] :- InputRule[rule].
 // Intermediate results to derive `ArgOfTerm` because we use linked list and the reason
-// I don't use `Flatmap()` on `Vec<Term>` instead is that Formula does not support it.
+// I don't use `Flatmap()` on `Vec<Term>` because Formula does not support it.
 ArgListOfTerm[(arg_list, c)] :- c in Term[Composite{_, arg_list}].
 ArgListOfTerm[(deref(nxt_arg_list), c)] :- ArgListOfTerm[(List {_, ListNxt {nxt_arg_list}}, c)].
-
 ArgOfTerm[(deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(List {term_ref, _}, c)].
 VarOfTerm[(variable, variable)] :- variable in Term[Variable{}].
 VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(Variable{}, term)], var variable = pair.0.
@@ -121,11 +122,15 @@ NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAs
 
 // Add inner rule of set comprehension back into the Rule relation
 Rule[inner_rule],
+SetcompreRule[inner_rule],
 Setcompre[(setcompre, rule)], 
 DefTermOfSetcompre[(def_term, setcompre, rule)] :-
 	ConstraintInRule[(_, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)],
 	var setcompre = deref(setcompre_ref),
 	var inner_rule = deref(setcompre.rule).
+
+// Use negation to derive all rules that are not from inside set comprehension
+NonSetcompreRule[rule] :- Rule[rule], not SetcompreRule[rule].
 
 DependentSetcompre[(setcompre, rule)], OuterVarInDepSetcompre[(shared_var, setcompre, rule)] :- 
 	Setcompre[(setcompre, rule)],

@@ -243,12 +243,13 @@ function atom_term_type(term: DDTerm): Option<DDTypeSpec> {
 function union_of_ddtypes(union_name: string, types: Vec<DDTypeSpec>): DDTypeSpec {
 	// typedef T1 = T11 {..} | T12 {..}
 	// typedef T2 = T21 {..} | T22 {..}
-	// typedef U = U_T1 { u_t1: T1 } | U_T2 { u_t2: T2 } 
+	// typedef U = U_T1 { t1_field: T1 } | U_T2 { t2_field: T2 } 
 	var constructors = vec_empty();
 	for (t in types) {
 		// Use the type name in lowercase as its field name
 		var type_name = type_alias(t);
-		var field_name = to_lowercase(type_name);
+		// Add "_field" at the end in case the type name is a reserved work like `float`
+		var field_name = to_lowercase(type_name) ++ "_field";
 		var cons_name = union_name ++ "_" ++ type_name;
 		var field = DDField { field_name, ref_new(t) };
 		var constructor = DDTypeCons { cons_name, from_singleton_to_list(field) };
