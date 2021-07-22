@@ -134,17 +134,27 @@ fn convert_setcompre(rid: String, sc: SetComprehension) -> Setcompre {
     Setcompre { rule: ref_new(&convert_rule(rid, sc_rule)), sop, default}
 }
 
-fn convert_expr(expr: FExpr) -> Expr {
+// Deal with setcompre expression separately because it needs to be assigned a rule id
+// for the inner rule inside set comprehension
+fn convert_setcompre_expr(sc_rule_id: String, expr: FExpr) -> Option<Expr> {
+    if let FExpr::BaseExpr(base_expr) = expr {
+        if let FBaseExpr::SetComprehension(setcompre) = base_expr {
+            let e = Expr::SetcompreExpr { sc: ref_new(&convert_setcompre(sc_rule_id, setcompre)) };
+            return Some(e);
+        }
+    }
+    None
+}
+
+fn convert_expr(expr: FExpr) -> Option<Expr> {
     match expr {
         FExpr::BaseExpr(base_expr) => {
             match base_expr {
                 FBaseExpr::Term(term) => { 
-                    Expr::BaseExpr { term: convert_term(term)} 
+                    let e = Expr::BaseExpr { term: convert_term(term)};
+                    Some(e)
                 },
-                FBaseExpr::SetComprehension(setcompre) => {
-                    // TODO: Derive a new name for the rule of set comprehension 
-                    Expr::SetcompreExpr { sc: ref_new(&convert_setcompre("".to_string(), setcompre)) }
-                }
+                FBaseExpr::SetComprehension(setcompre) => { None }
             }
         },
         FExpr::ArithExpr(arith_expr) => {
@@ -154,14 +164,35 @@ fn convert_expr(expr: FExpr) -> Expr {
                 differential_formula::expression::ArithmeticOp::Min => ArithOp::Minus,
                 differential_formula::expression::ArithmeticOp::Div => ArithOp::Div,
             };
-            let left_expr = convert_expr(arith_expr.left.as_ref().clone());
-            let right_expr = convert_expr(arith_expr.right.as_ref().clone());
-            Expr::ArithExpr { left: ref_new(&left_expr), right: ref_new(&right_expr), aop }
+            let left_expr = convert_expr(arith_expr.left.as_ref().clone()).unwrap();
+            let right_expr = convert_expr(arith_expr.right.as_ref().clone()).unwrap();
+            let e = Expr::ArithExpr { 
+                left: ref_new(&left_expr), 
+                right: ref_new(&right_expr), 
+                aop 
+            };
+            Some(e)
         }, 
     }
 }
 
-fn convert_constraint(constraint: FConstraint) -> Constraint {
+fn convert_setcompre_assignment_constraint(sc_rule_id: String, constraint: FConstraint) -> Option<Constraint> {
+    match constraint {
+        FConstraint::Binary(bin) => {
+            // TODO: Add expression assignment such as `var num = x * x`
+            if bin.is_setcompre_assignment() {
+                let setcompre_con = Constraint::AssignCons { 
+                    variable: convert_term(bin.left_term().unwrap()), 
+                    expr: convert_setcompre_expr(sc_rule_id, bin.right).unwrap()
+                };
+                Some(setcompre_con)
+            } else { None }
+        },
+        _ => { None }
+    }
+}
+
+fn convert_constraint(constraint: FConstraint) -> Option<Constraint> {
     match constraint {
         FConstraint::Predicate(pred) => {
             let alias = match pred.alias {
@@ -171,13 +202,18 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
                 }, 
                 None => DDOption::None
             };
-            Constraint::PredCons { 
+            let pred_con = Constraint::PredCons { 
                 negated: pred.negated, 
                 term: convert_term(pred.term), 
                 alias
-            }
+            };
+            Some(pred_con)
         },
         FConstraint::Binary(bin) => {
+            if bin.is_setcompre_assignment() {
+                return None;
+            }
+
             let bop = match bin.op {
                 differential_formula::constraint::BinOp::Eq => BinOp::Eq,
                 differential_formula::constraint::BinOp::Ne => BinOp::Neq,
@@ -186,27 +222,32 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
                 differential_formula::constraint::BinOp::Le => BinOp::Leq,
                 differential_formula::constraint::BinOp::Lt => BinOp::Lt,
             };
-            // TODO: Add expression assignment such as `var num = x * x`
-            if bin.is_setcompre_assignment() {
-                Constraint::AssignCons { 
-                    variable: convert_term(bin.left_term().unwrap()), 
-                    expr: convert_expr(bin.right)
-                }
-            } else {
-                Constraint::BinaryCons {
-                    left: convert_expr(bin.left),
-                    right: convert_expr(bin.right),
-                    bop 
-                }
-            }
+            let bin_con = Constraint::BinaryCons {
+                left: convert_expr(bin.left).unwrap(),
+                right: convert_expr(bin.right).unwrap(),
+                bop 
+            };
+            Some(bin_con)
         },
-        FConstraint::TypeConstraint(_) => { todo!() }
+        FConstraint::TypeConstraint(_) => { None }
     }
 }
 
 fn convert_rule(rid: String, rule: FRule) -> Rule {
-    let mut terms: Vec<Term> = rule.head().into_iter().map(|x| convert_term(x.clone())).collect();
-    let mut cons: Vec<Constraint> = rule.body().into_iter().map(|x| convert_constraint(x)).collect();
+    let mut terms: Vec<Term> = rule.head().into_iter().map(|t| convert_term(t.clone())).collect();
+    let mut cons: Vec<Constraint> = rule.body().into_iter().enumerate().map(|(i, con)| {
+        if let FConstraint::Binary(ref bin) = con {
+            if bin.is_setcompre_assignment() {
+                // Combine `rid` the position of setcompre constraint to be the rule id of 
+                // the rule inside set comprehension. e.g. `0S1S2S3` and id of each rule in the 
+                // set comprehension will extend the rule id of its parent rule.
+                let sc_rule_id = rid.to_string() + "S" + &i.to_string();
+                return convert_setcompre_assignment_constraint(sc_rule_id, con).unwrap();
+            }
+        }
+        convert_constraint(con).unwrap()
+    }).collect();
+
     let term_list_opt: Option<NonNullList<Term>> = from_nonnull_vec(&mut terms).into();
     let term_list = term_list_opt.unwrap();
     let cons_list_opt: Option<NonNullList<Constraint>> = from_nonnull_vec(&mut cons).into();
