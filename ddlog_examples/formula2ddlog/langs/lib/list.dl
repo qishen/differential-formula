@@ -8,55 +8,44 @@
 typedef NonNullList<'N> = NonNullList { node: 'N, nxt: NonNullNxt<'N> }
 typedef NonNullNxt<'N> = NonNullNxt { nxt: Ref<NonNullList<'N>> } | NULL
 
+function length(list: NonNullList<'N>): usize {
+    match (list.nxt) {
+        NULL -> 1,
+        NonNullNxt{nxt} -> 1 + nxt.deref().length()
+    }
+}
+
 function from_singleton_to_nonnull_list(item: 'N): NonNullList<'N> {
 	NonNullList { item, NULL }
 }
 
-function from_nonnull_vec(vector: mut Vec<'N>): Option<NonNullList<'N>> {
-	if (vec_len(vector) == 0) {
-		None
-	} else {
-		var last = vector.pop().unwrap_or_default();
-		var list_without_last_opt = from_nonnull_vec(vector);
-		match (list_without_last_opt) {
-			Some {list_without_last} -> {
-				var nonnull_list = nonnull_list_append(list_without_last, last);
-				Some { nonnull_list }
-			},
-			None -> { 
-				Some { NonNullList { last, NULL } }
-			}
-		}
-	}
+function from_nonnull_vec(vector: Vec<'N>): Option<NonNullList<'N>> {
+    var res = None;
+    for (v in vector.reverse_imm()) {
+        match (res) {
+            None -> {
+                res = Some{NonNullList{ v, NULL}}
+            },
+            Some{list} -> {
+                res = Some{NonNullList{v, NonNullNxt{ref_new(list)}}}
+            }
+        }        
+    };
+    res
 }
 
-function into_nonnull_vec(list: mut NonNullList<'N>): Vec<'N> {
-	// Have to reverse the list first because `Vec<T>` does not support insertion
-	// at the beginning of the vector
-	var reversed_list = nonnull_list_reverse(list);
-	// FIXME: A workarond to please the compiler
-	// var node = reversed_list.node;
-	var node = nonnull_list_nth(reversed_list, 0).unwrap_or_default();
-	var nxt = nonnull_list_nxt(reversed_list);
-	// match (reversed_list.nxt) {
-	match (nxt) {
-		NonNullNxt { nxt_nonnull_list_ref } -> {
-			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
-			var vector = into_nonnull_vec(nxt_nonnull_list);
-			vec_push(vector, node);
-			vector
-		},
-		NULL -> {
-			var vector = vec_empty();
-			vec_push(vector, node);
-			vector
-		}
-	}
+function into_nonnull_vec_inner(list: NonNullList<'N>, vec: mut Vec<'N>) {
+    vec.push(list.node);
+    match (list.nxt) {
+        NULL -> (),
+        NonNullNxt{nxt} -> into_nonnull_vec_inner(nxt.deref(), vec)
+    }
 }
 
-// A helper function for the temporary workaroud
-function nonnull_list_nxt(list: NonNullList<'N>): NonNullNxt<'N> {
-	list.nxt
+function into_nonnull_vec(list: NonNullList<'N>): Vec<'N> {
+    var res = vec_with_capacity(list.length());
+    into_nonnull_vec_inner(list, res);
+    res
 }
 
 function nonnull_list_nth(list: NonNullList<'N>, i: usize): Option<'N> {
@@ -73,15 +62,13 @@ function nonnull_list_nth(list: NonNullList<'N>, i: usize): Option<'N> {
 	}
 }
 
-function nonnull_list_append(list: mut NonNullList<'N>, item: 'N): NonNullList<'N> {
+function nonnull_list_append(list: NonNullList<'N>, item: 'N): NonNullList<'N> {
 	match (list.nxt) {
 		NonNullNxt { nxt_nonnull_list_ref } -> {
 			var nxt_nonnull_list = deref(nxt_nonnull_list_ref);
-			var nxt_nonnull_list_with_item = nonnull_list_append(nxt_nonnull_list, item);
-			nxt_nonnull_list_with_item
+			NonNullList { list.node, NonNullNxt { ref_new(nonnull_list_append(nxt_nonnull_list, item)) } }
 		},
 		NULL -> { 
-			// Create a NonNullList with two items
 			var nxt = NonNullNxt { ref_new(NonNullList { item, NULL }) };
 			NonNullList { list.node, nxt }
 		}
@@ -120,6 +107,13 @@ function nonnull_list_map(list: NonNullList<'N>, f: function('N): 'M): NonNullLi
 // LinkedList ::= NonNullLinkedList + NULL 
 typedef List<'N> = List { node: 'N, nxt: ListNxt<'N> } | EMPTY
 typedef ListNxt<'N> = ListNxt { nxt: Ref<List<'N>> }
+
+function length(list: List<'N>): usize {
+    match (list) {
+        EMPTY -> 0,
+        List{_, ListNxt {nxt_ref}} -> 1 + nxt_ref.deref().length()
+    }
+}
 
 function from_singleton_to_list(item: 'N): List<'N> {
 	List { item, ListNxt {ref_new(EMPTY)} }
