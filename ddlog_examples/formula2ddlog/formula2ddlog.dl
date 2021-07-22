@@ -60,6 +60,16 @@ DDRule[DDRule { input_rule_head, input_rule_body }] :-
 	var input_ddrhs = DDRhsAtom {false, input_atom},
 	var input_rule_body = [input_ddrhs].
 
+
+// Deal with binary constraints that are not assignment so formula expr can be directly translated
+// into ddlog expr
+DDRhsInRule[(bin_rhs, rule)] :-
+	ConstraintInRule[(_, BinaryCons{left, right, bop}, rule)],
+	var dd_left_expr = to_dd_expr(left).option_unwrap_or_default(),
+	var dd_right_expr = to_dd_expr(right).option_unwrap_or_default(),
+	var dd_bin_expr = DDBinExpr {ref_new(dd_left_expr), ref_new(dd_right_expr), bop},
+	var bin_rhs = DDRhsCondition { dd_bin_expr }.
+
 /**************** Handle Positive Predicate Term in Rule ********************/
 // If the head term is a boolean variable like hascycle :- no Path(u, u).
 // Need to generate a new typedef and relation named `BoolConstantHasCycle` to represent hascycle
@@ -402,6 +412,33 @@ function to_dd_term(term: Term): DDTerm {
 		},
 	};
 	dd_term
+}
+
+function to_dd_expr(expr: Expr): Option<DDExpr> {
+	match(expr) {
+		BaseExpr{term} -> {
+			var ddterm = to_dd_term(term);
+			var dd_expr = DDTermExpr { ref_new(ddterm) };
+			Some {dd_expr}
+		},
+		ArithExpr{left_ref, right_ref, aop} -> {
+			var dd_left = to_dd_expr(deref(left_ref)).unwrap_or_default();
+			var dd_right = to_dd_expr(deref(right_ref)).unwrap_or_default();
+			var dd_expr = DDArithExpr { ref_new(dd_left), ref_new(dd_right), aop };
+			Some {dd_expr}
+		},
+		UnaryExpr{expr_ref, uop} -> {
+			var expr = deref(expr_ref);
+			var inner_dd_expr = to_dd_expr(expr).option_unwrap_or_default();
+			var dd_expr = DDUnaryExpr { ref_new(inner_dd_expr) , uop };
+			Some {dd_expr}
+		},
+		SetcompreExpr{setcompre_ref} -> {
+			// Set comprehension should not appear here and should be handled
+			// as assignment as `var def_term = setcompre{}`
+			None
+		}	
+	}
 }
 
 // Recursively translate a Formula type spec into DDlog type spec 

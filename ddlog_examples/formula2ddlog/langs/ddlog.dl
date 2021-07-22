@@ -167,7 +167,7 @@ function to_string(expr: DDExpr): string {
 		DDTermFieldExpr { expr, field } -> { to_string(deref(expr)) ++ "." ++ field },
 		DDUnaryExpr { expr, uop } -> { to_string(uop) ++ " " ++ to_string(deref(expr)) },
 		DDArithExpr { left, right, aop } -> {
-			to_string(deref(left)) ++ " " ++ to_string(aop) ++ " " ++ to_string(deref(right))
+			"(" ++ to_string(deref(left)) ++ " " ++ to_string(aop) ++ " " ++ to_string(deref(right)) ++ ")"
 		},
 		DDBinExpr { left, right, bop } -> {
 			to_string(deref(left)) ++ " " ++ to_string(bop) ++ " " ++ to_string(deref(right))

@@ -148,8 +148,16 @@ fn convert_expr(expr: FExpr) -> Expr {
             }
         },
         FExpr::ArithExpr(arith_expr) => {
-            todo!()
-        } 
+            let aop = match arith_expr.op {
+                differential_formula::expression::ArithmeticOp::Add => ArithOp::Plus,
+                differential_formula::expression::ArithmeticOp::Mul => ArithOp::Mul,
+                differential_formula::expression::ArithmeticOp::Min => ArithOp::Minus,
+                differential_formula::expression::ArithmeticOp::Div => ArithOp::Div,
+            };
+            let left_expr = convert_expr(arith_expr.left.as_ref().clone());
+            let right_expr = convert_expr(arith_expr.right.as_ref().clone());
+            Expr::ArithExpr { left: ref_new(&left_expr), right: ref_new(&right_expr), aop }
+        }, 
     }
 }
 
@@ -178,6 +186,7 @@ fn convert_constraint(constraint: FConstraint) -> Constraint {
                 differential_formula::constraint::BinOp::Le => BinOp::Leq,
                 differential_formula::constraint::BinOp::Lt => BinOp::Lt,
             };
+            // TODO: Add expression assignment such as `var num = x * x`
             if bin.is_setcompre_assignment() {
                 Constraint::AssignCons { 
                     variable: convert_term(bin.left_term().unwrap()), 
