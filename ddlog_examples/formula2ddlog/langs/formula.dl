@@ -52,9 +52,17 @@ typedef Transform = Transform {}
 input relation TypeSpec [TypeSpec]
 input relation InputTerm [Term]
 output relation Term [Term]
-output relation ArgListOfTerm [(List<Ref<Term>>, Term)]
-output relation ArgOfTerm [(Term, Term)]
-output relation VarOfTerm [(Term, Term)]
+// A helper relation to infer the type of variables in Formula term but also for every subterm 
+// in the arguments of a term. The first term is the argument and the second term is the term
+// that contains the first term as (subterm, term, the type of subterm)
+output relation SubtermTypeSpec [(Term, Term, TypeSpec)]
+// I don't use `Flatmap()` on `Vec<T>` because Formula does not support it and eventually  
+// we want to model the languages in Formula
+output relation ArgListOfTerm [(usize, List<Ref<Term>>, Term)]
+output relation ArgOfTerm [(usize, Term, Term)]
+// Variable in the direct arguments of a composite term, not recursively.
+output relation VarOfTerm [(Term, Term)] 
+
 // It should contain both rule in the domain and rule in the set comprehension
 input relation InputRule [Rule]
 output relation Rule [Rule]
@@ -93,13 +101,25 @@ output relation DependentSetcompre [(Setcompre, Ref<Rule>)]
 // Add all composite subterm from `InputTerm` into the `Term` relation
 Term[term] :- InputTerm[term].
 Rule[rule] :- InputRule[rule].
-// Intermediate results to derive `ArgOfTerm` because we use linked list and the reason
-// I don't use `Flatmap()` on `Vec<Term>` because Formula does not support it.
-ArgListOfTerm[(arg_list, c)] :- c in Term[Composite{_, arg_list}].
-ArgListOfTerm[(deref(nxt_arg_list), c)] :- ArgListOfTerm[(List {_, ListNxt {nxt_arg_list}}, c)].
-ArgOfTerm[(deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(List {term_ref, _}, c)].
+
+// A composite term is a subterm of itself and the type can be easily derived by checking the 
+// the name of the constructor. Variable term and atom term are skipped in `SubtermTypeSpec` 
+// relation because no context provided for a single variable term and the type of atom term
+// can be directly obtained by calling function `atom_term_type()`.
+SubtermTypeSpec[(c, c, t)] :- 
+	c in Term[Composite{cons_name, arg_list}], 
+	t in TypeSpec[CompositeType{cons_name, _}].
+
+SubtermTypeSpec[(arg, ancestor, arg_type_spec)] :- 
+	SubtermTypeSpec[(term, ancestor, CompositeType{_, arg_types})], 
+	ArgOfTerm[(index, arg, term)],
+	var arg_type_spec = arg_types.nth(index).option_unwrap_or_default().type_spec.
+	
+ArgListOfTerm[(0, arg_list, c)] :- c in Term[Composite{_, arg_list}].
+ArgListOfTerm[(index+1, deref(nxt_arg_list), c)] :- ArgListOfTerm[(index, List {_, ListNxt {nxt_arg_list}}, c)].
+ArgOfTerm[(index, deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(index, List {term_ref, _}, c)].
 VarOfTerm[(variable, variable)] :- variable in Term[Variable{}].
-VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(Variable{}, term)], var variable = pair.0.
+VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1.
 
 HeadListInRule[(head_head, ref_new(r))] :- r in Rule[Rule {_, head_head, _}].
 HeadListInRule[(deref(nxt_head), r)] :- HeadListInRule[(NonNullList {_, NonNullNxt { nxt_head }}, r)].

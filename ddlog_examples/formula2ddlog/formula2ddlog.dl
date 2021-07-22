@@ -187,11 +187,17 @@ DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, rule)] :-
 	DDTermInSetcompreHead[(DDCons {cons_name, _}, setcompre, rule)], 
 	ddtypespec in DDTypeSpec[DDUnionTypeSpec{cons_name, _}].
 
-// TODO: What if it is a variable term? 
-// The type of variable term has to be inferred from the body of the set comprehension
-// DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, rule)] :- 
-// 	DDTermInSetcompreHead[(DDVar {variable}, setcompre, rule)], 
-// 	ddtypespec in DDTypeSpec[DDUnionTypeSpec{cons_name, _}].
+// The type of variable term has to be inferred within the context of the set comprehension
+DDTypeSpecInSetcompreHead[(dd_variable_type_spec, setcompre, rule)] :- 
+	tuple in DDTermInSetcompreHead[(DDVar{}, setcompre, rule)], 
+	PosPredInRule[(setcompre_pred, setcompre_rule)],
+	// Since we know the type of every variable in a composite term in relation `SubtermTypeSpec`, 
+	// it's easy to derive the type of variable that occur in both head and body of set comprehension
+	SubtermTypeSpec[(variable_term, setcompre_pred, variable_type_spec)],
+	var dd_variable_head_term = tuple.0,
+	setcompre_rule == setcompre.rule,
+	dd_variable_head_term == to_dd_term(variable_term),
+	var dd_variable_type_spec = to_dd_typespec(variable_type_spec).	
 
 // 1. Create a new union type to represent all types in the head of set comprehension 
 // `typedef SCHeadUnionR0SC1 = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn }`
@@ -263,6 +269,7 @@ DDRelation[setcompre_result_ddrelation] :-
 // var result = g.group_count().
 // Original rule only has predicates in it:
 // Head :- SCResultR0SC1[SCResult_usize{def_term}], C1, C2, ..., Cn.
+// One rule could have multiple `SCResultXXX[SCResultXXX{}]` atoms without conflicts
 DDRule[DDRule { [sc_result_head_atom], [dd_head_union_atom_rhs, group_assignment, result_assignment] }],
 DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
 	IndependentSetcompre[(setcompre, rule)], 
@@ -274,7 +281,6 @@ DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
 	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
 	dd_sc_head_union_relation in DDRelation[DDRelation {_,union_type_name,_}],
 	dd_sc_result_relation in DDRelation[DDRelation {_,sc_result_name,_}],
-	// TODO: May have conflict if a rule has multiple independent set comprehensions
 	// Add a new Rhs SCHeadUnion[t] to the new rule
 	var dd_head_union_atom_rhs = ddterm_to_ddrhs(
 		None, 
@@ -287,8 +293,8 @@ DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
 		ref_new(dd_sc_result_relation), 
 		DDCons{ 
 			// TODO: the type of result depends on the setcompre.sop
+			// Should we just force all values of aggregation to float type
 			sc_result_name ++ "_usize", 
-			// FIXME: why a dot is added to the end of the definition term string?
 			from_singleton_to_list(DDTermExpr{ref_new(DDVar{ to_string(dd_def_term) })}) 
 		}, 
 		false),
@@ -382,6 +388,7 @@ function to_dd_term(term: Term): DDTerm {
 		AtomNegInt { nint } -> DDInt { nint },
 		AtomFloat { float_num } -> DDFloat { float_num },
 		AtomBool { boolean } -> DDBool { boolean },
+		// TODO: What about the fragments
 		Variable { root, fragments } -> { DDVar { root } },
 		Composite { name, term_ref_arguments_head } -> {
 			var term_arguments_head = list_map(term_ref_arguments_head, |t_ref| {

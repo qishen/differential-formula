@@ -154,7 +154,6 @@ fn convert_expr(expr: FExpr) -> Expr {
 }
 
 fn convert_constraint(constraint: FConstraint) -> Constraint {
-    println!("debug constraint: {:?}", constraint);
     match constraint {
         FConstraint::Predicate(pred) => {
             let alias = match pred.alias {
@@ -203,9 +202,6 @@ fn convert_rule(rid: String, rule: FRule) -> Rule {
     let term_list = term_list_opt.unwrap();
     let cons_list_opt: Option<NonNullList<Constraint>> = from_nonnull_vec(&mut cons).into();
     let cons_list = cons_list_opt.unwrap();
-    // FIXME: Why does it cause stack overflow?
-    // let term_list = option_unwrap_or_default(&from_nonnull_vec(&mut terms));
-    // let cons_list = option_unwrap_or_default(&from_nonnull_vec(&mut cons));
     let rule = Rule { id: rid, head: term_list, body: cons_list };
     rule
 }
@@ -336,6 +332,7 @@ fn main() {
     let delta = xform_ddlog.flush_updates(updates).unwrap();
 
     // DDLogTransformation::dump_delta(&delta);
-    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_Setcompre as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_SubtermTypeSpec as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
     DDLogTransformation::print_program(&delta);
 }
