@@ -1,6 +1,7 @@
 domain Graph {
     Node ::= new(name: Integer + String).
     Edge ::= new(src: Node, dst: Node).
+    MagicEdge ::= new(src: Node + Integer, dst: Node + Integer + String).
     Path ::= new(src: Node, dst: Node).
     Line ::= new(a: Node, b: Node, c: Node, d: Node).
 
@@ -19,7 +20,12 @@ domain Graph {
     //HasNoCycle :- no Path(u, u).
     //OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e | e is Edge(src, dst) }). 
 	// src :- e is Edge(src, dst).
-    Outdegree(amt) :- amt = count({ Edge(src, dst) | e is Edge(src, dst) }). 
+    //Outdegree(amt) :- amt = count({ "hello", src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 
+    //MagicEdge(a, c) :- MagicEdge(a, b), MagicEdge(b, c).
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst), node_amt = count({ n | n is Node(x) }), node_amt > 1 }). 
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, e | e is Edge(src, dst), node_amt = count({ n | n is Node(x) }), node_amt > 1 }). 
+    OutdegreeByNode(amt) :- amt * 2 > 10, Edge(src, x), amt = count({ dst | e is Edge(src, dst) }). 
 }
 
 model m of Graph {

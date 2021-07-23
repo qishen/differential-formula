@@ -359,8 +359,7 @@ impl DDLogTransformation {
 fn main() {
     let mut xform_ddlog = DDLogTransformation::new().unwrap();
 
-	// let path = std::path::Path::new("../../../tests/testcase/p3.4ml");
-	let path = std::path::Path::new("src/p.4ml");
+	let path = std::path::Path::new("../examples/graph/graph.4ml");
     let content = std::fs::read_to_string(path).unwrap() + "EOF";
     let (_, program_ast) = parse_program(&content);
     let env: Env = program_ast.build_env();
@@ -385,5 +384,6 @@ fn main() {
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_SubtermTypeSpec as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
+    DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_OuterVarInDepSetcompre as RelId);
     DDLogTransformation::print_program(&delta);
 }
