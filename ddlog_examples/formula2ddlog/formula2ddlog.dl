@@ -200,14 +200,30 @@ DDTypeSpecInSetcompreHead[(ddtypespec, setcompre, rule)] :-
 // The type of variable term has to be inferred within the context of the set comprehension
 DDTypeSpecInSetcompreHead[(dd_variable_type_spec, setcompre, rule)] :- 
 	tuple in DDTermInSetcompreHead[(DDVar{}, setcompre, rule)], 
-	PosPredInRule[(setcompre_pred, setcompre_rule)],
+	PosPredInRule[(setcompre_pred_term, setcompre_rule)],
 	// Since we know the type of every variable in a composite term in relation `SubtermTypeSpec`, 
 	// it's easy to derive the type of variable that occur in both head and body of set comprehension
-	SubtermTypeSpec[(variable_term, setcompre_pred, variable_type_spec)],
+	SubtermTypeSpec[(variable_term, setcompre_pred_term, variable_type_spec)],
 	var dd_variable_head_term = tuple.0,
 	setcompre_rule == setcompre.rule,
 	dd_variable_head_term == to_dd_term(variable_term),
 	var dd_variable_type_spec = to_dd_typespec(variable_type_spec).	
+
+// The type of definition variable term such as `e is Edge(a, b)` because it could appear in the head
+// of set comprehension too
+DDTypeSpecInSetcompreHead[(dd_def_variable_type_spec, setcompre, rule)] :- 
+	tuple in DDTermInSetcompreHead[(DDVar{}, setcompre, rule)], 
+	PosPredInRule[(setcompre_pred_term, setcompre_rule)],
+	// The alias in the predicate is a string not a term
+	ConstraintInRule[(_, PredCons {false, setcompre_pred_term, Some{alias_str}}, setcompre_rule)],
+	// The type of definition term is the type of positive predicate term, the `SubtermTypeSpec` relation
+	// could be reused here to find the type of a composite term because in our definition a composite 
+	// term is a subterm of itself.
+	SubtermTypeSpec[(setcompre_pred_term, setcompre_pred_term, def_variable_type_spec)],
+	var dd_def_variable_head_term = tuple.0,
+	dd_def_variable_head_term == DDVar { alias_str },
+	setcompre_rule == setcompre.rule,
+	var dd_def_variable_type_spec = to_dd_typespec(def_variable_type_spec).	
 
 // 1. Create a new union type to represent all types in the head of set comprehension 
 // `typedef SCHeadUnionR0SC1 = T1 { i0: T1} | T2 { i1: T2 } | ... Tn { in: Tn }`

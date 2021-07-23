@@ -241,7 +241,7 @@ fn convert_rule(rid: String, rule: FRule) -> Rule {
                 // Combine `rid` the position of setcompre constraint to be the rule id of 
                 // the rule inside set comprehension. e.g. `0S1S2S3` and id of each rule in the 
                 // set comprehension will extend the rule id of its parent rule.
-                let sc_rule_id = rid.to_string() + "S" + &i.to_string();
+                let sc_rule_id = rid.to_string() + "DOT" + &i.to_string();
                 return convert_setcompre_assignment_constraint(sc_rule_id, con).unwrap();
             }
         }
@@ -384,5 +384,6 @@ fn main() {
     // DDLogTransformation::dump_delta(&delta);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_SubtermTypeSpec as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
     DDLogTransformation::print_program(&delta);
 }
