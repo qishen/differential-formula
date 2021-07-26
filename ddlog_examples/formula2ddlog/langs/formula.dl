@@ -134,10 +134,19 @@ ConstraintInRule[(index, constraint, r)] :- ConstraintListInRule[(index, NonNull
 Term[pos_term], PosPredInRule[(pos_term, r)] :- ConstraintInRule[(_, PredCons {false, pos_term, _}, r)].
 Term[neg_term], NegPredInRule[(neg_term, r)] :- ConstraintInRule[(_, PredCons {true, neg_term, _}, r)].
 PosVarInRule[(variable, r)] :- PosPredInRule[(pos_term, r)], VarOfTerm[(variable, pos_term)].
+// Note that in a positive predicate `x is Pred()` the alias `x` represents a variable too
+PosVarInRule[(variable, r)] :- 
+	ConstraintInRule[(_, PredCons {false, pos_term, Some{alias}}, r)],
+	var variable = Variable { alias, vec_empty() }.
 NegVarInRule[(variable, r)] :- NegPredInRule[(neg_term, r)], VarOfTerm[(variable, neg_term)].
-NegPredAsSetdiff[(neg_pred, r)] :- PosVarInRule[(variable, r)], NegVarInRule[(variable, r)], 
-	VarOfTerm[(variable, neg_pred)], 
-	NegPredInRule[(neg_pred, r)].
+
+// Check if any of the variables in the negated term occurs in the positive predicate term in the same rule
+NegPredAsSetdiff[(neg_pred, r)] :- 
+	NegPredInRule[(neg_pred, r)],
+	PosVarInRule[(variable, r)], 
+	NegVarInRule[(variable, r)], 
+	VarOfTerm[(variable, neg_pred)].
+
 NegPredAsSetcompre[(neg_pred, r)] :- NegPredInRule[(neg_pred, r)], not NegPredAsSetdiff[(neg_pred, r)].  
 
 // Add inner rule of set comprehension back into the Rule relation
@@ -152,7 +161,8 @@ DefTermOfSetcompre[(def_term, setcompre, rule)] :-
 // Use negation to derive all rules that are not from inside set comprehension
 NonSetcompreRule[rule] :- Rule[rule], not SetcompreRule[rule].
 
-DependentSetcompre[(setcompre, rule)], OuterVarInDepSetcompre[(shared_var, setcompre, rule)] :- 
+DependentSetcompre[(setcompre, rule)], 
+OuterVarInDepSetcompre[(shared_var, setcompre, rule)] :- 
 	Setcompre[(setcompre, rule)],
 	var sc_rule = setcompre.rule,
 	// TODO: What about the negative variables in rules?
