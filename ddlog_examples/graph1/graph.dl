@@ -23,6 +23,9 @@ typedef Null = Null {}
 // DummyNode[node] :- Node[node], is_dummy(node).
 input relation Node(id: usize)
 input relation Edge(src: Node, dst: Node)
+// Use Ref type to reduce memory allocation.
+// TODO: Compare performance with native Edge in large graph.
+input relation EdgeRef(src: Ref<Node>, dst: Ref<Node>)
 output relation SelfCycleEdge[Edge]
 
 // It will cause naming conflict and they will be treated as constants. 
@@ -49,7 +52,8 @@ output relation NodeList(item: Node, next: NodeListNxt)
 // we cannot use `nxt in Nxt()` because Nxt is not a relation but just a constructor.
 // Node[node] or node in Node() are the same expression to access all items in the relation `Node` 
 // in which the type of each item is also `Node` but different from relation `Node`.
-NodeList(node, nxt) :- Node[node], var single_node = NodeList{node, NULL}, var nxt = Nxt{ref_new(single_node)}. 
+// NodeList(node, next) :- node is Node(_), tail = NodeList(node, NULL), nxt = NodeList(node, tail).
+NodeList(node, nxt) :- Node[node], var tail = NodeList{node, NULL}, var nxt = Nxt{ref_new(tail)}. 
 
 // The rule order does not matter here.
 // Path(a, c) :- Path(a, b), Path(b, c).
@@ -73,8 +77,11 @@ Path(Node{a}, Node{b}) :- Edge(Node{a}, Node{b}).
 // Group by () which means nothing means put everything into one group.
 // Translate Formula rule in which the head is a boolean variable
 // `HasCycle()` is a relation that has at most one item `HasCycle(HasCycleConstant)`
+// Does not work if same variable occurs in predicate more than once.
+// HasCycle(HasCycleConstant) :- Path(u, u), var g = u.group_by(()), 
+//  				var count = g.group_count(), count == 0.
  HasCycle(HasCycleConstant) :- Path(u1, u2), u1 == u2, var g = u1.group_by(()), 
- 								var count = g.group_count(), count == 0.
+ 				var count = g.group_count(), count == 0.
 
 // 2. Rule with negation to do a set difference between two sets.
 // set1 of Node[u] is a set of all existing nodes and set2 is a set of nodes that matched in Path(u, u).
@@ -82,7 +89,8 @@ Path(Node{a}, Node{b}) :- Edge(Node{a}, Node{b}).
 // Node[u] or u in Node()
 // u = Node(..) is not a constraint but a constructor to create new record thus does not accept variables
 // that are not oriented from elsewhere in the current scope.
-NoCycle(u) :- u in Node(), not Path(u, u).
+// NoCycle(u) :- u is Node(x), not Path(u, u).
+NoCycle(u) :- u in Node[Node{x}], not Path(u, u).
 
 // More than one term in the head. DDLog will create something like Multi(a, b, c) to 
 // represent both head terms

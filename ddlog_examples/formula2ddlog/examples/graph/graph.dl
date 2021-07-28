@@ -9,14 +9,6 @@ typedef Node = Node{name: Graph_AUTOTYPE0}
 typedef Outdegree = Outdegree{degrees: usize}
 typedef OutdegreeByNode = OutdegreeByNode{node: Node, degrees: usize}
 typedef Path = Path{src: Node, dst: Node}
-typedef SCHeadUnionR0DOT1SC1 = SCHeadUnionR0DOT1SC1_Node{node_field: Node}
-typedef SCHeadUnionR0SC1 = SCHeadUnionR0SC1_Edge{edge_field: Edge} | SCHeadUnionR0SC1_Node{node_field: Node}
-typedef SCHeadUnionR1DOT1SC1 = SCHeadUnionR1DOT1SC1_Node{node_field: Node}
-typedef SCHeadUnionR1SC1 = SCHeadUnionR1SC1_Edge{edge_field: Edge} | SCHeadUnionR1SC1_Node{node_field: Node}
-typedef SCResultR0DOT1SC1 = SCResultR0DOT1SC1_usize{usize_field: usize} | SCResultR0DOT1SC1_float{float_field: float}
-typedef SCResultR0SC1 = SCResultR0SC1_usize{usize_field: usize} | SCResultR0SC1_float{float_field: float}
-typedef SCResultR1DOT1SC1 = SCResultR1DOT1SC1_usize{usize_field: usize} | SCResultR1DOT1SC1_float{float_field: float}
-typedef SCResultR1SC1 = SCResultR1SC1_usize{usize_field: usize} | SCResultR1SC1_float{float_field: float}
 typedef TwoEdge = TwoEdge{first: Edge, second: Edge}
 output relation Edge[Edge]
 output relation Graph_AUTOTYPE0[Graph_AUTOTYPE0]
@@ -29,14 +21,6 @@ output relation Node[Node]
 output relation Outdegree[Outdegree]
 output relation OutdegreeByNode[OutdegreeByNode]
 output relation Path[Path]
-output relation SCHeadUnionR0DOT1SC1[SCHeadUnionR0DOT1SC1]
-output relation SCHeadUnionR0SC1[SCHeadUnionR0SC1]
-output relation SCHeadUnionR1DOT1SC1[SCHeadUnionR1DOT1SC1]
-output relation SCHeadUnionR1SC1[SCHeadUnionR1SC1]
-output relation SCResultR0DOT1SC1[SCResultR0DOT1SC1]
-output relation SCResultR0SC1[SCResultR0SC1]
-output relation SCResultR1DOT1SC1[SCResultR1DOT1SC1]
-output relation SCResultR1SC1[SCResultR1SC1]
 output relation TwoEdge[TwoEdge]
 input relation EdgeInput[Edge]
 input relation Graph_AUTOTYPE0Input[Graph_AUTOTYPE0]
@@ -57,15 +41,11 @@ Graph_AUTOTYPE2[p] :- Graph_AUTOTYPE2Input[p].
 Line[p] :- LineInput[p].
 MagicEdge[p] :- MagicEdgeInput[p].
 Nocycle[p] :- NocycleInput[p].
+Nocycle[Nocycle{u}] :- u in Node[Node{_}], not Path[Path{u, u}].
 Node[p] :- NodeInput[p].
 Outdegree[p] :- OutdegreeInput[p].
-Outdegree[Outdegree{amt}] :- SCResultR0SC1[SCResultR0SC1_usize{amt}], (amt * 2) > 10.
-Outdegree[Outdegree{amt}] :- SCResultR1SC1[SCResultR1SC1_usize{amt}], (amt * 2) > 10.
 OutdegreeByNode[p] :- OutdegreeByNodeInput[p].
 Path[p] :- PathInput[p].
-SCHeadUnionR0SC1[SCHeadUnionR0SC1_Edge{Edge{dst, src}}], SCHeadUnionR0SC1[SCHeadUnionR0SC1_Edge{Edge{src, dst}}] :- SCResultR0DOT1SC1[SCResultR0DOT1SC1_usize{node_amt}], e in Edge[Edge{src, dst}], node_amt > 1.
-SCResultR0DOT1SC1[SCResultR0DOT1SC1_usize{result}] :- SCHeadUnionR0DOT1SC1[t], var g = (t).group_by(()), var result = g.group_count().
-SCResultR0SC1[SCResultR0SC1_usize{result}] :- SCHeadUnionR0SC1[t], var g = (t).group_by(()), var result = g.group_count().
-SCResultR1DOT1SC1[SCResultR1DOT1SC1_usize{result}] :- SCHeadUnionR1DOT1SC1[t], var g = (t).group_by(()), var result = g.group_count().
-SCResultR1SC1[SCResultR1SC1_usize{result}] :- SCHeadUnionR1SC1[t], var g = (t).group_by(()), var result = g.group_count().
+Path[Path{a, b}] :- Edge[Edge{a, b}].
+Path[Path{a, c}] :- Path[Path{a, b}], Path[Path{b, c}].
 TwoEdge[p] :- TwoEdgeInput[p].

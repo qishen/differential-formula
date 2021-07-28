@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::convert::TryInto;
 
 use differential_datalog::record::IntoRecord;
@@ -361,9 +360,10 @@ impl DDLogTransformation {
 }
 
 fn main() {
+    // cargo run -- ../examples/graph/graph.4ml > ../examples/graph/graph.dl
     let mut xform_ddlog = DDLogTransformation::new().unwrap();
-
-	let path = std::path::Path::new("../examples/graph/graph.4ml");
+    let formula_file_path = std::env::args().last().unwrap();
+	let path = std::path::Path::new(&formula_file_path);
     let content = std::fs::read_to_string(path).unwrap() + "EOF";
     let (_, program_ast) = parse_program(&content);
     let env: Env = program_ast.build_env();

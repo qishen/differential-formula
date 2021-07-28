@@ -1,0 +1,49 @@
+typedef Graph_AUTOTYPE0 = Graph_AUTOTYPE0_usize { t0: usize } | Graph_AUTOTYPE0_string { t1: string }
+typedef Node = Node{ name: usize }
+typedef TwoEdge = TwoEdge{ first: Edge, second: Edge }
+typedef Item = Item_Node { t0: Node } | Item_Edge { t1: Edge }
+typedef Line = Line{ a: Node, b: Node, c: Node, d: Node }
+typedef Nocycle = Nocycle{ node: Node }
+typedef Path = Path{ src: Node, dst: Node }
+typedef Edge = Edge{ src: Node, dst: Node }
+typedef R0SC0Union = R0SC0Union_Node { node: Node } | R0SC0Union_Edge { edge: Edge }
+typedef R0SC1Union = R0SC1Union_Node { node: Node } | R0SC1Union_Edge { edge: Edge }
+typedef NocycleBoolConst = NocycleBoolConst{}
+typedef R3N0BoolConst = R3N0BoolConst{}
+typedef R3N1BoolConst = R3N1BoolConst{}
+typedef Outdegree = Outdegree{ node: Node, degrees: usize }
+
+
+output relation Graph_AUTOTYPE0[Graph_AUTOTYPE0]
+output relation Node[Node]
+output relation TwoEdge[TwoEdge]
+output relation Item[Item]
+output relation Line[Line]
+output relation Nocycle[Nocycle]
+output relation Path[Path]
+output relation Edge[Edge]
+output relation R0SC0UnionContainerRel [R0SC0Union]
+output relation R0SC1UnionContainerRel [R0SC1Union]
+output relation NocycleBoolConst[NocycleBoolConst]
+output relation R3N0BoolConst[R3N0BoolConst]
+output relation R3N1BoolConst[R3N1BoolConst]
+output relation Outdegree[Outdegree]
+
+
+R0SC0UnionContainerRel[R0SC0Union_Node { Node{ x } }], R0SC0UnionContainerRel[R0SC0Union_Edge { Edge{ Node{ x }, Node{ x } } }] :- Node[Node{ x }].
+// TwoEdge[TwoEdge{ Edge{ Node{ 1 }, b }, Edge{ c, Node{ 2 } } }] :- Edge[Edge{ a, b }], 
+// 	Edge[Edge{ c, d }], R0SC0UnionContainerRel[u], var g = u.group_by(()), var aggr0_dc0 = g.group_count().
+Path[Path{ a, b }] :- e in Edge[Edge{ .src = a, .dst = b }].
+Path[Path{ a, c }] :- Path[Path{ a, b }], Path[Path{ b, c }].
+R3N0BoolConst[R3N0BoolConst{}] :- Path[Path{ u, u0 }], var g = (u).group_by(()), 
+	var count = g.group_count(), count == 0.
+R3N1BoolConst[R3N1BoolConst{}] :- Node[Node{ x }], var g = (x).group_by(()), 
+	var count = g.group_count(), count == 0.
+NocycleBoolConst[NocycleBoolConst{}] :- R3N0BoolConst[R3N0BoolConst{}], R3N1BoolConst[R3N1BoolConst{}].
+
+// `nid` should be integer
+// R0SC1UnionContainerRel[R0SC1Union_~Undefined { nid }] :- Edge[Edge{ src, Node{ nid } }].
+Outdegree[Outdegree{ src, aggr0_degrees }] :- src in Node[Node{ _ }], 
+	var degrees = 1,
+	R0SC0UnionContainerRel[u], var g = (u, u, u).group_by((src)), var aggr0_degrees = g.group_count().
+	// R0SC1UnionContainerRel[u], var g1 = u.group_by((src)), var aggr1_degrees2 = g1.group_sum().
