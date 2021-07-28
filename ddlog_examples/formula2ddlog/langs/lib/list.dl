@@ -119,14 +119,12 @@ function from_singleton_to_list(item: 'N): List<'N> {
 	List { item, ListNxt {ref_new(EMPTY)} }
 }
 
-function from_vec(vector: mut Vec<'N>): List<'N> {
-	if (vec_len(vector) == 0) {
-		EMPTY
-	} else {
-		var last = vector.pop().unwrap_or_default();
-		var list_without_last = from_vec(vector);
-		list_append(list_without_last, last)
-	}
+function from_vec(vector: Vec<'N>): List<'N> {
+    var res = EMPTY;
+    for (v in vector.reverse_imm()) {
+		res = List { v, ListNxt {ref_new(res)} };
+    };
+    res
 }
 
 function into_vec(list: mut List<'N>): Vec<'N> {

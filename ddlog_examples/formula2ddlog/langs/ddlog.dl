@@ -208,6 +208,15 @@ function to_string(rule: DDRule): string {
 
 
 /******************** Helper Functions *****************/
+
+function is_primitive_ddtype(ddtype: DDTypeSpec): bool {
+	match (ddtype) {
+		DDTupleTypeSpec {_, _} -> false,
+		DDUnionTypeSpec {_, _} -> false,
+		_ -> true
+	}
+}
+
 function ddterm_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
 	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
 	var dd_atom = DDAtom { var_name, rel, dd_term_expr };

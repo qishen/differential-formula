@@ -239,9 +239,11 @@ fn convert_rule(rid: String, rule: FRule) -> Rule {
         if let FConstraint::Binary(ref bin) = con {
             if bin.is_setcompre_assignment() {
                 // Combine `rid` the position of setcompre constraint to be the rule id of 
-                // the rule inside set comprehension. e.g. `0S1S2S3` and id of each rule in the 
+                // the rule inside set comprehension. e.g. `0Dot1Dot2Dot3` and id of each rule in the 
                 // set comprehension will extend the rule id of its parent rule.
-                let sc_rule_id = rid.to_string() + "DOT" + &i.to_string();
+                // Use `Dot` as separator to distinguish rule id `12` and `1Dot2` in which the first one is
+                // the 12th rule and the second one is the second set comprehension in the first rule
+                let sc_rule_id = rid.to_string() + "Dot" + &i.to_string();
                 return convert_setcompre_assignment_constraint(sc_rule_id, con).unwrap();
             }
         }
@@ -335,7 +337,9 @@ impl DDLogTransformation {
             // println!("{} {:+}", val, weight);
             let ddtype_record = val.clone().into_record();
             let ddtype: DDTypeSpec = DDTypeSpec::from_record(&ddtype_record).unwrap();
-            println!("{}", to_string_langs_ddlog_DDTypeSpec___Stringval(&ddtype));
+            if !is_primitive_ddtype(&ddtype) {
+                println!("{}", to_string_langs_ddlog_DDTypeSpec___Stringval(&ddtype));
+            }
         }
         for (val, _weight) in ddrel_changes.iter() {
             // println!("{} {:+}", val, weight);
@@ -384,6 +388,11 @@ fn main() {
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_SubtermTypeSpec as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
-    DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_OuterVarInDepSetcompre as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_DependentSetcompre as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDAtomInRule as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDRhsInRule as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_OuterVarInDepSetcompre as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::AtomVecOfRule as RelId);
     DDLogTransformation::print_program(&delta);
 }
