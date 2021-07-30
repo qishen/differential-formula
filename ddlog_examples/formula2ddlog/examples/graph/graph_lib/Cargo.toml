@@ -5,9 +5,16 @@ version = "0.1.0"
 authors = ["Qishen Zhang <qishen23@gmail.com>"]
 edition = "2018"
 
+[[bench]]
+name = "graph_computation"
+harness = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-rand = "0.4"
+rand = "0.8"
 differential_datalog = { path = "../graph_ddlog/differential_datalog" }
 graph = { path = "../graph_ddlog/" }
 types = { path = "../graph_ddlog/types" }
+
+[dev-dependencies]
+glassbench = "0.3"
