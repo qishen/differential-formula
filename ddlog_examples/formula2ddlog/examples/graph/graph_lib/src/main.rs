@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use graph_lib::*;
 
 // Usage:
@@ -22,14 +24,22 @@ fn main() {
             println!("Edge(Node({}), Node({})).", src, dst); 
         }
     } else if target == "formula_bench" {
+        let path = Path::new("../graph_template.4ml");
+        let domain_str = fs::read_to_string(path).unwrap();
         for i in 0 .. 30 {
+            let mut program_model_str = "".to_string();
             let nodes_num = 2000;
             let edges_num = 100 * (i + 1);
             let graph = Graph::gen_random_graph(nodes_num, edges_num);
             let edges = graph.edges();
             for (src, dst) in edges.iter() { 
-                println!("Edge(Node({}), Node({})).", src, dst); 
+                let term_str = format!("Edge(Node({}), Node({})).\n", src, dst); 
+                program_model_str += &term_str[..];
             }
+            let program_str = format!("{}\n model m of Graph {{\n {} \n}}", domain_str, program_model_str);
+            println!("{}", program_str);
+            let write_path = format!("../files/graph_n{}_e{}.4ml", nodes_num, edges_num);
+            fs::write(write_path, program_str).unwrap();
         }
     } else if target == "ddlog" {
         let mut bse = DDLogGraph::new(debug).unwrap();

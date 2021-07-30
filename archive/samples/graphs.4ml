@@ -9,6 +9,11 @@ domain DAGs extends Digraphs
 {
    path ::= (V, V).
    path(u, w) :- E(u, w); E(u, v), path(v, w).  
+   NoCycle ::= (node: V).
+
+   NoCycle(u) :- u is V(_), no path(u, u).
+   hello :- count({ E(n, n), n, 1.23 | n is V(_) }) = 5.
+
    conforms no path(u, u).
 }
 

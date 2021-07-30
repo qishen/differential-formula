@@ -1,0 +1,25 @@
+echo first around:;
+start;
+insert NodeInput[Node{Graph_AUTOTYPE0_usize{0}}],
+insert NodeInput[Node{Graph_AUTOTYPE0_usize{1}}],
+insert NodeInput[Node{Graph_AUTOTYPE0_usize{2}}],
+insert NodeInput[Node{Graph_AUTOTYPE0_usize{3}}],
+insert NodeInput[Node{Graph_AUTOTYPE0_usize{4}}],
+insert EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{0}}, Node{Graph_AUTOTYPE0_usize{1}}}],
+insert EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{1}}, Node{Graph_AUTOTYPE0_usize{2}}}],
+insert EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{2}}, Node{Graph_AUTOTYPE0_usize{3}}}],
+insert EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{3}}, Node{Graph_AUTOTYPE0_usize{4}}}],
+commit dump_changes;
+
+echo 
+second around:;
+start;
+insert EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{1}}, Node{Graph_AUTOTYPE0_usize{0}}}],
+commit dump_changes;
+
+echo 
+third around:;
+start;
+delete EdgeInput[Edge{Node{Graph_AUTOTYPE0_usize{1}}, Node{Graph_AUTOTYPE0_usize{0}}}],
+commit dump_changes;
+

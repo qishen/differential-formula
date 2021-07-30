@@ -4,8 +4,11 @@ domain Graph {
     Path ::= new(src: Node, dst: Node).
     Line ::= new(a: Node, b: Node, c: Node, d: Node).
 
+    Item ::= Node + Edge.
+
     Nocycle ::= new(node: Node).
     TwoEdge ::= new(first: Edge, second: Edge).
+    Outdegree ::= new(node: Node, degrees: Integer).
 
     // Simple rule
     // No joins and just map one collection to another.
@@ -13,8 +16,32 @@ domain Graph {
     // Path(a, b) :- Edge(a, b).
     // Edge(a, c) :- Edge(a, b), Edge(b, c).
 
+    // Two aggregations both with connection to the outer scope
+    // Outdegree(src, degrees) :- src is Node(_), degrees = count({ e | e is Edge(src, dst) }),
+    //                            degrees2 = sum(0, { nid | Edge(src, Node(nid))}).
+
+    // Three layers of nested set comprehension in a rule
+    // No more than two adjacent layers of set comprehension can share variables 
+    // otherwise the program fails to compile
+    // Error message: Variable src in parent scope is hidden by find
+    Outdegree(src, degrees) :- src is Node(_), degrees = count({ e | 
+        e is Edge(a, b),
+        num = count({ x | src1 is Node(x), 
+            num1 = count({y | src2 is Node(y) }),
+            num1 > 0
+        }),
+        num > 0
+     }).
+
+
+    //TwoEdge(Edge(Node(1), b), Edge(c, Node(2))) :- e1 is Edge(a, b), e2 is Edge(c, d), 
+    //    no Node(x), no Edge(d, e).
+    TwoEdge(Edge(Node(1), b), Edge(c, Node(2))) :- 
+        e1 is Edge(a, b), e2 is Edge(c, d), count({ Node(x), Edge(Node(x), Node(x)) | Node(x)}) = 10 .
+
     Path(a, b) :- Edge(a, b).
     Path(a, c) :- Path(a, b), Path(b, c).
+    Nocycle :- no Path(u, u), no Node(x).
 
     // Path(a, b) :- Edge(a, b).
     // Path(a, c) :- Edge(a, b), Edge(b, c).
@@ -54,4 +81,47 @@ model m of Graph {
 
     // dummy is a symbolic value in partial model.
     // ex is Edge(n0, dummy).
+}
+
+domain Graph2 {
+    Node ::= new(name: Integer + String).
+    NodeList ::= new(item: Node, nxt: any NodeList + {NIL}).
+    
+    Edge ::= new(src: Node, dst: Node).
+    TwoEdge ::= new(src: Edge, dst: Edge).
+    Path ::= new(src: Node, dst: Node).
+    Line ::= new(a: Node, b: Node, c: Node, d: Node).
+
+    Item ::= Node + Edge.
+
+    NoCycle ::= new(node: Node).
+    Outdegree ::= new(node: Node, amt: Integer).
+    NodeIdSum ::= new(amt: Real).
+    NodeIdSumByNode ::= new(node: Node, amt: Real).
+    
+    // Compute transitive closure in the graph
+    Path(a, b) :- Edge(a, b).
+    Path(a, c) :- Path(a, b), Path(b, c).
+    
+    // A linked list that points to itself
+    NodeList(n, nl) :- n is Node(_), nl = NodeList(n, NIL).
+    
+    // Production rule
+    TwoEdge(e1, e2) :- e1 is Edge(a, b), e2 is Edge(c, d).
+    
+    // Negation
+    NoCycle(u) :- u is Node(_), no Path(u, u).
+    HasNoCycle :- no Path(u, u).
+    
+    // Aggregation without outer scope vars
+    hasFiveNodes :- count({ n | n is Node(_)}) = 5.
+    // Aggregation with outer scope vars
+    Outdegree(src, amt) :- src is Node(_), amt = count({ e | e is Edge(src, dst) }).
+    
+    // Nested Aggregation without outer scope vars
+    NodeIdSum(idsum) :- idsum = sum(0, { x, y | NoCycle(Node(x)), Edge(Node(x), Node(y)), 
+	count({ z | Edge(Node(y), Node(z)) }) > 1 }).
+    // Nested Aggregation with outer scope vars
+    NodeIdSumByNode(Node(x), idsum) :- Node(x), idsum = sum(0, { x, y | NoCycle(Node(x)), 
+    	Edge(Node(x), Node(y)), count({ z | Edge(Node(y), Node(z)) }) > 1 }).
 }
