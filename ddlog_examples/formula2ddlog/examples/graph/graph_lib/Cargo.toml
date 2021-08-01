@@ -14,7 +14,6 @@ harness = false
 rand = "0.8"
 differential_datalog = { path = "../graph_ddlog/differential_datalog" }
 graph = { path = "../graph_ddlog/" }
-types = { path = "../graph_ddlog/types" }
 
 [dev-dependencies]
 glassbench = "0.3"
