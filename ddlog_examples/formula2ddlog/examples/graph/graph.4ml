@@ -16,7 +16,7 @@ domain Graph {
     Path(a, c) :- Path(a, b), Path(b, c). 
     //Nocycle(u) :- Edge(u, v), no Path(u, u).
     Nocycle(u) :- u is Node(_), no Path(u, u).
-    //HasNoCycle :- no Path(u, u).
+    HasNoCycle :- no Path(u, u).
     //OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e | e is Edge(src, dst) }). 
 	// src :- e is Edge(src, dst).
     //Outdegree(amt) :- amt = count({ "hello", src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 

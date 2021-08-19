@@ -297,7 +297,6 @@ DDRelation[setcompre_result_ddrelation] :-
 	// The name of new union type should include the rule id and the setcompre id
 	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
 	// TODO: Think about the type of aggregation results other than int and float.
-	// FIXME: the field name cannot be float or usize because they are reserved
 	var setcompre_result_type = union_of_ddtypes(sc_result_name, [Int, Float]),
 	var setcompre_result_ddrelation = DDRelation { false, sc_result_name, setcompre_result_type }.
 
@@ -380,7 +379,10 @@ DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
 // 1. Create `PreAggrContainer ::= (vco1: T1, vco2: T2,..., vcon: Tn, inner: SCHeadUnion)` where `vcox` is the 
 // variable in the outer scope and `Tn` is the type of that variable. 
 DDTypeSpec[pre_aggr_container_ddtype], 
-DDRelation[pre_aggr_container_ddrelation] :-
+DDRelation[pre_aggr_container_ddrelation] 
+// DDTypeSpec[], 
+// DDRelation[] 
+:-
 	DependentSetcompre[(setcompre, rule)], 
 	// The shared outer var must be from predicate constraints in the rule
 	// TODO: What if the var is from negative predicate?

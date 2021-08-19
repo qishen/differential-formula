@@ -130,7 +130,7 @@ fn convert_setcompre(rid: String, sc: SetComprehension) -> Setcompre {
         val: atom
     });
     let default = convert_term(default_term);
-    Setcompre { rule: ref_new(&convert_rule(rid, sc_rule)), sop, default}
+    Setcompre { rule: ref_new(convert_rule(rid, sc_rule)), sop, default}
 }
 
 // Deal with setcompre expression separately because it needs to be assigned a rule id
@@ -138,7 +138,7 @@ fn convert_setcompre(rid: String, sc: SetComprehension) -> Setcompre {
 fn convert_setcompre_expr(sc_rule_id: String, expr: FExpr) -> Option<Expr> {
     if let FExpr::BaseExpr(base_expr) = expr {
         if let FBaseExpr::SetComprehension(setcompre) = base_expr {
-            let e = Expr::SetcompreExpr { sc: ref_new(&convert_setcompre(sc_rule_id, setcompre)) };
+            let e = Expr::SetcompreExpr { sc: ref_new(convert_setcompre(sc_rule_id, setcompre)) };
             return Some(e);
         }
     }
@@ -166,8 +166,8 @@ fn convert_expr(expr: FExpr) -> Option<Expr> {
             let left_expr = convert_expr(arith_expr.left.as_ref().clone()).unwrap();
             let right_expr = convert_expr(arith_expr.right.as_ref().clone()).unwrap();
             let e = Expr::ArithExpr { 
-                left: ref_new(&left_expr), 
-                right: ref_new(&right_expr), 
+                left: ref_new(left_expr), 
+                right: ref_new(right_expr), 
                 aop 
             };
             Some(e)

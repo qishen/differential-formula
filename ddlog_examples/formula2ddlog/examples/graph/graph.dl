@@ -1,3 +1,5 @@
+typedef BoolConstantHasNoCycle = BoolConstantHasNoCycle{}
+typedef BoolConstantR3N0 = BoolConstantR3N0{}
 typedef Edge = Edge{src: Node, dst: Node}
 typedef Graph_AUTOTYPE0 = Graph_AUTOTYPE0_usize{usize_field: usize} | Graph_AUTOTYPE0_string{string_field: string}
 typedef Graph_AUTOTYPE1 = Graph_AUTOTYPE1_Node{node_field: Node} | Graph_AUTOTYPE1_usize{usize_field: usize}
@@ -10,6 +12,8 @@ typedef Outdegree = Outdegree{degrees: usize}
 typedef OutdegreeByNode = OutdegreeByNode{node: Node, degrees: usize}
 typedef Path = Path{src: Node, dst: Node}
 typedef TwoEdge = TwoEdge{first: Edge, second: Edge}
+output relation BoolConstantHasNoCycle[BoolConstantHasNoCycle]
+output relation BoolConstantR3N0[BoolConstantR3N0]
 output relation Edge[Edge]
 output relation Graph_AUTOTYPE0[Graph_AUTOTYPE0]
 output relation Graph_AUTOTYPE1[Graph_AUTOTYPE1]
@@ -34,6 +38,8 @@ input relation OutdegreeByNodeInput[OutdegreeByNode]
 input relation OutdegreeInput[Outdegree]
 input relation PathInput[Path]
 input relation TwoEdgeInput[TwoEdge]
+BoolConstantHasNoCycle[BoolConstantHasNoCycle{}] :- BoolConstantR3N0[p].
+BoolConstantR3N0[BoolConstantR3N0{}] :- p in Path[Path{u, u1}], u == u1, var g = (p).group_by(()), var num = g.group_count(), num == 0.
 Edge[p] :- EdgeInput[p].
 Graph_AUTOTYPE0[p] :- Graph_AUTOTYPE0Input[p].
 Graph_AUTOTYPE1[p] :- Graph_AUTOTYPE1Input[p].
