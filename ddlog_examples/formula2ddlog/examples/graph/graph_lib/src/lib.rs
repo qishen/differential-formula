@@ -10,7 +10,7 @@ use differential_datalog::{DDlog, DDlogDynamic};
 use differential_datalog::program::config::{Config, ProfilingConfig};
 use differential_datalog::api::HDDlog;
 use differential_datalog::DeltaMap; // A trait representing the changes resulting from a given update.
-use differential_datalog::ddval::DDValue; // A generic DLog value type
+use differential_datalog::ddval::{DDVal, DDValConvert, DDValMethods, DDValue}; // A generic DLog value type
 // use differential_datalog::ddval::DDValConvert; //Another helper trair
 use differential_datalog::program::RelId; // Numeric relations id
 use differential_datalog::program::Update; // A type representing updates to the database

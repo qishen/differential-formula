@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
 
+use differential_datalog::program::Relation;
 use differential_datalog::record::IntoRecord;
 // Trait that must be implemented by an instance of a DDlog program. 
 // Type that represents a set of changes to DDlog relations.
@@ -388,11 +389,11 @@ fn main() {
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_SubtermTypeSpec as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDTermInSetcompreHead as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
-    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_ConstraintInRule as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_DependentSetcompre as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDAtomInRule as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::DDRhsInRule as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_OuterVarInDepSetcompre as RelId);
     // DDLogTransformation::dump_delta_by_relid(&delta, Relations::AtomVecOfRule as RelId);
+    // DDLogTransformation::dump_delta_by_relid(&delta, Relations::langs_formula_Rule as RelId);
     DDLogTransformation::print_program(&delta);
 }
