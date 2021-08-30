@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::*;
+use std::iter::FromIterator;
 
 use crate::expression::{BasicExprOps, SetComprehension, SetCompreOp};
 use crate::module::*;
@@ -7,6 +8,7 @@ use crate::parser::combinator::parse_program;
 use crate::term::*;
 use crate::type_system::*;
 use crate::rule::Rule;
+use crate::util::map::GenericMap;
 
 
 pub trait DDLogFormat {
@@ -75,43 +77,57 @@ impl DDLogFormat for RawType {
     }
 }
 
-impl DDLogFormat for AtomicTerm {
-    fn into_ddlog_format(&self) -> Option<String> {
-        let str = match self {
-            AtomicTerm::Composite(composite) => {
-                let type_name = composite.sort.type_id();
-                let subterm_strs: Vec<String> = composite.arguments.iter().map(|x| {
-                    x.into_ddlog_format().unwrap()
-                }).collect();
-                let subterms_str = subterm_strs.join(", ");
-                let str = format!("{}{{ {} }}", type_name, subterms_str);
-                str
-            },
-            AtomicTerm::Variable(variable) => {
-                variable.root.clone()
-            },
-            AtomicTerm::Atom(atom) => {
-                format!("{}", atom)
-            }
-        };
-        Some(str)
-    }
+fn convert_term(term: &AtomicTerm) -> String {
+    let str = match term {
+        AtomicTerm::Composite(composite) => {
+            let type_name = composite.sort.type_id();
+            let subterm_strs: Vec<String> = composite.arguments.iter().map(|x| {
+                convert_term(x)
+            }).collect();
+            let subterms_str = subterm_strs.join(", ");
+            let str = format!("{}{{ {} }}", type_name, subterms_str);
+            str
+        },
+        AtomicTerm::Variable(variable) => {
+            variable.root.clone()
+        },
+        AtomicTerm::Atom(atom) => {
+            format!("{}", atom)
+        }
+    };
+    str
 }
 
+/// Convert the term in the same way but return a string map for replaced variables. 
+fn convert_term_without_identical_vars(term: &AtomicTerm) -> (String, HashMap<String, Vec<String>>) {
+    let (normalized_term, tmap) = term.replace_identical_vars();
+    let mut vmap = HashMap::new();
+    for (k, vals) in tmap {
+        // Add some binary constraint later as k == val1, val1 == val2, ...
+        let val_strs: Vec<String> = vals.into_iter().map(|x| format!("{}", x)).collect();
+        vmap.insert(format!("{}", k), val_strs);
+    }
+    let str = convert_term(&normalized_term);
+    (str, vmap)
+}
+
+/// Return head terms and a list of type definition and relation pairs
 fn convert_rule_head(rule: &Rule) -> (String, Vec<(String, String)>){
     let mut term_strs = vec![];
     let mut boolean_vars = vec![];
     for term in rule.head().into_iter() {
         match term {
             &AtomicTerm::Composite(_) => {
-                let str = format!("{}[{}]", term.type_id(), term.into_ddlog_format().unwrap());
+                let str = format!("{}[{}]", term.type_id(), convert_term(term));
                 term_strs.push(str);
             },
             &AtomicTerm::Variable(_) => {
+                // Create new bool type and relation for the boolean variable in the head
                 let bool_constant_type = format!("typedef {}BoolConst = {}BoolConst{{}}", term, term);
-                let bool_constant_relation = format!("output relation {}BoolConst[inner: {}BoolConst]", 
+                let bool_constant_relation = format!("output relation {}BoolConst[{}BoolConst]", 
                     term, term);
                 boolean_vars.push((bool_constant_type, bool_constant_relation));
+                term_strs.push(format!("{}BoolConst[{}BoolConst{{}}]", term, term));
             },
             _ => {}
         }
@@ -120,25 +136,94 @@ fn convert_rule_head(rule: &Rule) -> (String, Vec<(String, String)>){
     (head_terms_str, boolean_vars)
 }
 
-fn convert_rule_body(rule: &Rule) -> (String, Vec<String>, Vec<String>, Vec<String>) {
+fn convert_binary() -> String {
+    todo!()
+}
+
+fn convert_rule_body(rule_id: usize, rule: &Rule) 
+-> (String, Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<(String, String)>) {
+    // Positive predicate terms
+    let mut vmap: HashMap<String, HashSet<String>> = HashMap::new();
     let pos_strs: Vec<String> = rule.positive_terms().into_iter().map(|term| {
-        format!("{}[{}]", term.type_id(), term.into_ddlog_format().unwrap())
+        // Derive some additional equality constraints if one variable occurs more than one in the term
+        let (normalized_term, tmap) = term.replace_identical_vars(); 
+        for (k, vals) in tmap {
+            let k_str = format!("{}", k);
+            let val_strs: Vec<String> = vals.into_iter().map(|x| format!("{}", x)).collect();
+            if vmap.contains_key(&k_str) {
+                let set = vmap.get_mut(&k_str).unwrap();
+                set.extend(val_strs);
+            } else {
+                vmap.insert(k_str, HashSet::from_iter(val_strs.into_iter()));
+            }
+        }
+        // Predicate in ddlog is expressed in the complete form of `Relation [Type]`
+        format!("{}[{}]", term.type_id(), convert_term(&normalized_term))
     }).collect();
 
-    // Negation to set comprehension
-    let neg_setcompre_strs: Vec<String> = rule.negated_setcompre_terms().into_iter().enumerate()
-    .map(|(i, term)| {
-        let neg_vars = term.variables();
-        let neg_var_strs: Vec<String> = neg_vars.iter().map(|x| format!("{}", x)).collect();
-        let neg_vars_str = neg_var_strs.join(", ");
-        format!("var g{} = ({}).group_by(()), var count{} = g.group_count(), count{} == 0",
-            i, neg_vars_str, i, i
-        )
-    }).collect();
+    let neg_setdiff_strs: Vec<String> = rule.negated_setdiff_terms().into_iter()
+        .enumerate().map(|x| {
+            todo!()
+        }).collect();
 
-    // Negation to set difference
+    // Negation as set comprehension and create new rules for each comprehension in the form of
+    // PredExists :- u is Pred(..), var g = (u).group_by(()), var count = g.group_count(), count == 0.
+    // Bool constant `PredExists` could then be used in the body of other rules.
+    let mut boolean_vars = vec![];
+    let mut neg_bool_constraint_strs = vec![]; 
+    let neg_setcompre_bool_const_rule_strs: Vec<String> = rule.negated_setcompre_terms().into_iter()
+        .enumerate().map(|(i, term)| {
+            let auto_aggr_var = format!("R{}N{}", rule_id, i);
+            let bool_constant_type = format!("typedef {}BoolConst = {}BoolConst{{}}", 
+                auto_aggr_var, auto_aggr_var);
+            let bool_constant_relation = format!("output relation {}BoolConst[{}BoolConst]", 
+                auto_aggr_var, auto_aggr_var);
+            boolean_vars.push((bool_constant_type, bool_constant_relation));
+            neg_bool_constraint_strs.push(format!("{}BoolConst[{}BoolConst{{}}]", auto_aggr_var, auto_aggr_var));
+
+            let neg_vars = term.variables();
+            let neg_var_strs: Vec<String> = neg_vars.iter().map(|x| format!("{}", x)).collect();
+            let neg_vars_str = neg_var_strs.join(", ");
+            let head = format!("{}BoolConst[{}BoolConst{{}}]", auto_aggr_var, auto_aggr_var);
+            let aggr = format!("var g = ({}).group_by(()), var count = g.group_count(), count == 0", 
+                neg_vars_str);
+
+            // Derive some additional equality constraints if one variable occurs more than one in the term
+            let mut setcompre_vmap: HashMap<String, HashSet<String>> = HashMap::new();
+            let (normalized_term, tmap) = term.replace_identical_vars(); 
+            for (k, vals) in tmap {
+                let k_str = format!("{}", k);
+                let val_strs: Vec<String> = vals.into_iter().map(|x| format!("{}", x)).collect();
+                if setcompre_vmap.contains_key(&k_str) {
+                    let set = setcompre_vmap.get_mut(&k_str).unwrap();
+                    set.extend(val_strs);
+                } else {
+                    setcompre_vmap.insert(k_str, HashSet::from_iter(val_strs.into_iter()));
+                }
+            }
+
+            // TODO: Handle derived binary constraints from setcompre_vmap.
+            format!("{} :- {}[{}], {}.", 
+                head, term.type_id(), 
+                convert_term(&normalized_term), aggr
+            )
+        }).collect();
+
+    // Negation as set difference
+    // TODO: Figure out how to set difference with multiple negation in a rule
     let neg_setdiff_strs: Vec<String> = rule.negated_setdiff_terms().into_iter().map(|term| {
-        format!("not {}[{}]", term.type_id(), term.into_ddlog_format().unwrap())
+        let (normalized_term, tmap) = term.replace_identical_vars(); 
+        for (k, vals) in tmap {
+            let k_str = format!("{}", k);
+            let val_strs: Vec<String> = vals.into_iter().map(|x| format!("{}", x)).collect();
+            if vmap.contains_key(&k_str) {
+                let set = vmap.get_mut(&k_str).unwrap();
+                set.extend(val_strs);
+            } else {
+                vmap.insert(k_str, HashSet::from_iter(val_strs.into_iter()));
+            }
+        }
+        format!("not {}[{}]", term.type_id(), convert_term(&normalized_term))
     }).collect();
        
     let mut pre_aggr_rules = vec![];
@@ -150,7 +235,7 @@ fn convert_rule_body(rule: &Rule) -> (String, Vec<String>, Vec<String>, Vec<Stri
     for (i, (var, setcompre)) in rule.setcompre_map().iter().enumerate() {
         // Rename the variable name to hold the result of set comprehension.
         let aggr_result_name = format!("aggr{}_{}", i, var);
-        let union_name = format!("SetcompreHeadUnion{}", i);
+        let union_name = format!("R{}SC{}Union", rule_id, i);
         let (union_type_str, 
             container_relation_str, 
             pre_aggr_rule_str, 
@@ -165,7 +250,7 @@ fn convert_rule_body(rule: &Rule) -> (String, Vec<String>, Vec<String>, Vec<Stri
     let str_vectors= vec![
         pos_strs, 
         neg_setdiff_strs, 
-        neg_setcompre_strs, 
+        neg_bool_constraint_strs,
         post_aggr_rule_body_strs
     ];
     let body_part_strs: Vec<String> = str_vectors.iter()
@@ -174,7 +259,14 @@ fn convert_rule_body(rule: &Rule) -> (String, Vec<String>, Vec<String>, Vec<Stri
         .collect();
     let body_str = body_part_strs.join(", ");
 
-    (body_str, pre_aggr_rules, setcompre_head_union_types, setcompre_head_union_relations)
+    (
+        body_str, 
+        pre_aggr_rules, 
+        neg_setcompre_bool_const_rule_strs, 
+        setcompre_head_union_types, 
+        setcompre_head_union_relations, 
+        boolean_vars
+    )
 }
 
 /// Return union type defs and containers in the head of intermediate rule.
@@ -183,7 +275,9 @@ fn convert_setcompre_head(union_name: String, container_name: String, head: Vec<
     // TODO: Add constants or do we really have to? 
     let mut type_names = HashSet::new();
     for term in head.iter() {
-        // If the term is a variable, it must have a valid type assigned to it.
+        // If the term is a variable, it must have a valid type not type id assigned to it.
+        // TODO: Check if the right type is assigned to the variable term otherwise
+        // the `term.type_id()` will return Undefined.
         type_names.insert(term.type_id().to_string());
     }
     let union_strs: Vec<String> = type_names.iter().enumerate().map(|(i, type_name)| {
@@ -203,7 +297,7 @@ fn convert_setcompre_head(union_name: String, container_name: String, head: Vec<
             container_name, 
             union_name,
             type_name, 
-            term.into_ddlog_format().unwrap()
+            convert_term(term)
         )
     }).collect(); 
     let container_head_str = container_strs.join(", ");
@@ -216,6 +310,7 @@ fn convert_setcompre(
     outer_vars: HashSet<AtomicTerm>, 
     setcompre: SetComprehension) 
 -> (String, String, String, String) {
+    // Create a new relation to contain the head term in set comprehension.
     let container_name = format!("{}ContainerRel", union_type_name);
     let head = setcompre.vars.clone();
     let (union_type_str, container_head_str) = convert_setcompre_head(
@@ -226,21 +321,24 @@ fn convert_setcompre(
 
     let container_relation_str = format!("output relation {} [{}]", container_name, union_type_name);
     let setcompre_rule: Rule = setcompre.clone().into();
-    // Take the condition of set comprehension as the body of a rule.
-    let (rule_body_str, _, _, _) = convert_rule_body(&setcompre_rule);
-    let pre_aggr_rule_str = format!("{} :- {}", container_head_str, rule_body_str);
+    // Take the condition of set comprehension as the body of a rule
+    // TODO: Handle nested set comprehension.
+    let (rule_body_str, _, _, _, _, _) = convert_rule_body(666, &setcompre_rule);
+    let pre_aggr_rule_str = format!("{} :- {}.", container_head_str, rule_body_str);
 
-    // TODO: Add more setcompre operators.
+    // TODO: Add more setcompre operators
     let op_str = match setcompre.op {
         SetCompreOp::Sum => "group_sum()",
         _ => "group_count()"
     };
+
     // Aggregate on the whole group because no shared variabels with outer scope
     let post_aggr_rule_body_str = format!("{}[u], var g = u.group_by(()), var {} = g.{}", 
         container_name, 
         aggr_result_name,
         op_str
     );
+
     (union_type_str, container_relation_str, pre_aggr_rule_str, post_aggr_rule_body_str)
 }
 
@@ -265,7 +363,7 @@ fn convert_domain(domain: &Domain) -> String {
         }
     }
 
-    for rule in rules.iter() {
+    for (i, rule) in rules.iter().enumerate() {
         let (rule_head_str, extras) = convert_rule_head(rule);
         for (bool_type, bool_relation) in extras {
             typedef_strs.push(bool_type);
@@ -273,12 +371,21 @@ fn convert_domain(domain: &Domain) -> String {
         }
 
         let (rule_body_str, 
-            pre_aggr_rules, 
+            pre_aggr_rules,
+            neg_bool_const_rules, 
             setcompre_head_union_types, 
-            setcompre_head_union_relations
-        ) = convert_rule_body(rule);
+            setcompre_head_union_relations,
+            boolean_vars
+        ) = convert_rule_body(i, rule);
+
+        // Those boolean vars are from negation that are treated as set comprehension
+        for (bool_type, bool_relation) in boolean_vars {
+            typedef_strs.push(bool_type);
+            relation_strs.push(bool_relation);
+        }
 
         rule_strs.extend(pre_aggr_rules);
+        rule_strs.extend(neg_bool_const_rules);
         typedef_strs.extend(setcompre_head_union_types);
         relation_strs.extend(setcompre_head_union_relations);
 
@@ -337,12 +444,17 @@ fn test_convert_type() {
     let r1 = graph.meta_info().rules().get(0).unwrap().clone();
     let t1 = r1.head().get(0).unwrap().clone();
     assert_eq!(
-        t1.into_ddlog_format().unwrap(), 
+        convert_term(t1), 
         "TwoEdge{ Edge{ Node{ 1 }, b }, Edge{ c, Node{ 2 } } }"
     );
     
-    let (body_str, pre_aggr_rules, setcompre_head_union_types, setcompre_head_union_relations) =
-        convert_rule_body(&r1);
+    let (body_str, 
+        pre_aggr_rules, 
+        neg_bool_const_rules, 
+        setcompre_head_union_types, 
+        setcompre_head_union_relations,
+        _
+    ) = convert_rule_body(0, &r1);
     println!("{}", body_str);
     println!("{:?}", pre_aggr_rules);
     println!("{:?}", setcompre_head_union_types);

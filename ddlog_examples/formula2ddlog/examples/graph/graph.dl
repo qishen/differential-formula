@@ -9,6 +9,10 @@ typedef Node = Node{name: Graph_AUTOTYPE0}
 typedef Outdegree = Outdegree{degrees: usize}
 typedef OutdegreeByNode = OutdegreeByNode{node: Node, degrees: usize}
 typedef Path = Path{src: Node, dst: Node}
+typedef PostAggrContainerR0SC0Dot1 = PostAggrContainerR0SC0Dot1{src: Node, sc_result: SCResultR0SC0Dot1}
+typedef PreAggrContainerR0SC0Dot1 = PreAggrContainerR0SC0Dot1{src: Node, sc_union: SCHeadUnionR0SC0Dot1}
+typedef SCHeadUnionR0SC0Dot1 = SCHeadUnionR0SC0Dot1_Edge{edge_field: Edge} | SCHeadUnionR0SC0Dot1_Node{node_field: Node}
+typedef SCResultR0SC0Dot1 = SCResultR0SC0Dot1_usize{usize_field: usize} | SCResultR0SC0Dot1_float{float_field: float}
 typedef TwoEdge = TwoEdge{first: Edge, second: Edge}
 output relation Edge[Edge]
 output relation Graph_AUTOTYPE0[Graph_AUTOTYPE0]
@@ -21,6 +25,9 @@ output relation Node[Node]
 output relation Outdegree[Outdegree]
 output relation OutdegreeByNode[OutdegreeByNode]
 output relation Path[Path]
+output relation PostAggrContainerR0SC0Dot1[PostAggrContainerR0SC0Dot1]
+output relation PreAggrContainerR0SC0Dot1[PreAggrContainerR0SC0Dot1]
+output relation SCHeadUnionR0SC0Dot1[SCHeadUnionR0SC0Dot1]
 output relation TwoEdge[TwoEdge]
 input relation EdgeInput[Edge]
 input relation Graph_AUTOTYPE0Input[Graph_AUTOTYPE0]
@@ -41,11 +48,11 @@ Graph_AUTOTYPE2[p] :- Graph_AUTOTYPE2Input[p].
 Line[p] :- LineInput[p].
 MagicEdge[p] :- MagicEdgeInput[p].
 Nocycle[p] :- NocycleInput[p].
-Nocycle[Nocycle{u}] :- u in Node[Node{_}], not Path[Path{u, u}].
 Node[p] :- NodeInput[p].
 Outdegree[p] :- OutdegreeInput[p].
 OutdegreeByNode[p] :- OutdegreeByNodeInput[p].
+OutdegreeByNode[OutdegreeByNode{src, amt}] :- src in Node[Node{_}], PostAggrContainerR0SC0Dot1[PostAggrContainerR0SC0Dot1{src, amt}].
 Path[p] :- PathInput[p].
-Path[Path{a, b}] :- Edge[Edge{a, b}].
-Path[Path{a, c}] :- Path[Path{a, b}], Path[Path{b, c}].
+PostAggrContainerR0SC0Dot1[PostAggrContainerR0SC0Dot1{src, result}] :- PreAggrContainerR0SC0Dot1[PreAggrContainerR0SC0Dot1{src, u}], var g = (u).group_by((src)), var result = g.group_count().
+PreAggrContainerR0SC0Dot1[PreAggrContainerR0SC0Dot1{src, SCHeadUnionR0SC0Dot1_Edge{e}}], PreAggrContainerR0SC0Dot1[PreAggrContainerR0SC0Dot1{src, SCHeadUnionR0SC0Dot1_Edge{Edge{src, src}}}], PreAggrContainerR0SC0Dot1[PreAggrContainerR0SC0Dot1{src, SCHeadUnionR0SC0Dot1_Node{src}}] :- PostAggrContainerR0SC0Dot1[PostAggrContainerR0SC0Dot1{src, amt}], e in Edge[Edge{src, dst}], src in Node[Node{_}].
 TwoEdge[p] :- TwoEdgeInput[p].

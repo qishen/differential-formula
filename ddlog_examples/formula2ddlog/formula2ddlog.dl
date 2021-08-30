@@ -297,7 +297,6 @@ DDRelation[setcompre_result_ddrelation] :-
 	// The name of new union type should include the rule id and the setcompre id
 	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
 	// TODO: Think about the type of aggregation results other than int and float.
-	// FIXME: the field name cannot be float or usize because they are reserved
 	var setcompre_result_type = union_of_ddtypes(sc_result_name, [Int, Float]),
 	var setcompre_result_ddrelation = DDRelation { false, sc_result_name, setcompre_result_type }.
 
@@ -378,37 +377,72 @@ DDRhsInRule[(dd_head_union_atom_rhs_with_def, rule)] :-
 // s1 and s2 represent the shared variable between inner and outer scope
 
 // 1. Create `PreAggrContainer ::= (vco1: T1, vco2: T2,..., vcon: Tn, inner: SCHeadUnion)` where `vcox` is the 
-// variable in the outer scope and `Tn` is the type of that variable. 
+// variable in the outer scope and `Tn` is the type of that variable. `SCHeadUnion` should be available by
+// looking up the name.
+DDTypeSpec[setcompre_result_type], 
 DDTypeSpec[pre_aggr_container_ddtype], 
-DDRelation[pre_aggr_container_ddrelation] :-
+DDRelation[pre_aggr_container_ddrelation], 
+DDTypeSpec[post_aggr_container_ddtype], 
+DDRelation[post_aggr_container_ddrelation] :-
 	DependentSetcompre[(setcompre, rule)], 
 	// The shared outer var must be from predicate constraints in the rule
 	// TODO: What if the var is from negative predicate?
-	ConstraintInRule[(_, PredCons {false, pos_pred_term, _}, rule)],
-	OuterVarInDepSetcompre[(shared_outer_var, setcompre, rule)],
-	SubtermTypeSpec[(shared_outer_var, pos_pred_term, outer_var_typespec)],
+	// `src is Node()` is not included in relation SubtermTypeSpec.
+	ConstraintInRule[(_, PredCons {false, pos_pred_term, _}, setcompre.rule)],
+	OuterVarInDepSetcompre[(outer_var, setcompre, rule)],
+	// We derive the type of every subterm in each term.
+	SubtermTypeSpec[(outer_var, pos_pred_term, outer_var_typespec)],
 	var rule_id = rule.id,
 	var sc_id = setcompre.rule.id,
 	var head_union_type_name = "SCHeadUnion" ++ "R" ++ rule_id ++ "SC" ++ sc_id,
 	var pre_aggr_container_name = "PreAggrContainer" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
+	var post_aggr_container_name = "PostAggrContainer" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
+	var sc_result_name = "SCResult" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
 	// Find the pre-computed union type of all types that occur in the head of set comprehension
 	dd_head_union_typespec in DDTypeSpec[DDUnionTypeSpec {head_union_type_name, _}],
-	var group = (shared_outer_var, outer_var_typespec).
-		group_by((setcompre, rule, dd_head_union_typespec, pre_aggr_container_name)),
+	// Aggregate all shared variables for the new constructor `PreAggrContainer` 
+	// FIXME: The variables are aggregated in which order?
+	var group = (outer_var, outer_var_typespec).group_by((
+		setcompre, 
+		rule, 
+		dd_head_union_typespec, 
+		pre_aggr_container_name,
+		post_aggr_container_name,
+		sc_result_name)),
 	// Get the keys in `group_by()` because we need the name that is consumed in aggregation
-	(_, _, _, var pre_aggr_container_name2) = group.group_key(),
-	var fields_without_union = group.map(|var_and_typespec| 
+	(_,_,_, var pre_aggr_container_name2, var post_aggr_container_name2, var sc_result_name2) = group.group_key(),
+	var outer_var_fields = group.map(|var_and_typespec| 
 		DDField { to_string(var_and_typespec.0), ref_new(to_dd_typespec(var_and_typespec.1)) }
 	),
+	// `SCResult` the type of aggregation result
+	var setcompre_result_type = union_of_ddtypes(sc_result_name2, [Int, Float]),
 	// `PreAggrContainer ::= (vco1: T1, vco2: T2,..., vcon: Tn, inner: SCHeadUnion)`
-	var fields = vec_push_imm(fields_without_union, DDField { "sc_union", ref_new(dd_head_union_typespec) }), 
-	var field_list = from_vec(fields),
-	var pre_aggr_container_cons = DDTypeCons { pre_aggr_container_name2, field_list }, 
+	var pre_fields = vec_push_imm(outer_var_fields, DDField { "sc_union", ref_new(dd_head_union_typespec) }), 
+	var pre_field_list = from_vec(pre_fields),
+	var pre_aggr_container_cons = DDTypeCons { pre_aggr_container_name2, pre_field_list }, 
 	var pre_aggr_container_ddtype = DDUnionTypeSpec { 
 		pre_aggr_container_name2, 
 		from_singleton_to_nonnull_list(pre_aggr_container_cons) 
 	},
-	var pre_aggr_container_ddrelation = DDRelation { false, pre_aggr_container_name2, pre_aggr_container_ddtype }.
+	var pre_aggr_container_ddrelation = DDRelation { 
+		false, 
+		pre_aggr_container_name2, 
+		pre_aggr_container_ddtype 
+	},
+	// TODO: result could be other numeric type and find a way to decide which type or types to use.
+	// `PostAggrContainer ::= (vco1: T1, vco2: T2,..., vcon: Tn, result: Integer+Float)`
+	var post_fields = vec_push_imm(outer_var_fields, DDField{ "sc_result", ref_new(setcompre_result_type) }),
+	var post_field_list = from_vec(post_fields),
+	var post_aggr_container_cons = DDTypeCons { post_aggr_container_name2, post_field_list },
+	var post_aggr_container_ddtype = DDUnionTypeSpec { 
+		post_aggr_container_name2, 
+		from_singleton_to_nonnull_list(post_aggr_container_cons) 
+	},
+	var post_aggr_container_ddrelation = DDRelation { 
+		false, 
+		post_aggr_container_name2, 
+		post_aggr_container_ddtype 
+	}.
 
 
 // PreAggrContainer(vco,.., U::CONST1()),..., PreAggrContainer(vco,.., U::CONSTn()) :- 
@@ -459,37 +493,88 @@ DDAtomInRule[(dd_atom_for_sc_rule, sc_rule)] :-
 	// SCHeadUnion[tn] where `tn` is the term from the head of set comprehension
 	var dd_atom_for_sc_rule = DDAtom { None, ref_new(dd_pre_aggr_container_relation), dd_sc_head_term_expr }.
 
+
 // Aggregate the result grouped by shared variables
-// PostAggrContainer(vco1, vco2,..., vcon, val) :- PreAggrContainer(vco1, vco2,..., vcon, u), 
-// 	   u.group_by((vco1, vco2,..., vcon)), var val = g.some_aggr_func().
-DDRule[DDRule{ [post_aggr_atom], [pre_aggr_container_atom_rhs]}] :-
+// PostAggrContainer(vco1, vco2,..., vcon, val) :- 
+// 		PreAggrContainer(vco1, vco2,..., vcon, u), 
+// 	    u.group_by((vco1, vco2,..., vcon)), 
+// 		var result = g.some_aggr_func().
+DDRule[DDRule{ 
+	[post_aggr_atom], 
+	[pre_aggr_container_atom_rhs, group_assignment, result_assignment] 
+}] :-
 	DependentSetcompre[(setcompre, rule)], 
 	OuterVarInDepSetcompre[(outer_var, setcompre, rule)],
 	var group = (outer_var).group_by((setcompre, rule)),
 	(var setcompre2, var rule2) = group.group_key(),
 	var rule_id = rule2.id,
 	var sc_id = setcompre2.rule.id,
-	var dd_outer_variable_exprs = group.map(|outer_var| DDTermExpr{ref_new(to_dd_term(outer_var))}),
+	var dd_outer_variable_exprs = group.map(|outer_var| DDTermExpr { ref_new(to_dd_term(outer_var)) } ),
+	var dd_outer_variable_expr_refs = group.map(|outer_var| 
+		ref_new(DDTermExpr { ref_new(to_dd_term(outer_var)) }) 
+	),
 	var pre_aggr_container_name = "PreAggrContainer" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
 	var post_aggr_container_name = "PostAggrContainer" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
+	// Create an RHS expression for `PreAggrContainer(vco1, vco2,..., vcon, u)`
 	var u_term = DDVar {"u"},
-	var pre_aggr_container_term = DDCons {
-		pre_aggr_container_name,
-		from_vec(vec_push_imm(dd_outer_variable_exprs, DDTermExpr{ref_new(u_term)}))
-	},
+	var pre_aggr_fields = vec_push_imm(dd_outer_variable_exprs, DDTermExpr{ref_new(u_term)}),
+	var pre_aggr_container_term = DDCons { pre_aggr_container_name, from_vec(pre_aggr_fields) },
 	var pre_aggr_container_term_expr = DDTermExpr { ref_new(pre_aggr_container_term) },
 	dd_pre_aggr_container_relation in DDRelation[DDRelation {_,pre_aggr_container_name,_}],
-	var pre_aggr_container_atom = DDAtom {None, ref_new(dd_pre_aggr_container_relation), pre_aggr_container_term_expr},
+	var pre_aggr_container_atom = DDAtom {
+		None, 
+		ref_new(dd_pre_aggr_container_relation), 
+		pre_aggr_container_term_expr
+	},
 	var pre_aggr_container_atom_rhs = DDRhsAtom {false, pre_aggr_container_atom}, 
+	var val_term = DDVar {"result"},
 	dd_post_aggr_container_relation in DDRelation[DDRelation {_,post_aggr_container_name,_}],
 	var post_aggr_term = DDCons {
 		post_aggr_container_name,
-		from_vec(vec_push_imm(dd_outer_variable_exprs, DDTermExpr{ref_new(DDVar{"val"})}))
+		from_vec(vec_push_imm(dd_outer_variable_exprs, DDTermExpr{ref_new(val_term)}))
 	},
-	var post_aggr_term_expr = DDTermExpr{ ref_new(post_aggr_term) }, 
-	var post_aggr_atom = DDAtom {None, ref_new(dd_post_aggr_container_relation), post_aggr_term_expr}.
+	var post_aggr_term_expr = DDTermExpr { ref_new(post_aggr_term) }, 
+	var post_aggr_atom = DDAtom {None, ref_new(dd_post_aggr_container_relation), post_aggr_term_expr},
+	// var g = u.group_by((vco1, vco2,..., vcon)).
+	var u_expr_ref = ref_new(DDTermExpr { ref_new(u_term) }),
+	var u_vec = [u_expr_ref],
+	var group_assignment = DDGroup { 
+		"g", DDTupleExpr{u_vec}, 
+		DDTupleExpr{ dd_outer_variable_expr_refs } 
+	},
+	// var result = g.group_count().
+	var result_ref = ref_new(DDVarDecl { "result" }),
+	var result_expr = DDTermExpr { result_ref },
+	var g_ref = ref_new(DDVar { "g" }),
+	var g_expr_ref = ref_new(DDTermExpr { g_ref }),
+	// TODO: Replace `group_count` based on the exact setcompre.sop
+	var aggregation_expr = DDDotFunctionCallExpr { g_expr_ref, "group_count", vec_empty() },
+	var result_assignment = DDRhsAssignment { result_expr, aggregation_expr }.
 
 
+// Find the variable that represents the aggregation result and use it in the `PostAggrContainer` to
+// create a new RHS and add it to the original rule that contains the aggregation.
+DDRhsInRule[(ddrhs, rule)] :-
+	DependentSetcompre[(setcompre, rule)], 
+	ConstraintInRule[(_, AssignCons{def_term, SetcompreExpr{setcompre_ref}}, rule)], 
+	ref_new(setcompre) == setcompre_ref,
+	OuterVarInDepSetcompre[(outer_var, setcompre, rule)],
+	var group = (outer_var).group_by((setcompre, rule, def_term)),
+	(var setcompre2, var rule2, var def_term2) = group.group_key(),
+	var rule_id = rule2.id,
+	var sc_id = setcompre2.rule.id,
+	var dd_outer_variable_exprs = group.map(|outer_var| DDTermExpr { ref_new(to_dd_term(outer_var)) } ),
+	var post_aggr_container_name = "PostAggrContainer" ++ "R" ++ rule_id ++ "SC" ++ sc_id, 
+	// var val_term = DDVar {"result"},
+	var dd_def_term = to_dd_term(def_term2),
+	dd_post_aggr_container_relation in DDRelation[DDRelation {_,post_aggr_container_name,_}],
+	var post_aggr_term = DDCons {
+		post_aggr_container_name,
+		from_vec(vec_push_imm(dd_outer_variable_exprs, DDTermExpr{ref_new(dd_def_term)}))
+	},
+	var post_aggr_term_expr = DDTermExpr { ref_new(post_aggr_term) }, 
+	var post_aggr_atom = DDAtom {None, ref_new(dd_post_aggr_container_relation), post_aggr_term_expr},
+	var ddrhs = DDRhsAtom { false, post_aggr_atom }.
 
 /***************** Create New DDRule in DDlog ********************/
 AtomVecOfRule[(atom_vec, rule_ref)] :- Rule[rule], var rule_ref = ref_new(rule), DDAtomInRule[(ddatom, rule_ref)], 

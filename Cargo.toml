@@ -22,14 +22,14 @@ bimap = "0.6.1"
 # timely = { version = "0.11.1", features = ["bincode"] } 
 # timely = { path = "../timely-dataflow/timely/", features = ["bincode"] }
 # timely = { path = "../timely-dataflow/timely/" }
-timely = { git = "https://github.com/TimelyDataflow/timely-dataflow", features = ["bincode"] }
 # timely = { git = "https://github.com/TimelyDataflow/timely-dataflow" }
+timely = { git = "https://github.com/TimelyDataflow/timely-dataflow", features = ["bincode"] }
 timely_sort = "0.1.6"
 
 # Internally differential-dataflow use timely as a dependency and they have to be at the same version.
 # differential-dataflow = "0.11.0"
-differential-dataflow = { path = "../differential-dataflow" }
-# differential-dataflow = { git = "https://github.com/qishen/differential-dataflow.git", branch = "add-serde-fields" }
+# differential-dataflow = { path = "../differential-dataflow" }
+differential-dataflow = { git = "https://github.com/qishen/differential-dataflow" }
 
 # Import a local differential-datalog library.
 # types = { path = "../differential-datalog/rust/template/types" }
