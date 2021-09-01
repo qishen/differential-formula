@@ -12,10 +12,16 @@ EDGE_NUM=${2-100}
 TARGET=${3-ddlog}
 echo "Print out bash script arguments: Nodes=$NODE_NUM, Edges=$EDGE_NUM, Target=$TARGET"
 
+# Download DDLog-0.47.0 release rather than building from latest DDLog source code
+if [ ! -d ddlog ]; then
+wget https://github.com/vmware/differential-datalog/releases/download/v0.47.0/ddlog-v0.47.0-20210819223359-Linux.tar.gz -O ddlog.tar.gz \
+	&& tar -xzvf ddlog.tar.gz && rm ddlog.tar.gz
+fi
+
 if [[ $TARGET = ddlog* ]]; then
 	echo "Compiling `formula2ddlog` transformation into Rust runtime" 
 	# Build formula2ddlog Rust runtime from formula2ddlog.dl and compile it all the way to binary
-	ddlog -i formula2ddlog.dl -L $HOME/differential-datalog/lib && 
+	ddlog/bin/ddlog -i formula2ddlog.dl -L ddlog/lib && 
 	(cd formula2ddlog_lib && cargo build --release)
 
 	echo "Generating DDLog program `graph.dl` from FORMULA program `graph.4ml`"
@@ -24,7 +30,7 @@ if [[ $TARGET = ddlog* ]]; then
 
 	echo "Compiling DDLog program `graph.dl` to Rust runtime"
 	# If the std lib is missing we have to specify the path when generating Rust runtime for domain
-	ddlog -i examples/graph/graph.dl -L $HOME/differential-datalog/lib
+	ddlog/bin/ddlog -i examples/graph/graph.dl -L ddlog/lib
 
 	pushd examples/graph/graph_lib > /dev/null
 	if [[ $TARGET = "ddlog_bench" ]]; then
