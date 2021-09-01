@@ -16,7 +16,7 @@ Incremental Formal Modeling Using Logic Programming and Analysis
 3. Copy the DDLog program into `ddlog_examples/formula2ddlog/example/graph/graph.dl` and run `ddlog -i graph.dl` to generate a Rust runtime for the graph domain that can execute constraint checking and model transformation incrementally. The Rust runtime for graph domain is generated in `graph_ddlog` and a separate `graph_lib` uses the Rust runtime in `graph_ddlog` as library to build an executable that does graph domain related computation incrementally.
 
 ## Testing
-Run `ddlog_examples/formula2ddlog/run.sh` to benchmark constraint checking on random graph in both FORMULA and DDLog.
+Run `ddlog_examples/formula2ddlog/benchmark.sh` to benchmark constraint checking on random graph in both FORMULA and DDLog.
 
 ```
 Usage:
@@ -26,3 +26,10 @@ run.sh <NODE=2000> <EDGE=100> <TARGET=ddlog>
 if the target is set to `ddlog` or `formula`, <NODE> and <EDGE> are the attributes of the auto-generated random graph. The constraint checking will only be executed once on the random graph with the exact size we specify in the arguments or the default value.
 
 if the target is for benchmark as `ddlog_bench` or `formula_bench`, <NODE> is the number of nodes for the auto-generated random graph but <EDGE> is number for both initial edges and the range interval. The constraint checking will be executed multiple times for the benchmarking.
+
+Well, things may not be working well on your machine for various reasons when you are following the instructions to run the testing or benchmark. In this case, build a docker image with command `docker build -t differential-formula .` in the main directory where `Dockerfile` is located or pull `differential-formula` from Docker Hub. 
+
+The image has 3 executables inside a folder named `dformula-executable`:
+1. DDLog binary and library in case you still need it to run some DDLog commands.
+2. `formula2ddlog_lib` transformation tool - Generates a DDLog program given a FORMULA program as parameter. For example, `formula2ddlog_lib xxx.4ml > xxx.dl`.
+3. `graph_lib` benchmarking tool - Run benchmark or just testing with parameters as `graph_lib <NODE=2000> <EDGE=100> <TARGET=ddlog>`. If the target is `ddlog` or `formula`, `<NODE>` and `<EDGE>` define the size of the random graph for testing. If the target is set for benchmark as `ddlog_bench` or `formula_bench`, `<NODE>` is the number of nodes of the random graph for benchmark but `<EDGE>` is number of both initial edges and the range interval.
