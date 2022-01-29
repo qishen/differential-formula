@@ -1,4 +1,6 @@
 import group
+import print
+
 import langs::ddlog
 import langs::formula
 import langs::lib::list
@@ -44,15 +46,56 @@ DDTypeSpec[Bool] :- TypeSpec[Boolean].
 DDTypeSpec[Float] :- TypeSpec[FloatNum].
 DDTypeSpec[Str] :- TypeSpec[String].
 
+// Create a new a new relation for the FORMULA constructor `T ::= new (T1, T2, ..., Tn)`
+// DDTypeSpec[dd_com_type] :- TypeSpec[composite_type], is_composite_type(composite_type), 
+// 	var dd_com_type = to_dd_typespec(composite_type).
+DDTypeSpec[dd_union_subtype],
+DDTypeSpec[dd_union_type] :-
+	TypeSpec[union_type], is_union_type(union_type), 
+	// Inspect print("UnionType ${union_type}"),
+	var union_subtype = FlatMap(subtype_set(union_type)), 
+	var dd_union_type = to_dd_typespec(union_type),
+	var dd_union_subtype = to_dd_typespec(union_subtype).
+
+// For a union type `U ::= T1 + ... + Tn` in which Ti could be another union type too
+DDTypeSpec[dd_union_subtype], 
+DDRelation[dd_union_relation], 
+// The additional rule for the relation of union type `U[to_any(p)] :- T[p]`
+DDRule[DDRule { rule_head, rule_body }] :- 
+	TypeSpec[union_type], is_union_type(union_type), 
+	// Have to change the `dd_union_type` to Any type in the relation
+	// var dd_union_type = to_dd_typespec(union_type),
+	// Each composite subtype in the union type should already be defined.  
+	var union_subtype = FlatMap(subtype_set(union_type)), 
+	var dd_union_subtype = to_dd_typespec(union_subtype),
+	var subtype_rel_name = to_string(union_subtype),
+	var union_rel_name = to_string(union_type),
+	// relation U[Any] is a relation of Any type. 
+	var dd_union_relation = DDRelation { false, union_rel_name, Any },
+	// relation T[T] is a relation of the constructor type T.
+	var dd_subtype_relation = DDRelation { false, subtype_rel_name, dd_union_subtype },
+	// `U[to_any(p)] :- T[p]`
+	var pterm = DDVar{"p"},
+	// to_any(p)
+	var head_atom = ddterm_to_any_atom(None, ref_new(dd_union_relation), pterm),
+	var rule_head = [head_atom],
+	// Simply wrap term `p` into an atom.
+	var body_atom = ddterm_to_ddatom(None, ref_new(dd_subtype_relation), pterm),
+	var ddrhs = DDRhsAtom { false, body_atom },
+	var rule_body = [ddrhs].
+
 // Generate DDlog type and relation for each Formula type
 // Since Formula does not distinguish between input and output relations but DDlog does, we need to 
 // define two relations for the same type with a rule as `T[t] :- Tinput[t]`
-DDTypeSpec[dd_type], 
-DDRelation[dd_input_relation], DDRelation[dd_relation], 
+// DDTypeSpec[dd_type], 
+DDRelation[dd_input_relation], 
+DDRelation[dd_relation], 
+// An input rule: T[p] :- TInput[p]
 DDRule[DDRule { input_rule_head, input_rule_body }] :- 
-	TypeSpec[t], not is_primitive_type(t),
+	TypeSpec[t], is_composite_type(t),
 	var dd_type = to_dd_typespec(t),
 	var rel_name = to_string(t),
+	// TODO: Don't assume user won't define a type name like "XYZInput" and need to use a preserved keyword as prefix
 	var input_rel_name = rel_name ++ "Input",
 	var dd_relation = DDRelation { false, rel_name, dd_type },
 	var dd_input_relation = DDRelation { true, input_rel_name, dd_type },
@@ -641,24 +684,51 @@ function to_dd_expr(expr: Expr): Option<DDExpr> {
 	}
 }
 
+function subtype_set(type_spec: TypeSpec): Set<TypeSpec> {
+	var type_set = match (type_spec) {
+		UnionType {union_name, subtypes} -> {
+			// Examples:
+			// A ::= B + C + D.  G ::= C + E + F.  H ::= A + G.
+			// H ::= B + C + D + E + F.
+			// X1 ::= Y1 + NULL, X2 ::= Y2 + NULL + {1, 2, "hi"} 
+			var set_vec = vec_empty();
+			for (subtype in subtypes) {
+				var subsubtype_set = subtype_set(subtype);
+				vec_push(set_vec, subsubtype_set);
+			};
+			unions(set_vec)
+		},
+		_ -> {
+			set_singleton(type_spec)
+		}
+	};
+	type_set
+}
+
 // Recursively translate a Formula type spec into DDlog type spec 
 function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
 	var dd_type_spec = match (type_spec) {
 		CompositeType {name, fields} -> {
 			var ddfields = vec_empty();
 			for (field in fields) {
+				// The type of its argument could be an union type too.
 				var ddtypespec = to_dd_typespec(field.type_spec);
 				// Field name has to start with lowercase letter
 				vec_push(ddfields, DDField { to_lowercase(field.field_name), ref_new(ddtypespec) });
 			};
+			// FORMULA composite type is just a constructor in DDLog
 			var dd_cons = DDTypeCons { name, from_vec(ddfields) };
 			DDUnionTypeSpec { name, from_singleton_to_nonnull_list(dd_cons) }
 		},
 		UnionType {union_name, subtypes} -> {
-			// From Formula union type to tagged union in DDlog
-			// TODO: How to merge union types rather than create a new tagged union?
-			// A ::= B + C.  D ::= E + F.  G ::= A + D.
-			// X1 ::= Y1 + NULL, X2 ::= Y2 + NULL 
+			// From Formula union type to tagged union in DDlog.
+			// We actually are not going to use tag union to represent union type in FORMULA anymore because
+			// it is not practical for nested union type below:
+			// A ::= B + C + F.  D ::= E + F + C.  
+			// G ::= A + D. ==> G ::= B + C + E + F.
+			// However, we still represent the FORMULA union type in the form of tagged union even though we are
+			// not using tagging union at all because we have to return a `DDTypeSpec`.
+			// A ::= A_B{b_field: B} | A_C{c_field: C} | A_F{f_field: F}.
 			var dd_cons_types = vec_empty();
 			for (subtype in subtypes) {
 				var dd_subtype_spec = to_dd_typespec(subtype);
@@ -667,13 +737,14 @@ function to_dd_typespec(type_spec: TypeSpec): DDTypeSpec {
 				var field_name = to_lowercase(type_alias(dd_subtype_spec)) ++ "_field";
 				var single_dd_field = DDField { field_name, ref_new(dd_subtype_spec) };
 				var field_list = [single_dd_field];
+				// U = U_T1{ t1_field: T1 } + U_T2{ t2_field: T2 } + ...
 				var dd_cons_type = DDTypeCons { union_tag, from_vec(field_list) };
 				vec_push(dd_cons_types, dd_cons_type);
 			};
 			DDUnionTypeSpec { union_name, from_nonnull_vec(dd_cons_types).unwrap_or_default() }
 		},
 		ConstantType {constant} -> { 
-			// A constructor with no arguments or fields as `typedef Constant = Constant {}`
+			// A constructor with no arguments or fields as `typedef Constant = ConstructorName {}`
 			// The vector can not be empty in `DDTypeCons` so we create a new type named `Empty`
 			var empty_list = vec_empty();
 			var dd_constant_cons_type = DDTypeCons {

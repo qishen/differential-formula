@@ -14,9 +14,12 @@ typedef DDTypeSpec = BigInt |
 					 Int | 
 					 Double | 
 					 Float | 
-					 // (T1, T2, ..., Tn)
+					 Any |
+					 // (T1, T2, ..., Tn) and the tuple cannot be empty
 					 DDTupleTypeSpec { name: string, tuple: NonNullList<Ref<DDTypeSpec>> } |
-					 // T1 {..} | T2 {..} | ... | Tn {..}
+					 // T = T1 {..} | T2 {..} | ... | Tn {..} as tagged union and cannot be empty
+					 // Tagged union in DDLog is a sum type of more than one constructors
+					 // FORMULA composite type can be represented as a sum type of exactly one constructor as typedef T = T {..}
 					 DDUnionTypeSpec { name: string, types: NonNullList<DDTypeCons> }
 
 // There are more term types defined in the DDlog language reference but we only need a few
@@ -40,7 +43,7 @@ typedef DDExpr =  DDTermExpr { term: Ref<DDTerm> } |
 				  // A tuple of DDExpr as (e1, e2, ..., en)
 				  DDTupleExpr { exprs: Vec<Ref<DDExpr>> } |
 				  // Function call as `func(arguments)`
-				  DDFunctionCallExpr { func: Ref<DDExpr>, arguments: Vec<Ref<DDExpr>> } |
+				  DDFunctionCallExpr { func_name: string, arguments: Vec<Ref<DDExpr>> } |
 				  // Function call on an object as `a.call(arguments)`
 				  DDDotFunctionCallExpr { obj: Ref<DDExpr>, func_name: string, arguments: Vec<Ref<DDExpr>> } |
 				  // Access struct field by identifier like `list.node`	
@@ -80,6 +83,7 @@ function type_alias(type_spec: DDTypeSpec): string {
 		Int -> { "usize" },
 		Double -> { "double" },
 		Float -> { "float" },
+		Any -> { "Any" },
 		DDTupleTypeSpec { name, _ } -> { name },
 		DDUnionTypeSpec { name, _ } -> { name },
 	}
@@ -106,6 +110,7 @@ function to_string(type_spec: DDTypeSpec): string {
 		Int -> { "Int" },
 		Double -> { "Double" },
 		Float -> { "Float" },
+		Any -> { "Any" },
 		DDTupleTypeSpec { name, tuple } -> { 
 			var types = tuple;
 			var type_vector = into_nonnull_vec(types);
@@ -156,9 +161,9 @@ function to_string(expr: DDExpr): string {
 			var exprs_str = exprs.map(|x| to_string(deref(x))).join(", "); 
 			"(" ++ exprs_str ++ ")"
 		},
-		DDFunctionCallExpr { expr, args } -> {
+		DDFunctionCallExpr { func_name, args } -> {
 			var args_str = args.map(|x| to_string(deref(x))).join(", "); 
-			to_string(deref(expr)) ++ "(" ++ args_str ++ ")"
+			func_name ++ "(" ++ args_str ++ ")"
 		},
 		DDDotFunctionCallExpr { obj, func_name, arguments } -> {
 			var args_str = arguments.map(|x| to_string(deref(x))).join(", ");
@@ -218,8 +223,17 @@ function is_primitive_ddtype(ddtype: DDTypeSpec): bool {
 }
 
 function ddterm_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
+	// T[term]
 	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
 	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
+	dd_atom
+}
+
+function ddterm_to_any_atom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
+	// T[to_any(term)]
+	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
+	var dd_to_any_expr = DDFunctionCallExpr { "to_any", [ref_new(dd_term_expr)] };
+	var dd_atom = DDAtom { var_name, rel, dd_to_any_expr };
 	dd_atom
 }
 

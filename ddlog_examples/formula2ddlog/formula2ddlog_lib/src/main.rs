@@ -266,7 +266,7 @@ impl DDLogTransformation {
     pub fn new()  -> Result<DDLogTransformation, String> {
         let config = Config::new()
             .with_timely_workers(1)
-            .with_profiling_config(ProfilingConfig::SelfProfiling);
+            .with_profiling_config(ProfilingConfig::None);
         // let (hddlog, init_state) = formula2ddlog_ddlog::run_with_config(config, false); 
         let (hddlog, init_state) = formula2ddlog_ddlog::run_with_config(config, false)?;
         Self::dump_delta(&init_state);

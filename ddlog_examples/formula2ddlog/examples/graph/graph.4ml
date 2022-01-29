@@ -1,15 +1,23 @@
 domain Graph {
-    Node ::= new(name: Integer + String).
+    //Node ::= new(name: Integer + String).
+    Node ::= new(name: Integer).
     Edge ::= new(src: Node, dst: Node).
-    MagicEdge ::= new(src: Node + Integer, dst: Node + Integer + String).
-    Path ::= new(src: Node, dst: Node).
-    Line ::= new(a: Node, b: Node, c: Node, d: Node).
+    Triangle ::= new(one: Node, two: Node, three: Node).
 
-    Nocycle ::= new(node: Node).
-    TwoEdge ::= new(first: Edge, second: Edge).
+    Item ::= Node + Edge.
+    Union ::= Triangle + Node. 
 
-    OutdegreeByNode ::= new(node: Node, degrees: Integer).
-    Outdegree ::= new(degrees: Integer).
+    NestedUnion ::= Union + Item.
+
+    //MagicEdge ::= new(src: Node + Integer, dst: Node + Integer + String).
+    //Path ::= new(src: Node, dst: Node).
+    //Line ::= new(a: Node, b: Node, c: Node, d: Node).
+
+    //Nocycle ::= new(node: Node).
+    //TwoEdge ::= new(first: Edge, second: Edge).
+
+    //OutdegreeByNode ::= new(node: Node, degrees: Integer).
+    //Outdegree ::= new(degrees: Integer).
 
     //Edge(a, c) :- Edge(a, b), Edge(b, c).
     // Path(a, b) :- Edge(a, b).
@@ -17,7 +25,7 @@ domain Graph {
     //Nocycle(u) :- Edge(u, v), no Path(u, u).
     // Nocycle(u) :- u is Node(_), no Path(u, u).
     // HasNoCycle :- no Path(u, u).
-    OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e, src, Edge(src, src) | e is Edge(src, dst) }). 
+    //OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e, src, Edge(src, src) | e is Edge(src, dst) }). 
 	// src :- e is Edge(src, dst).
     //Outdegree(amt) :- amt = count({ "hello", src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 
     //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 

@@ -18,6 +18,7 @@ typedef TypeSpec =  Integer | Boolean | FloatNum | String |
 					CompositeType { name: string, arguments: Vec<Field> } |
 					UnionType { name: string, subtypes: Vec<TypeSpec> } |
 					EnumType {name: string, items: Vec<Term>} |
+					// ConstantType is a CompositeType without arguments
 					ConstantType {constant: string} 
 
 // The head terms and conditions are the same as head and body in a rule so the set 
@@ -182,6 +183,21 @@ function is_primitive_type(type_spec: TypeSpec): bool {
 		Boolean -> true,
 		FloatNum -> true,
 		String -> true,
+		_ -> false
+	}
+}
+
+function is_union_type(type_spec: TypeSpec): bool {
+	match (type_spec) {
+		UnionType {union_name, _} -> true,
+		_ -> false
+	}
+}
+
+function is_composite_type(type_spec: TypeSpec): bool {
+	match (type_spec) {
+		CompositeType {cons_name, _} -> true,
+		ConstantType {constant} -> true,
 		_ -> false
 	}
 }
