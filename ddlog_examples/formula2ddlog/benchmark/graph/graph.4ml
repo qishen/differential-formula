@@ -1,0 +1,127 @@
+domain Graph {
+    //Node ::= new(name: Integer + String).
+    Node ::= new(name: Integer).
+    Edge ::= new(src: Node, dst: Node).
+    Triangle ::= new(one: Node, two: Node, three: Node).
+
+    // Tagged union is ugly and does not work for FORMULA
+    // typedef Item = Item_Node {field: Node} | Item_Edge {field: Edge}
+    // tagged union: Item_Node{Node(1)}, Item_Edge{Edge(n1, n2)}
+    // Formula union: Node(1), Edge(n1, n2)
+    Item ::= Node + Edge.
+    Union ::= Triangle + Node. 
+
+    NestedUnion ::= Union + Item.
+    // Nested Union ::= Triangle + Node + Edge.
+
+    BigEdge ::= new(src: NestedUnion, dst: NestedUnion).
+    BigEdge2 ::= new(src: NestedUnion, dst: Node). 
+
+
+    // Need a bit reasoning here to infer the type
+    // DDlog follows the order of the predicates while FORMULA does not.
+    // Finding a good rule execution order matters.
+    // Two ways to interpret the rule:
+    // BigEdge(a, c) :- Edge(a, b), BigEdge(to_any(b), c).
+    // BigEdge(a, c) :- BigEdge(b, c), Edge(a, from_any(b).unwrap()).
+    // A good way is to start from predicates that have more constraints on their arguments.
+    // How should we compare the constraints of each predicate? Type inference?
+    // Edge(a, c) :- Edge(a, b), BigEdge(b, c).
+    // Should generate the following DDlog rule but may with different order. 
+    // Edge[Edge{a, from_any(c).unwrap_or_default()}] :- Edge[Edge{a, b}], BigEdge[BigEdge{to_any(b), c}].
+
+    // If one variable appears to represent a union type in the predicate like `b` in `BigEdge(b, c)`,
+    // then `b` has to be wrapped with `to_any()` in that predicate, the other predicates that have the variable `b` but
+    // do not represent union types should appear before that predicate.
+    // May need to wrap or unwrap the variables in the head according to the type. Need some type inference.
+
+    // BigEdge(a, c) :- Edge(a, b), BigEdge(to_any(b), c), Edge(c, a).
+    //Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
+    //BigEdge(a, d) :- BigEdge(a, b), BigEdge(b, c), BigEdge(c, d).
+    BigEdge2(a, d) :- BigEdge2(a, b), BigEdge2(b, c), BigEdge2(c, d), BigEdge2(c, a).
+
+    // What if all of them are union types?
+    // Check if one variable is in more than one predicate and match to only non union type (Always match them first)
+    // Check if one variable is in more than one predicate and match to at least union type (Add to_any())
+    // Check if one variable is in more than one predicate and match to all union type
+
+    // 1. Find all predicates without any of their variables matched to union types and those predicates should be put upfront.
+    // e.g. Edge(a, b), Edge(b, c)
+    //
+    // 2. Find all predicates with all variables matched to union types and those predicates should be put at the very end. 
+    // e.g. BigEdge(a, b), BigEdge(b, c)  
+    //
+    // 3. Find all variables that are matched to both union type and non union type somewhere in the rule 
+    //                                        Any Node         Any Node       Any Node
+    // e.g. variable `b` is matched to BigEdge2(a, b), BigEdge2(b, c), BigEdge2(c, a)
+    //                                     e1              e2              e3
+    // Then BigEdge2(a, b) should be put before BigEdge2(b, c) and change it to BigEdge2(to_any(b), c)
+    // `a` is matched to BigEdge2(a, b) and BigEdge2(c, a)
+    // BigEdge2(c, a) should be put before BigEdge2(a, b)
+    // `c` is matched to BigEdge2(b, c) and BigEdge2(c, a)
+    // BigEdge2(b, c) should be put before BigEdge2(c, a)
+    // e1 --> e2, e3 --> e1, e2 --> e3 
+    // Cycle detected and it is bad because at somewhere we have to convert Any type back to regular type
+    // BigEdge2(to_any(b), from_any(a).unwrap()) :- BigEdge2(a, b), BigEdge2(to_any(b), c), BigEdge2(to_any(c), from_any(a).unwrap())
+    // Need a score to represent the priority of the constraint decided by the number of variables matched but it is not dependent
+    // on the input stream.
+    // Need a relation to decide which variable is treated as Any type and which ones are not. Keep the same order.
+
+
+    // Solutions:
+    // 1. Everything to `Any` type but need to measure performance.
+    //    let ddlog_std::tuple2(ref c, ref a) = *unsafe { <ddlog_std::tuple2<ddlog_std::Any, ddlog_std::Any>>::from_ddvalue_ref_unchecked( &__v ) };
+    //    ::core::option::Option::Some((((*c).clone()).into_ddvalue(), ((*a).clone()).into_ddvalue()))
+    //    let ddlog_std::tuple2(ref c, ref a) = *unsafe { <ddlog_std::tuple2<ddlog_std::Any, ddlog_std::Any>>::from_ddvalue_ref_unchecked( &__v ) };
+    //    ::core::option::Option::Some((((*c).clone()).into_ddvalue(), ((*a).clone()).into_ddvalue()))
+    //    conclusion: `Any` type is not good for performance.
+    // 2. Transform one rule into a set of rules like FORMULA
+    // 3. Imperative programming to handle the ordering but not an elegant way to do it and FORMULA does not support it.
+
+
+    // BigEdge(a, c) :- BigEdge(a, b), BigEdge(b, c).
+    // BigEdge(a, c) :- BigEdge2(a, b), BigEdge2(b, c).
+
+    //BigEdge(a, d) :- BigEdge(a, b), BigEdge(b, c), BigEdge(c, d).
+
+    // Two rules are actually independent
+    //Edge(a, Node(1)) :- Edge(Node(1), a).
+    //Edge(Node(2), a) :- Edge(a, Node(2))
+
+    //MagicEdge ::= new(src: Node + Integer, dst: Node + Integer + String).
+    //Path ::= new(src: Node, dst: Node).
+    //Line ::= new(a: Node, b: Node, c: Node, d: Node).
+
+    //Nocycle ::= new(node: Node).
+    //TwoEdge ::= new(first: Edge, second: Edge).
+
+    //OutdegreeByNode ::= new(node: Node, degrees: Integer).
+    //Outdegree ::= new(degrees: Integer).
+
+    // Path(a, b) :- Edge(a, b).
+    // Path(a, c) :- Path(a, b), Path(b, c). 
+    //Nocycle(u) :- Edge(u, v), no Path(u, u).
+    // Nocycle(u) :- u is Node(_), no Path(u, u).
+    // HasNoCycle :- no Path(u, u).
+    //OutdegreeByNode(src, amt) :- src is Node(_), amt = count({ e, src, Edge(src, src) | e is Edge(src, dst) }). 
+	// src :- e is Edge(src, dst).
+    //Outdegree(amt) :- amt = count({ "hello", src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst) }). 
+    //MagicEdge(a, c) :- MagicEdge(a, b), MagicEdge(b, c).
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, Edge(dst, src), Edge(src, dst) | e is Edge(src, dst), node_amt = count({ n | n is Node(x) }), node_amt > 1 }). 
+    //Outdegree(amt) :- amt * 2 > 10, amt = count({ src, e | e is Edge(src, dst), node_amt = count({ n | n is Node(x) }), node_amt > 1 }). 
+    //OutdegreeByNode(amt) :- amt * 2 > 10, Edge(src, x), amt = count({ dst, e, Edge(src, src), Node(88) | e is Edge(src, dst) }). 
+}
+
+model m of Graph {
+    n0 is Node(0).
+    n1 is Node(1).
+    n2 is Node(2).
+    n3 is Node(3).
+    n4 is Node(4).
+
+    Edge(n0, n1).
+    Edge(n1, n2).
+    Edge(n2, n3).
+    Edge(n3, n4).
+}

@@ -1,0 +1,31 @@
+
+domain Graph {
+    //Node ::= new(name: Integer + String).
+    Node ::= new(name: Integer).
+    Edge ::= new(src: Node, dst: Node).
+    Triangle ::= new(one: Node, two: Node, three: Node).
+
+    Item ::= Node + Edge.
+    Union ::= Triangle + Node. 
+    NestedUnion ::= Union + Item.
+
+    BigEdge ::= new(src: NestedUnion, dst: NestedUnion).
+    BigEdge2 ::= new(src: NestedUnion, dst: Node). 
+
+
+    Edge(a, d) :- Edge(a, b), Edge(b, c), Edge(c, d).
+    // BigEdge(a, d) :- BigEdge(a, b), BigEdge(b, c), BigEdge(c, d).
+}
+
+model m of Graph {
+    n0 is Node(0).
+    n1 is Node(1).
+    n2 is Node(2).
+    n3 is Node(3).
+    n4 is Node(4).
+
+    Edge(n0, n1).
+    Edge(n1, n2).
+    Edge(n2, n3).
+    Edge(n3, n4).
+}

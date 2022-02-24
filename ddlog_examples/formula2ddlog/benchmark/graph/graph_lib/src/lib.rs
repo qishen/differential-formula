@@ -124,7 +124,7 @@ impl DDLogGraph {
     pub fn new(debug: bool)  -> Result<DDLogGraph, String> {
         let config = Config::new()
             .with_timely_workers(1)
-            .with_profiling_config(ProfilingConfig::SelfProfiling);
+            .with_profiling_config(ProfilingConfig::None);
         // let (hddlog, init_state) = formula2ddlog_ddlog::run_with_config(config, false); 
         let (hddlog, init_state) = graph_ddlog::run_with_config(config, false)?;
         Self::dump_delta(&init_state);
@@ -141,7 +141,7 @@ impl DDLogGraph {
     pub fn gen_node_updates(&mut self, nodes: Vec<usize>, kind: UpdateKind) -> Vec<Update<DDValue>> {
         let updates = nodes.into_iter().map(|num| {
             let relid = Relations::NodeInput as RelId;
-            let v = Node { name: Graph_AUTOTYPE0::Graph_AUTOTYPE0_usize{usize_field: num as u64} }.into_ddvalue();
+            let v = Node { name: num as u64 }.into_ddvalue();
             match kind {
                 UpdateKind::Insert => Update::Insert { relid, v },
                 UpdateKind::Delete => Update::DeleteValue { relid, v },
@@ -156,8 +156,25 @@ impl DDLogGraph {
         let updates = edges.into_iter().map(|(src, dst)| {
             let relid = Relations::EdgeInput as RelId;
             let v = Edge { 
-                src: Node { name: Graph_AUTOTYPE0::Graph_AUTOTYPE0_usize{usize_field: src as u64} }, 
-                dst: Node { name: Graph_AUTOTYPE0::Graph_AUTOTYPE0_usize{usize_field: dst as u64} } 
+                src: Node { name: src as u64 }, 
+                dst: Node { name: dst as u64 } 
+            }.into_ddvalue();
+            match kind {
+                UpdateKind::Insert => Update::Insert { relid, v },
+                UpdateKind::Delete => Update::DeleteValue { relid, v },
+                UpdateKind::DeleteByKey => Update::DeleteKey { relid, k: v },
+            }
+        }).collect::<Vec<_>>();
+
+        updates
+    } 
+
+    pub fn gen_bigedge_updates(&mut self, edges: Vec<(usize, usize)>, kind: UpdateKind) -> Vec<Update<DDValue>> {
+        let updates = edges.into_iter().map(|(src, dst)| {
+            let relid = Relations::BigEdgeInput as RelId;
+            let v = BigEdge { 
+                src: ddlog_std::to_any(Node { name: src as u64 }), 
+                dst: ddlog_std::to_any(Node { name: dst as u64 }) 
             }.into_ddvalue();
             match kind {
                 UpdateKind::Insert => Update::Insert { relid, v },
