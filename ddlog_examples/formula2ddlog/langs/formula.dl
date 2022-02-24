@@ -1,5 +1,7 @@
 import langs::lib::list
 import langs::lib::operators
+import hashset
+import print
 
 /***********************************************/
 /******* FORMULA 2.0 Language Meta-model *******/
@@ -40,6 +42,8 @@ typedef Constraint = PredCons { negated: bool, term: Term, alias: Option<string>
 					 AssignCons { variable: Term, expr: Expr } | 
 					 TypeCons { variable: Term, var_type: TypeSpec }
 
+typedef AnyTypeConversionEnum = ToAny | FromAny | NoConversion
+
 // A rule is composed by a linked list of head terms and a linked list of constraints
 // Rule has at least one constraint and at least one head term otherwise the rule is meaningless
 // The term in the head could be ground term and only count once in the set
@@ -63,6 +67,7 @@ output relation ArgListOfTerm [(usize, List<Ref<Term>>, Term)]
 output relation ArgOfTerm [(usize, Term, Term)]
 // Variable in the direct arguments of a composite term, not recursively.
 output relation VarOfTerm [(Term, Term)] 
+output relation AnyTypeVarOfTerm [(Term, Term)] 
 
 // It should contain both rule in the domain and rule in the set comprehension
 input relation InputRule [Rule]
@@ -72,6 +77,9 @@ output relation NonSetcompreRule [Rule]
 
 // The head of each constraint list cannot be null otherwise it's meaningless
 output relation PosPredInRule [(Term, Ref<Rule>)]
+output relation Var2PosPred[(Term, Term, Ref<Rule>)] 
+output relation PosPred2Var[(Term, Term, Ref<Rule>)]
+
 // Negative predicates can be directly use in `DDRule` as `not Pred(..)` or
 // translated into set comprehension in `DDRule` rather than set difference depending on
 // if the variables in negative term occur in the outer scope. 
@@ -90,6 +98,9 @@ output relation HeadInRule[(Term, Ref<Rule>)]
 // the first item of usize is the unique index or id of the constraint
 output relation ConstraintListInRule [(usize, NonNullList<Constraint>, Ref<Rule>)]
 output relation ConstraintInRule [(usize, Constraint, Ref<Rule>)]
+
+// Decide if the variable in predicates should be wrapped in `to_any()` or `from_any()`
+output relation ConsVarConversion[(usize, Term, Term, Ref<Rule>, AnyTypeConversionEnum)]
 
 // The variable term in the rule to define Setcompre 
 output relation DefTermOfSetcompre [(Term, Setcompre, Ref<Rule>)]
@@ -115,30 +126,139 @@ SubtermTypeSpec[(arg, ancestor, arg_type_spec)] :-
 	SubtermTypeSpec[(term, ancestor, CompositeType{_, arg_types})], 
 	ArgOfTerm[(index, arg, term)],
 	var arg_type_spec = arg_types.nth(index).option_unwrap_or_default().type_spec.
-	
+
+// Find the direct argument of each composite term.	
 ArgListOfTerm[(0, arg_list, c)] :- c in Term[Composite{_, arg_list}].
 ArgListOfTerm[(index+1, deref(nxt_arg_list), c)] :- ArgListOfTerm[(index, List {_, ListNxt {nxt_arg_list}}, c)].
 ArgOfTerm[(index, deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(index, List {term_ref, _}, c)].
+
+// Find the variables in the direct arguments of a composite term without digging into the arguments to find variables.
+// T(a, b, c, d) is handled in this rule but not T(T1(a, b), T2(c, d)) and we recursively add subterms to the term collection
 VarOfTerm[(variable, variable)] :- variable in Term[Variable{}].
 VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1.
+// Find the variables that represent union type or Any type.
+AnyTypeVarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1, 
+	SubtermTypeSpec[(variable, term, UnionType{})].
+	// Inspect print("Any type variable ${variable} in term ${term}").
 
 HeadListInRule[(head_head, ref_new(r))] :- r in Rule[Rule {_, head_head, _}].
 HeadListInRule[(deref(nxt_head), r)] :- HeadListInRule[(NonNullList {_, NonNullNxt { nxt_head }}, r)].
 HeadInRule[(term, r)] :- HeadListInRule[(NonNullList {term, _}, r)].
 
+// Return a collection of index, constraint and rule that contains the constraint
 ConstraintListInRule[(0, constraint_head, ref_new(r))] :- r in Rule[Rule{ _, _, constraint_head }].
-ConstraintListInRule[(index + 1, deref(nxt_constraint), r)] :- 
-	ConstraintListInRule[(index, NonNullList {_, NonNullNxt { nxt_constraint }}, r)].
+ConstraintListInRule[(index + 1, deref(nxt_constraint), r)] :- ConstraintListInRule[(index, NonNullList {_, NonNullNxt { nxt_constraint }}, r)].
 ConstraintInRule[(index, constraint, r)] :- ConstraintListInRule[(index, NonNullList {constraint, _}, r)]. 
 
+// Deal with the first predicate and every variable in it will be added as the first occurance.
+// Because there are no previous predicates to match with the first predicate
+// No conversion is needed no matter the variable is union type or other types.
+// TODO: What if one predicate has a variable twice but with different types?
+// e.g. BigEdge ::= new(src: Union, dst: Node) and the predicate is BigEdge(x, x)
+// TODO: The subterm type needs to consider the position too.
+// SubtermTypeSpec[(variable, pos_term, UnionType{})],
+ConsVarConversion[(0, variable, pos_term, rule, NoConversion)] :-
+	VarOfTerm[(variable, pos_term)],
+	ConstraintInRule[(0, PredCons {false, pos_term, _}, rule)].
+
+// Find the first occurrence of the variable in predicates but the variable does not occur in previous predicates.
+// head :- pred1, pred2, pred_m..., pred_n
+// A variable occurs in pred_n but not in pred_m, pred_m occurs before pred_n.
+ConsVarConversion[(index2, variable2, pos_term2, rule2, NoConversion)] :-
+	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
+	VarOfTerm[(variable, pos_term)],
+	// Inspect print("variable ${variable} in term ${pos_term}"),
+
+    // BigEdge(a, d) :- BigEdge(a, b), BigEdge(b, c), BigEdge(c, d).
+	// first a, b -> BigEdge(a, b)
+	// first c -> BigEdge(a, b), BigEdge(b, c)
+	// first d -> BigEdge(c, d)
+	// None -> BigEdge(c, d)
+
+	// Find all predicates and variables before a certain predicate
+	ConstraintInRule[(pre_index, PredCons {false, pre_pos_term, _}, rule)],
+	pre_index < index,
+	VarOfTerm[(pre_variable, pre_pos_term)],
+
+	// Find all variables in the previous predicates before the current predicate
+	var pre_var_group = (pre_variable).group_by((index, pos_term, variable, rule)),
+	(var index2, var pos_term2, var variable2, var rule2) = pre_var_group.group_key(),
+	var variable_set = pre_var_group.to_hashset(),
+	not hashset_contains(variable_set, variable2).
+
+
+ConsVarConversion[(index, variable, pos_term, rule, ToAny)] :-
+	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
+	VarOfTerm[(variable, pos_term)],
+	subtype_tuple in SubtermTypeSpec[(variable, pos_term, UnionType{})],
+	Inspect print("variable ${variable} in term ${pos_term} with type ${subtype_tuple.2}"),
+	// Find another predicate term that has the same variable in it but is not union type.
+	ConsVarConversion[(pre_index, variable, pre_pos_term, rule, NoConversion)],
+	pre_index < index.
+
+// The first occurance of variable is of union type but the next one is not and we need to 
+// convert from union type to regular type.
+ConsVarConversion[(index, variable, pos_term, rule, FromAny)] :-
+	// The first occurance of variable that is born to be union type.
+	ConsVarConversion[(pre_index, variable, pre_pos_term, rule, NoConversion)],
+	SubtermTypeSpec[(variable, pre_pos_term, UnionType{})],
+
+	// In the current predicate, the variable is not union type.
+	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
+	pre_index < index,
+	VarOfTerm[(variable, pos_term)],
+	SubtermTypeSpec[(variable, pos_term, non_union_type)],
+	not is_union_type(non_union_type).
+
+// Print out
+ConsVarConversion[(index, variable, term, rule, any_enum)] :-
+	ConsVarConversion[(index, variable, term, rule, any_enum)],
+	Inspect print("Tuple ${variable} in positive term ${term} at position ${index} with enum ${any_enum}").
+// :- ConstraintInRule[(index, constraint, rule)], var constraint_group = (constraint).group_by((rule)),
+// 	var rule = constraint_group.group_key(),
+// 	var pos_constraint_group.filter_map(|constraint| {
+// 		match (constraint) {
+// 			PredCons {negated, term, alias} => {
+// 				var negated = negated;
+// 				return None
+// 		},
+// 		_ => {
+// 			return None
+// 		}
+// 	})
+
 // Add all positive and negative terms into the Term relation
-Term[pos_term], PosPredInRule[(pos_term, r)] :- ConstraintInRule[(_, PredCons {false, pos_term, _}, r)].
-Term[neg_term], NegPredInRule[(neg_term, r)] :- ConstraintInRule[(_, PredCons {true, neg_term, _}, r)].
+Term[pos_term], PosPredInRule[(pos_term, rule)] :- ConstraintInRule[(_, PredCons {false, pos_term, _}, rule)].
+Term[neg_term], NegPredInRule[(neg_term, rule)] :- ConstraintInRule[(_, PredCons {true, neg_term, _}, rule)].
+
 PosVarInRule[(variable, r)] :- PosPredInRule[(pos_term, r)], VarOfTerm[(variable, pos_term)].
 // Note that in a positive predicate `x is Pred()` the alias `x` represents a variable too
 PosVarInRule[(variable, r)] :- 
 	ConstraintInRule[(_, PredCons {false, pos_term, Some{alias}}, r)],
 	var variable = Variable { alias, vec_empty() }.
+
+// Find all the positive predicates associated with a variable in the same rule
+Var2PosPred[(variable2, each_term, rule2)]:- 
+	// ConstraintInRule[(index, PredCons{negated, term, alias}, rule)], 
+	PosPredInRule[(term, rule)],
+	PosVarInRule[(variable, rule)], 
+	VarOfTerm[(variable, term)],
+	var term_group = (term).group_by((variable, rule)),
+	(var variable2, var rule2) = term_group.group_key(),
+	var term_set = term_group.group_to_set(),
+	var each_term = FlatMap(term_set).
+
+// Find all variables associated with a predicate in the same rule
+PosPred2Var[(term2, each_var, rule2)] :-
+	PosPredInRule[(term, rule)],
+	PosVarInRule[(variable, rule)], 
+	VarOfTerm[(variable, term)],
+	var var_group = (variable).group_by((term, rule)),
+	(var term2, var rule2) = var_group.group_key(),
+	var var_set = var_group.group_to_set(),
+	var each_var = FlatMap(var_set).
+
+
 NegVarInRule[(variable, r)] :- NegPredInRule[(neg_term, r)], VarOfTerm[(variable, neg_term)].
 
 // Check if any of the variables in the negated term occurs in the positive predicate term in the same rule
@@ -200,6 +320,14 @@ function is_composite_type(type_spec: TypeSpec): bool {
 		ConstantType {constant} -> true,
 		_ -> false
 	}
+}
+
+function to_string(any_enum: AnyTypeConversionEnum): string {
+	match(any_enum) {
+		FromAny -> {"from_any"},
+		ToAny -> {"to_any"},
+		NoConversion -> {"no_conversion"}
+	}				
 }
 
 function to_string(type_spec: TypeSpec): string {
