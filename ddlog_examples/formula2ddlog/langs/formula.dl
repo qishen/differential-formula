@@ -1,5 +1,6 @@
 import langs::lib::list
 import langs::lib::operators
+import vec
 import hashset
 import print
 
@@ -67,6 +68,13 @@ output relation ArgListOfTerm [(usize, List<Ref<Term>>, Term)]
 output relation ArgOfTerm [(usize, Term, Term)]
 // Variable in the direct arguments of a composite term, not recursively.
 output relation VarOfTerm [(Term, Term)] 
+
+// The position of a descendent term is specified by a list of indices over its ancestor.
+output relation DescendentOfTerm [(Vec<usize>, Term, Term)]
+// The position of a descendent variable term is specified by a list of indices over its ancestor.
+output relation DescendentVarOfTerm [(Vec<usize>, Term, Term)]
+output relation DescendentTermTypeSpec [(Vec<usize>, Term, Term, TypeSpec)]
+
 output relation AnyTypeVarOfTerm [(Term, Term)] 
 
 // It should contain both rule in the domain and rule in the set comprehension
@@ -100,7 +108,10 @@ output relation ConstraintListInRule [(usize, NonNullList<Constraint>, Ref<Rule>
 output relation ConstraintInRule [(usize, Constraint, Ref<Rule>)]
 
 // Decide if the variable in predicates should be wrapped in `to_any()` or `from_any()`
-output relation ConsVarConversion[(usize, Term, Term, Ref<Rule>, AnyTypeConversionEnum)]
+// (constraint_position, variable_position, variable, term, rule_reference, conversion_enum)
+output relation ConsVarConversion[(usize, Vec<usize>, Term, Term, Ref<Rule>, AnyTypeConversionEnum)]
+// The position of the predicate in the head does not matter
+output relation HeadVarConversion[(Vec<usize>, Term, Term, Ref<Rule>, AnyTypeConversionEnum)]
 
 // The variable term in the rule to define Setcompre 
 output relation DefTermOfSetcompre [(Term, Setcompre, Ref<Rule>)]
@@ -118,28 +129,63 @@ Rule[rule] :- InputRule[rule].
 // the name of the constructor. Variable term and atom term are skipped in `SubtermTypeSpec` 
 // relation because no context provided for a single variable term and the type of atom term
 // can be directly obtained by calling function `atom_term_type()`.
+
+// A composite term is a subterm of the term itself
 SubtermTypeSpec[(c, c, t)] :- 
 	c in Term[Composite{cons_name, arg_list}], 
 	t in TypeSpec[CompositeType{cons_name, _}].
 
+// TODO: What if the term has more than two variables with the same name but of different type?
 SubtermTypeSpec[(arg, ancestor, arg_type_spec)] :- 
 	SubtermTypeSpec[(term, ancestor, CompositeType{_, arg_types})], 
 	ArgOfTerm[(index, arg, term)],
 	var arg_type_spec = arg_types.nth(index).option_unwrap_or_default().type_spec.
 
-// Find the direct argument of each composite term.	
+// Find the direct argument of each composite term with index specified too.	
 ArgListOfTerm[(0, arg_list, c)] :- c in Term[Composite{_, arg_list}].
 ArgListOfTerm[(index+1, deref(nxt_arg_list), c)] :- ArgListOfTerm[(index, List {_, ListNxt {nxt_arg_list}}, c)].
 ArgOfTerm[(index, deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(index, List {term_ref, _}, c)].
+
+DescendentOfTerm[(vec_singleton(index), arg, term)] :- ArgOfTerm[(index, arg, term)].
+// e.g. T(a, T(a, b, a), T(Tm(a), b, c)) ->  `a` of Tm(a) and Tm(a) of T(Tm(a), b, c)
+DescendentOfTerm[(index_vec, a, c)] :- DescendentOfTerm[(index_vec2, a, b)], DescendentOfTerm[(index_vec1, b, c)], 
+	var index_vec = vec_concat(index_vec1, index_vec2).	
 
 // Find the variables in the direct arguments of a composite term without digging into the arguments to find variables.
 // T(a, b, c, d) is handled in this rule but not T(T1(a, b), T2(c, d)) and we recursively add subterms to the term collection
 VarOfTerm[(variable, variable)] :- variable in Term[Variable{}].
 VarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1.
-// Find the variables that represent union type or Any type.
-AnyTypeVarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1, 
-	SubtermTypeSpec[(variable, term, UnionType{})].
-	// Inspect print("Any type variable ${variable} in term ${term}").
+
+// Distinguish same variable but at different locations in a term. e.g. T(a, T(a, b, a), T(Tm(a), b, c))
+// Find variables not in the arguments of current term but also its subterms.
+// TODO: index by position or the order of occurance?
+DescendentVarOfTerm[(vec_singleton(index), variable, term)] :- VarOfTerm[(variable, term)], ArgOfTerm[(index, variable, term)].
+DescendentVarOfTerm[(index_vec1, variable, term)] :- DescendentVarOfTerm[(index_vec2, variable, descendent)], 
+	DescendentOfTerm[(index_vec1, descendent, term)],
+	var index_vec = vec_concat(index_vec1, index_vec2).	
+
+DescendentTermTypeSpec[(indices, arg, term, arg_type_spec)] :- 
+	TypeSpec[CompositeType{cons_name, arg_types}], 
+	tuple in ArgOfTerm[(index, arg, Composite{cons_name, _})],
+	var term = tuple.2,
+	var arg_type_spec = arg_types.nth(index).option_unwrap_or_default().type_spec,
+	var indices = vec_singleton(index).
+
+DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)] :- 
+	DescendentTermTypeSpec[(index_vec2, descendent, ancestor, desc_type_spec)], 
+	DescendentTermTypeSpec[(index_vec1, ancestor, root, _)],
+	var index_vec = vec_concat(index_vec1, index_vec2).	
+
+// Only for debugging
+DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)] :- 
+	DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)],
+	Inspect print("DescendentTermTypeSpec: ${descendent}, ${root}, ${desc_type_spec}")
+	.
+
+// // Find the variables that represent union type or Any type.
+// AnyTypeVarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1, 
+// 	SubtermTypeSpec[(variable, term, UnionType{})].
+// 	// Inspect print("Any type variable ${variable} in term ${term}").
 
 HeadListInRule[(head_head, ref_new(r))] :- r in Rule[Rule {_, head_head, _}].
 HeadListInRule[(deref(nxt_head), r)] :- HeadListInRule[(NonNullList {_, NonNullNxt { nxt_head }}, r)].
@@ -155,18 +201,19 @@ ConstraintInRule[(index, constraint, r)] :- ConstraintListInRule[(index, NonNull
 // No conversion is needed no matter the variable is union type or other types.
 // TODO: What if one predicate has a variable twice but with different types?
 // e.g. BigEdge ::= new(src: Union, dst: Node) and the predicate is BigEdge(x, x)
+// DDLog does not allow the same variable to be used more than once in the same predicate.
+// We may have to write BigEdge[BigEdge{x, x}] as BigEdge[BigEdge{x1, x2}], x1 == x2, var x = x1.
 // TODO: The subterm type needs to consider the position too.
-// SubtermTypeSpec[(variable, pos_term, UnionType{})],
-ConsVarConversion[(0, variable, pos_term, rule, NoConversion)] :-
-	VarOfTerm[(variable, pos_term)],
+ConsVarConversion[(0, indices, variable, pos_term, rule, NoConversion)] :-
+	DescendentVarOfTerm[(indices, variable, pos_term)],
 	ConstraintInRule[(0, PredCons {false, pos_term, _}, rule)].
 
 // Find the first occurrence of the variable in predicates but the variable does not occur in previous predicates.
 // head :- pred1, pred2, pred_m..., pred_n
 // A variable occurs in pred_n but not in pred_m, pred_m occurs before pred_n.
-ConsVarConversion[(index2, variable2, pos_term2, rule2, NoConversion)] :-
+ConsVarConversion[(index2, indices2, variable2, pos_term2, rule2, NoConversion)] :-
 	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
-	VarOfTerm[(variable, pos_term)],
+	DescendentVarOfTerm[(indices, variable, pos_term)],
 	// Inspect print("variable ${variable} in term ${pos_term}"),
 
     // BigEdge(a, d) :- BigEdge(a, b), BigEdge(b, c), BigEdge(c, d).
@@ -178,56 +225,80 @@ ConsVarConversion[(index2, variable2, pos_term2, rule2, NoConversion)] :-
 	// Find all predicates and variables before a certain predicate
 	ConstraintInRule[(pre_index, PredCons {false, pre_pos_term, _}, rule)],
 	pre_index < index,
-	VarOfTerm[(pre_variable, pre_pos_term)],
+	DescendentVarOfTerm[(pre_indices, pre_variable, pre_pos_term)],
 
 	// Find all variables in the previous predicates before the current predicate
-	var pre_var_group = (pre_variable).group_by((index, pos_term, variable, rule)),
-	(var index2, var pos_term2, var variable2, var rule2) = pre_var_group.group_key(),
+	var pre_var_group = (pre_variable).group_by((index, indices, pos_term, variable, rule)),
+	(var index2, var indices2, var pos_term2, var variable2, var rule2) = pre_var_group.group_key(),
 	var variable_set = pre_var_group.to_hashset(),
 	not hashset_contains(variable_set, variable2).
 
 
-ConsVarConversion[(index, variable, pos_term, rule, ToAny)] :-
+ConsVarConversion[(index, indices, variable, pos_term, rule, ToAny)] :-
 	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
-	VarOfTerm[(variable, pos_term)],
-	subtype_tuple in SubtermTypeSpec[(variable, pos_term, UnionType{})],
-	Inspect print("variable ${variable} in term ${pos_term} with type ${subtype_tuple.2}"),
-	// Find another predicate term that has the same variable in it but is not union type.
-	ConsVarConversion[(pre_index, variable, pre_pos_term, rule, NoConversion)],
+	DescendentVarOfTerm[(indices, variable, pos_term)],
+	DescendentTermTypeSpec[(indices, variable, pos_term, UnionType{})],
+	// Inspect print("variable ${variable} in term ${pos_term} with type ${subtype_tuple.2}"),
+	// Find another predicate term that has the same variable in it but not union type.
+	DescendentTermTypeSpec[(pre_indices, variable, pre_pos_term, non_union_type)],
+	not is_union_type(non_union_type),
+	ConsVarConversion[(pre_index, pre_indices, variable, pre_pos_term, rule, NoConversion)],
 	pre_index < index.
 
 // The first occurance of variable is of union type but the next one is not and we need to 
 // convert from union type to regular type.
-ConsVarConversion[(index, variable, pos_term, rule, FromAny)] :-
+ConsVarConversion[(index, indices, variable, pos_term, rule, FromAny)] :-
 	// The first occurance of variable that is born to be union type.
-	ConsVarConversion[(pre_index, variable, pre_pos_term, rule, NoConversion)],
-	SubtermTypeSpec[(variable, pre_pos_term, UnionType{})],
-
+	ConsVarConversion[(pre_index, pre_indices, variable, pre_pos_term, rule, NoConversion)],
+	DescendentTermTypeSpec[(pre_indices, variable, pre_pos_term, UnionType{})],
 	// In the current predicate, the variable is not union type.
 	ConstraintInRule[(index, PredCons {false, pos_term, _}, rule)],
 	pre_index < index,
-	VarOfTerm[(variable, pos_term)],
-	SubtermTypeSpec[(variable, pos_term, non_union_type)],
+	DescendentVarOfTerm[(indices, variable, pos_term)],
+	DescendentTermTypeSpec[(indices, variable, pos_term, non_union_type)],
 	not is_union_type(non_union_type).
 
-// Print out
-ConsVarConversion[(index, variable, term, rule, any_enum)] :-
-	ConsVarConversion[(index, variable, term, rule, any_enum)],
-	Inspect print("Tuple ${variable} in positive term ${term} at position ${index} with enum ${any_enum}").
-// :- ConstraintInRule[(index, constraint, rule)], var constraint_group = (constraint).group_by((rule)),
-// 	var rule = constraint_group.group_key(),
-// 	var pos_constraint_group.filter_map(|constraint| {
-// 		match (constraint) {
-// 			PredCons {negated, term, alias} => {
-// 				var negated = negated;
-// 				return None
-// 		},
-// 		_ => {
-// 			return None
-// 		}
-// 	})
 
-// Add all positive and negative terms into the Term relation
+// Print out for debugging
+ConsVarConversion[(index, indices, variable, term, rule, any_enum)] :-
+	ConsVarConversion[(index, indices, variable, term, rule, any_enum)],
+	Inspect print("ConsVarConversion tuple ${variable} in positive term ${term} at position ${index} of a rule ${rule.id} with enum ${any_enum}").
+
+
+HeadVarConversion[(head_var_indices, variable, head_term, rule, ToAny)] :-
+	HeadInRule[(head_term, rule)],
+	DescendentVarOfTerm[(head_var_indices, variable, head_term)],
+	DescendentTermTypeSpec[(head_var_indices, variable, head_term, UnionType{})],
+	// Find the first occurrance of this variable in the body
+	DescendentTermTypeSpec[(body_indices, variable, body_term, non_union_type)],
+	not is_union_type(non_union_type),
+	ConsVarConversion[(body_index, body_indices, variable, body_term, rule, NoConversion)].
+
+HeadVarConversion[(head_var_indices, variable, head_term, rule, FromAny)] :-
+	HeadInRule[(head_term, rule)],
+	DescendentVarOfTerm[(head_var_indices, variable, head_term)],
+	DescendentTermTypeSpec[(head_var_indices, variable, head_term, non_union_type)],
+	not is_union_type(non_union_type),
+	// Find the first occurrance of this variable of union type in the body
+	DescendentTermTypeSpec[(body_indices, variable, body_term, UnionType{})],
+	ConsVarConversion[(body_index, body_indices, variable, body_term, rule, NoConversion)].
+
+// No conversion if the type of variable in the head is the same as the type of variable in the body.
+HeadVarConversion[(head_var_indices, variable, head_term, rule, NoConversion)] :-
+	HeadInRule[(head_term, rule)],
+	DescendentVarOfTerm[(head_var_indices, variable, head_term)],
+	DescendentTermTypeSpec[(head_var_indices, variable, head_term, var_type)],
+	ConsVarConversion[(body_index, body_indices, variable, body_term, rule, NoConversion)],
+	DescendentTermTypeSpec[(body_indices, variable, body_term, var_type)].
+
+
+HeadVarConversion[(indices, variable, head_term, rule, any_enum)] :-
+	HeadVarConversion[(indices, variable, head_term, rule, any_enum)],
+	Inspect print("HeadVarConversion tuple ${variable} in ${head_term} of rule ${rule.id} with enum ${any_enum}").
+
+
+// Add all terms that occur in the rule into the `Term` relation
+Term[head_term] :- HeadInRule[(head_term, _)].
 Term[pos_term], PosPredInRule[(pos_term, rule)] :- ConstraintInRule[(_, PredCons {false, pos_term, _}, rule)].
 Term[neg_term], NegPredInRule[(neg_term, rule)] :- ConstraintInRule[(_, PredCons {true, neg_term, _}, rule)].
 
@@ -297,6 +368,20 @@ IndependentSetcompre[(setcompre, rule)] :- Setcompre[(setcompre, rule)],
 /******* Helper Functions for Formula 2.0 Meta-model *******/
 /***********************************************************/
 
+function vec_concat(v1: Vec<'T>, v2: Vec<'T>): Vec<'T> {
+	var mutable_vec = vec_with_capacity(v1.len() + v2.len());
+
+	for (item in v1) {
+		mutable_vec.push(item);
+	};
+
+	for (item in v2) {
+		mutable_vec.push(item);
+	};
+
+    mutable_vec
+}
+
 function is_primitive_type(type_spec: TypeSpec): bool {
 	match (type_spec) {
 		Integer -> true,
@@ -320,6 +405,12 @@ function is_composite_type(type_spec: TypeSpec): bool {
 		ConstantType {constant} -> true,
 		_ -> false
 	}
+}
+
+function to_string(v: Vec<usize>): string {
+	var indices_strs = map(v, |x| to_string(x));
+	var str = "(" ++ indices_strs.join(", ") ++ ")";
+	str
 }
 
 function to_string(any_enum: AnyTypeConversionEnum): string {
