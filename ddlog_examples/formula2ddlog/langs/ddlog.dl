@@ -70,6 +70,7 @@ typedef DDRule = DDRule { head: Vec<DDAtom>, body: Vec<DDRhs> }
 /********** Relations ***********/
 output relation DDTypeSpec [DDTypeSpec]
 output relation DDTermOfDDTypeSpec [(DDTerm, DDTypeSpec)]
+output relation DDTermOfDDRelation [(DDTerm, DDRelation)]
 output relation DDRelation [DDRelation]
 output relation DDRule [DDRule]
 
@@ -223,7 +224,7 @@ function is_primitive_ddtype(ddtype: DDTypeSpec): bool {
 }
 
 function ddterm_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_term: DDTerm): DDAtom {
-	// T[term]
+	// T[term] or x in T[term]
 	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
 	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
 	dd_atom
@@ -237,6 +238,12 @@ function ddterm_to_any_atom(var_name: Option<string>, rel: Ref<DDRelation>, dd_t
 	dd_atom
 }
 
+function ddexpr_to_ddatom(var_name: Option<string>, rel: Ref<DDRelation>, dd_expr: DDExpr): DDAtom {
+	// T[expr] or x in T[expr]
+	var dd_atom = DDAtom { var_name, rel, dd_expr };
+	dd_atom
+}
+
 // Translate a DDTerm `Pred(..)` into a DDRhs such as `not x in Relation[Pred(..)]`
 // given some parameters. Relation must have the same type as current DDTerm
 function ddterm_to_ddrhs(
@@ -247,6 +254,12 @@ function ddterm_to_ddrhs(
 ): DDRhs {
 	var dd_term_expr = DDTermExpr { ref_new(dd_term) };
 	var dd_atom = DDAtom { var_name, rel, dd_term_expr };
+	DDRhsAtom { negated, dd_atom }
+}
+
+// x in Relation[Expr]
+function ddexpr_to_ddrhs(var_name: Option<string>, rel: Ref<DDRelation>, expr: DDExpr, negated: bool): DDRhs {
+	var dd_atom = DDAtom { var_name, rel, expr };
 	DDRhsAtom { negated, dd_atom }
 }
 

@@ -120,6 +120,20 @@ output relation Setcompre [(Setcompre, Ref<Rule>)]
 output relation IndependentSetcompre [(Setcompre, Ref<Rule>)]
 output relation DependentSetcompre [(Setcompre, Ref<Rule>)]
 
+/******************** Debuging Rules *********************/
+// DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)] :- 
+// 	DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)],
+// 	Inspect print("DescendentTermTypeSpec: ${descendent}, ${root}, ${desc_type_spec}")
+// 	.
+
+// ConsVarConversion[(index, indices, variable, term, rule, any_enum)] :-
+// 	ConsVarConversion[(index, indices, variable, term, rule, any_enum)],
+// 	Inspect print("ConsVarConversion tuple ${variable} in positive term ${term} at position ${index} of a rule ${rule.id} with enum ${any_enum}").
+
+// HeadVarConversion[(indices, variable, head_term, rule, any_enum)] :-
+// 	HeadVarConversion[(indices, variable, head_term, rule, any_enum)],
+// 	Inspect print("HeadVarConversion tuple ${variable} in ${head_term} of rule ${rule.id} with enum ${any_enum}").
+
 /******************** Rules *********************/
 // Add all composite subterm from `InputTerm` into the `Term` relation
 Term[term] :- InputTerm[term].
@@ -175,12 +189,6 @@ DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)] :-
 	DescendentTermTypeSpec[(index_vec2, descendent, ancestor, desc_type_spec)], 
 	DescendentTermTypeSpec[(index_vec1, ancestor, root, _)],
 	var index_vec = vec_concat(index_vec1, index_vec2).	
-
-// Only for debugging
-DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)] :- 
-	DescendentTermTypeSpec[(index_vec, descendent, root, desc_type_spec)],
-	Inspect print("DescendentTermTypeSpec: ${descendent}, ${root}, ${desc_type_spec}")
-	.
 
 // // Find the variables that represent union type or Any type.
 // AnyTypeVarOfTerm[(variable, term)] :- pair in ArgOfTerm[(_, Variable{}, term)], var variable = pair.1, 
@@ -259,12 +267,6 @@ ConsVarConversion[(index, indices, variable, pos_term, rule, FromAny)] :-
 	not is_union_type(non_union_type).
 
 
-// Print out for debugging
-ConsVarConversion[(index, indices, variable, term, rule, any_enum)] :-
-	ConsVarConversion[(index, indices, variable, term, rule, any_enum)],
-	Inspect print("ConsVarConversion tuple ${variable} in positive term ${term} at position ${index} of a rule ${rule.id} with enum ${any_enum}").
-
-
 HeadVarConversion[(head_var_indices, variable, head_term, rule, ToAny)] :-
 	HeadInRule[(head_term, rule)],
 	DescendentVarOfTerm[(head_var_indices, variable, head_term)],
@@ -290,11 +292,6 @@ HeadVarConversion[(head_var_indices, variable, head_term, rule, NoConversion)] :
 	DescendentTermTypeSpec[(head_var_indices, variable, head_term, var_type)],
 	ConsVarConversion[(body_index, body_indices, variable, body_term, rule, NoConversion)],
 	DescendentTermTypeSpec[(body_indices, variable, body_term, var_type)].
-
-
-HeadVarConversion[(indices, variable, head_term, rule, any_enum)] :-
-	HeadVarConversion[(indices, variable, head_term, rule, any_enum)],
-	Inspect print("HeadVarConversion tuple ${variable} in ${head_term} of rule ${rule.id} with enum ${any_enum}").
 
 
 // Add all terms that occur in the rule into the `Term` relation
