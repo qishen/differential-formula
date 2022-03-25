@@ -158,6 +158,7 @@ SubtermTypeSpec[(arg, ancestor, arg_type_spec)] :-
 // Find the direct argument of each composite term with index specified too.	
 ArgListOfTerm[(0, arg_list, c)] :- c in Term[Composite{_, arg_list}].
 ArgListOfTerm[(index+1, deref(nxt_arg_list), c)] :- ArgListOfTerm[(index, List {_, ListNxt {nxt_arg_list}}, c)].
+// Add all arguments in the term into the `Term` relation too.
 ArgOfTerm[(index, deref(term_ref), c)], Term[deref(term_ref)] :- ArgListOfTerm[(index, List {term_ref, _}, c)].
 
 DescendentOfTerm[(vec_singleton(index), arg, term)] :- ArgOfTerm[(index, arg, term)].
@@ -361,6 +362,109 @@ OuterVarInDepSetcompre[(shared_var, setcompre, rule)] :-
 IndependentSetcompre[(setcompre, rule)] :- Setcompre[(setcompre, rule)], 
 	not DependentSetcompre[(setcompre, rule)].
 
+
+/***********************************************************/
+/*********** Static Analysis of FORMULA programs ***********/
+/***********************************************************/
+
+output relation DisjointSetRel [(Term, Term)]
+output relation NonDisjointSetRel [(Term, Term)]
+output relation GroundTerm [Term]
+output relation NonGroundTerm[Term]
+
+output relation PosDependency [(Ref<Rule>, Ref<Rule>)]
+output relation NegDependency [(Ref<Rule>, Ref<Rule>)]
+output relation ErrorNegDep [Ref<Rule>]
+
+// Variables are not ground terms.
+// Inspect print("NonGroundTerm(var): ${term}")
+NonGroundTerm[term] :- term in Term[Variable{}].
+
+// A composite term is a non-ground term if any of its subterms are non-ground terms.
+// Inspect print("NonGroundTerm: ${term}")
+NonGroundTerm[term] :- term in Term[Composite{}], ArgOfTerm[(index, arg, term)], NonGroundTerm[arg].
+
+// Use set difference to find ground terms.
+// GroundTerm[term] :- GroundTerm[term], Inspect print("GroundTerm: ${term}").
+GroundTerm[term] :- Term[term], not NonGroundTerm[term].
+
+
+// TODO: There might be more cases that make two terms to be disjoint sets.
+// Subset, overlap and disjoint?
+// 1. Two different ground terms are obviously in the DisjointSetRel relation.
+DisjointSetRel[(term1, term2)] :- GroundTerm[term1], GroundTerm[term2], term1 != term2,
+	// Inspect print("DisjointSetRel term1 ${term1} and term2 ${term2}"),
+	.
+
+// 2. Term A and Term B are in the DisjointSetRel relation if they belong to the same composite type but at least one of
+// their arguments at the same position are in the DisjointSetRel relation too.
+DisjointSetRel[(term1, term2)] :- term1 in NonGroundTerm[Composite{name, args1}], term2 in NonGroundTerm[Composite{name, args2}],
+	term1 != term2,
+	ArgOfTerm[(index, arg1, term1)], ArgOfTerm[(index, arg2, term2)],
+	DisjointSetRel[(arg1, arg2)],
+	// Inspect print("DisjointSetRel for two non ground term ${term1} and ${term2}"),
+	.
+
+// Only apply to two composite terms of same type.
+NonDisjointSetRel[(term1, term2)] :- term1 in NonGroundTerm[Composite{name, args1}], 
+	term2 in NonGroundTerm[Composite{name, args2}],
+	not DisjointSetRel[(term1, term2)].
+
+// rule1 depends on rule2 positively.
+PosDependency[(rule1, rule2)] :-
+	// term1 from the body of one rule depends on term2 from the head of another rule.
+	ConstraintInRule[(index, PredCons {false, term1, _}, rule1)],
+	HeadInRule[(term2, rule2)],
+	rule1 != rule2,
+	NonDisjointSetRel[(term1, term2)],
+	Inspect print("Two rule PosDependency ${term1} in ${rule1.id} depends on ${term2} in ${rule2.id}"),
+	.
+
+// A single rule with recursion in it.
+PosDependency[(rule, rule)] :-
+	// term1 from the body of one rule depends on term2 from the head of another rule.
+	ConstraintInRule[(index, PredCons {false, term1, _}, rule)],
+	HeadInRule[(term2, rule)],
+	NonDisjointSetRel[(term1, term2)],
+	Inspect print("Single rule PosDependency ${term2} in ${rule.id} depends on ${term1} in ${rule.id}"),
+	.
+
+// Recursion is allowed without negation in it.
+PosDependency[(r1, r3)] :- PosDependency[(r1, r2)], PosDependency[(r2, r3)].
+
+// rule1 depends on rule2 negatively and no recursion is allowed.
+NegDependency[(rule1, rule2)] :-
+	// term1 from the body of one rule depends on term2 from the head of another rule.
+	ConstraintInRule[(index, PredCons {true, term1, _}, rule1)],
+	// term2 should not occur in the body of rule1 or rules that directly or indirectly depend on the derived facts of rule1.
+	HeadInRule[(term2, rule2)],
+	rule1 != rule2,
+	NonDisjointSetRel[(term1, term2)],
+	Inspect print("Two rules NegDependency ${term1} in ${rule1.id} depends on ${term2} in ${rule2.id}"),
+	.
+
+NegDependency[(rule, rule)] :-
+	// term1 from the body of one rule depends on term2 from the head of another rule.
+	ConstraintInRule[(index, PredCons {true, term1, _}, rule)],
+	// term2 should not occur in the body of rule1 or rules that directly or indirectly depend on the derived facts of rule1.
+	HeadInRule[(term2, rule)],
+	NonDisjointSetRel[(term1, term2)],
+	Inspect print("Single rule NegDependency ${term2} in ${rule.id} depends on ${term1} in ${rule.id}"),
+	.
+
+// Rule `r2` has negation that depends on some derived facts in rule `r3`.
+NegDependency[(r1, r3)] :- PosDependency[(r1, r2)], NegDependency[(r2, r3)].
+NegDependency[(r1, r3)] :- NegDependency[(r1, r2)], NegDependency[(r2, r3)].
+
+// No cycle is allowed in the negative dependency graph.
+ErrorNegDep[rule] :- NegDependency[(rule1, rule2)], 
+	rule1 == rule2, var rule = rule1,
+	Inspect print("ErrorNegDep ${rule.id}")
+	.
+
+
+
+
 /***********************************************************/
 /******* Helper Functions for Formula 2.0 Meta-model *******/
 /***********************************************************/
@@ -377,6 +481,18 @@ function vec_concat(v1: Vec<'T>, v2: Vec<'T>): Vec<'T> {
 	};
 
     mutable_vec
+}
+
+// Do it with DDLog rules even though we can do it with a piece of imperative program.
+function is_ground_term(term: Term): bool {
+	match (term) {
+		Variable{} -> true,
+		Composite{} -> {
+			// TODO: All arguments must be ground term to make it a ground term too.
+			true
+		},
+		_ -> true
+	}
 }
 
 function is_primitive_type(type_spec: TypeSpec): bool {
